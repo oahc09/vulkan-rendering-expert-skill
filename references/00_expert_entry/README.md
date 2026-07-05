@@ -10,7 +10,6 @@
 
 ```text
 00_expert_entry/
-├── SKILL.md                 # Skill YAML frontmatter 与总体说明
 ├── README.md                # 本文件
 ├── role.md                  # 专家角色定义
 ├── hard_rules.md            # 必须遵守的硬规则
@@ -27,7 +26,7 @@
 处理任务时按以下顺序引用：
 
 ```text
-1. SKILL.md
+1. 根目录 `../../SKILL.md`
 2. role.md
 3. hard_rules.md
 4. task_classifier.md

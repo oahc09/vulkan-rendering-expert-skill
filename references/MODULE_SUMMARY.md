@@ -1,6 +1,6 @@
 # Module Summary
 
-- `00_expert_entry`: 10 files
+- `00_expert_entry`: 9 files
 - `01_source_map_and_api_manual_strategy`: 8 files
 - `02_core_mental_model`: 12 files
 - `03_api_manual`: 53 files

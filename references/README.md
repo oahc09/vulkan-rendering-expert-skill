@@ -31,7 +31,7 @@ vulkan-rendering-expert-skill/
 
 ## 使用建议
 
-1. 默认先读取 `00_expert_entry/SKILL.md`。
+1. 默认先读取仓库根目录 `../SKILL.md`，再按需读取 `00_expert_entry` 中的角色、硬规则和输出格式文件。
 2. 根据任务类型查 `07_integration_pack/task_routing_rules.md`。
 3. API 细节查 `03_api_manual`。
 4. 故障调试查 `04_debug_playbooks`。

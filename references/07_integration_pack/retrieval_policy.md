@@ -4,7 +4,8 @@
 
 默认只加载：
 
-- `00_expert_entry/SKILL.md`
+- 根目录 `../../SKILL.md`
+- `00_expert_entry` 中的入口规则文件
 - 当前任务相关的最小模块文件
 
 不要默认加载：

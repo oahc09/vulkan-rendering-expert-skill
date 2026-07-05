@@ -4,7 +4,7 @@
 
 - 建立专家行为控制模块。
 - 拆分 role、hard rules、task classifier、response formats、debug priority、performance priority、accuracy check。
-- 控制 `SKILL.md` 只作为入口，不承载大段知识。
+- 控制根目录 `../../SKILL.md` 只作为入口，不承载大段知识。
 - 引入准确性分级：12 标签体系（详见 `01_source_map_and_api_manual_strategy/source_tags.md`）。
 
 ## v0.1 决策（已解决）

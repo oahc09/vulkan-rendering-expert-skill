@@ -11,7 +11,7 @@ Android Vulkan 工程运行后黑屏，没有 crash，怎么排查？
 期望路由：
 
 ```text
-00_expert_entry/SKILL.md
+根目录 SKILL.md
 → 02_core_mental_model/vulkan_object_chain.md
 → 04_debug_playbooks/01_visual_issues/black_screen.md
 → 03_api_manual/02_surface_swapchain/swapchain.md
@@ -43,7 +43,7 @@ Android Vulkan 工程运行后黑屏，没有 crash，怎么排查？
 期望路由：
 
 ```text
-00_expert_entry/SKILL.md
+根目录 SKILL.md
 → 02_core_mental_model/render_target_model.md
 → 05_workflows/02_render_pass_effects/add_fullscreen_pass.md
 → 03_api_manual/04_buffer_image_memory/image.md
@@ -76,7 +76,7 @@ Android 横竖屏切换后 Vulkan crash。
 期望路由：
 
 ```text
-00_expert_entry/SKILL.md
+根目录 SKILL.md
 → 02_core_mental_model/android_surface_swapchain_lifecycle.md
 → 04_debug_playbooks/02_crash_hang/swapchain_recreate_crash.md
 → 05_workflows/04_android_integration/handle_swapchain_recreate.md
@@ -107,7 +107,7 @@ Compute 写 storage image 后给 fragment shader 采样，结果是黑的。
 期望路由：
 
 ```text
-00_expert_entry/SKILL.md
+根目录 SKILL.md
 → 05_workflows/03_compute_workflows/compute_to_graphics_sync.md
 → 04_debug_playbooks/04_resource_sync/compute_no_output.md
 → 06_cases/03_sync_layout/case_compute_to_fragment_missing_barrier.md
@@ -136,7 +136,7 @@ Vulkan 后处理 pass 开启后 GPU 很高，怎么优化？
 期望路由：
 
 ```text
-00_expert_entry/SKILL.md
+根目录 SKILL.md
 → 05_workflows/07_optimization/optimize_fullscreen_pass.md
 → 04_debug_playbooks/06_performance_symptoms/fullscreen_pass_cost.md
 → 06_cases/06_performance/case_fullscreen_pass_bandwidth_high.md
@@ -164,7 +164,7 @@ Validation 报 descriptor binding 不匹配，怎么定位？
 期望路由：
 
 ```text
-00_expert_entry/SKILL.md
+根目录 SKILL.md
 → 04_debug_playbooks/03_validation_errors/descriptor_binding_error.md
 → 03_api_manual/05_descriptor/descriptor_set_layout.md
 → 03_api_manual/05_descriptor/descriptor_set.md
@@ -195,7 +195,7 @@ Compute 输出给 Fragment 采样黑屏，有没有类似案例？
 期望路由：
 
 ```text
-00_expert_entry/SKILL.md
+根目录 SKILL.md
 → 06_cases/03_sync_layout/case_compute_to_fragment_missing_barrier.md
 → 04_debug_playbooks/04_resource_sync/compute_no_output.md
 → 03_api_manual/08_synchronization/pipeline_barrier.md

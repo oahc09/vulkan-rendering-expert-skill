@@ -5,7 +5,7 @@ import re
 import pytest
 import yaml
 
-from conftest import SKILL_DIR, MODULES
+from conftest import PROJECT_ROOT, SKILL_DIR, MODULES
 
 REQUIRED_SKILL_FILES = [
     "role.md",
@@ -33,7 +33,7 @@ def _parse_frontmatter(path):
 
 # TC2.1
 def test_skill_md_has_frontmatter():
-    skill_md = SKILL_DIR / "00_expert_entry" / "SKILL.md"
+    skill_md = PROJECT_ROOT / "SKILL.md"
     text = skill_md.read_text(encoding="utf-8")
     assert text.startswith("---\n"), "SKILL.md does not start with frontmatter"
     assert "\n---\n" in text[4:], "SKILL.md frontmatter not properly closed"
@@ -41,17 +41,17 @@ def test_skill_md_has_frontmatter():
 
 # TC2.2
 def test_skill_md_frontmatter_required_fields():
-    skill_md = SKILL_DIR / "00_expert_entry" / "SKILL.md"
+    skill_md = PROJECT_ROOT / "SKILL.md"
     data = _parse_frontmatter(skill_md)
     assert data is not None, "SKILL.md frontmatter could not be parsed"
-    for field in ("name", "description", "version", "tags"):
+    for field in ("name", "description"):
         assert field in data, f"SKILL.md frontmatter missing '{field}'"
         assert data[field], f"SKILL.md frontmatter '{field}' is empty"
     assert isinstance(data["name"], str)
     assert isinstance(data["description"], str)
-    assert isinstance(data["version"], str)
-    assert re.match(r"^\d+\.\d+\.\d+", data["version"]), "version not semver-like"
-    assert isinstance(data["tags"], list) and len(data["tags"]) >= 1
+    version = data.get("version") or data.get("metadata", {}).get("version")
+    assert isinstance(version, str)
+    assert re.match(r"^\d+\.\d+\.\d+", version), "version not semver-like"
 
 
 # TC2.3
