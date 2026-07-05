@@ -1,0 +1,3 @@
+我在做 Vulkan 的 Image Layout Transition，从 VK_IMAGE_LAYOUT_UNDEFINED 转到 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL。
+这个 transition 的正确 barrier 参数是什么？
+另外，移动端做 layout transition 有什么性能影响？

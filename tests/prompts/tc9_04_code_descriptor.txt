@@ -1,0 +1,4 @@
+我现在需要修改引擎代码，支持每帧动态更新 Uniform Buffer 中的 MVP 矩阵。
+当前代码使用 vkAllocateDescriptorSets 每帧分配新的 Descriptor Set。
+我想改成预分配 + vkUpdateDescriptorSets 方式。
+帮我设计修改方案，包括需要改哪些文件、新增什么对象、初始化和每帧流程。

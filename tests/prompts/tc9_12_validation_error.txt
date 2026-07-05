@@ -1,0 +1,5 @@
+我收到一个 Validation Layer 报错：
+VUID-vkCmdBindDescriptorSets-pDescriptorSets-00358
+这个是在绑定 Descriptor Set 时报的。
+我用了 VkDescriptorSetLayoutBinding，binding 0 是 uniform buffer，binding 1 是 combined image sampler。
+请帮我分析和修复。

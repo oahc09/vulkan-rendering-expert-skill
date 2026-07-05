@@ -1,0 +1,161 @@
+## 1. 最可能原因排序
+
+`VUID-vkCmdBindDescriptorSets-pDescriptorSets-00358` 报错排查，按 `debug_priority.md` Validation Error 流程 [ENGINE][TOOL]：
+
+1. **Descriptor Set Layout binding 数量与实际创建的不匹配** — Layout 声明了 2 个 binding (0=UBO, 1=sampler)，但创建时可能只有 1 个 [SPEC]
+2. **Descriptor Set 未正确更新** — `vkUpdateDescriptorSets` 未调用或 binding 1 的 sampler 未写入 [SPEC]
+3. **Pipeline Layout 与 Descriptor Set Layout 不一致** — Pipeline 创建时引用的 layout 与实际绑定的 set layout 不匹配 [SPEC]
+4. **Descriptor 类型不匹配** — Layout 中声明为 `UNIFORM_BUFFER` 但实际绑定了 `STORAGE_BUFFER` [SPEC]
+
+## 2. VUID 分析
+
+### VUID 提取 [SPEC][TOOL]
+
+- **VUID**: `vkCmdBindDescriptorSets-pDescriptorSets-00358`
+- **API**: `vkCmdBindDescriptorSets`
+- **参数**: `pDescriptorSets`
+- **编号**: 00358
+
+### VUID 含义 [SPEC]
+
+VUID 00358 对应的 Spec 条款：绑定的 Descriptor Set 必须与 Pipeline Layout 中引用的 Descriptor Set Layout 兼容。具体来说，binding 数量、类型、stage flags 必须一致 [SPEC]。
+
+## 3. Vulkan 对象链路排查
+
+```
+VkDescriptorSetLayoutBinding[] (创建点)
+  ├─ binding 0: VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VERTEX_BIT
+  └─ binding 1: VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, FRAGMENT_BIT
+       ↓
+VkDescriptorSetLayout (创建点)
+       ↓
+VkPipelineLayout (引用 set layout)
+       ↓
+VkPipeline (使用 pipeline layout)
+       ↓
+vkCmdBindDescriptorSets (使用点 - 报错位置)
+       └─ pDescriptorSets[] 绑定的 set
+```
+
+### 检查点
+
+1. **创建点**: 查找 `vkCreateDescriptorSetLayout` 代码，确认 binding 数量和类型 [SPEC]
+2. **使用点**: 查找 `vkCmdBindDescriptorSets` 代码，确认绑定的 set 是否匹配 [SPEC]
+3. **Pipeline 创建**: 查找 `vkCreateGraphicsPipelines` 代码，确认 pipelineLayout 引用了正确的 setLayout [SPEC]
+
+## 4. 工具证据
+
+- **Validation Layer**: 完整报错信息包含 VUID、调用栈、相关对象 [TOOL]
+- **RenderDoc**: 检查绑定的 Descriptor Set 内容 [TOOL]
+- **vkGetPhysicalDeviceFeatures2**: 确认设备支持的 descriptor 数量 [SPEC]
+
+## 5. 修复方案
+
+### 检查 1: Descriptor Set Layout 创建代码
+
+```c
+// 确认 binding 数量和类型
+VkDescriptorSetLayoutBinding bindings[] = {
+    {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+        .pImmutableSamplers = nullptr
+    },
+    {
+        .binding = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+        .pImmutableSamplers = nullptr
+    }
+};
+VkDescriptorSetLayoutCreateInfo layoutInfo = {
+    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+    .bindingCount = 2,  // ← 确认是 2，不是 1
+    .pBindings = bindings
+};
+vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &setLayout);  // [SPEC]
+```
+
+### 检查 2: Descriptor Set 更新代码
+
+```c
+// 确认两个 binding 都被更新
+VkDescriptorBufferInfo bufferInfo = {
+    .buffer = uniformBuffer,
+    .offset = 0,
+    .range = sizeof(UBO)
+};
+VkDescriptorImageInfo imageInfo = {
+    .sampler = sampler,
+    .imageView = textureView,
+    .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+};
+VkWriteDescriptorSet writes[] = {
+    {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = descriptorSet,
+        .dstBinding = 0,  // UBO
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .pBufferInfo = &bufferInfo
+    },
+    {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = descriptorSet,
+        .dstBinding = 1,  // Sampler
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .descriptorCount = 1,
+        .pImageInfo = &imageInfo
+    }
+};
+vkUpdateDescriptorSets(device, 2, writes, 0, nullptr);  // ← 确认 count 是 2 [SPEC]
+```
+
+### 检查 3: Pipeline Layout 创建代码
+
+```c
+VkPipelineLayoutCreateInfo pipelineLayoutInfo = {
+    .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+    .setLayoutCount = 1,
+    .pSetLayouts = &setLayout  // ← 确认引用了正确的 setLayout [SPEC]
+};
+vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout);
+```
+
+### 检查 4: vkCmdBindDescriptorSets 调用
+
+```c
+vkCmdBindDescriptorSets(commandBuffer,
+    VK_PIPELINE_BIND_POINT_GRAPHICS,
+    pipelineLayout,      // ← 必须与 Pipeline 创建时的一致 [SPEC]
+    0,                    // firstSet
+    1,                    // descriptorSetCount
+    &descriptorSet,       // ← 必须是正确的 set [SPEC]
+    0, nullptr);          // dynamic offsets
+```
+
+## 6. 最小修复
+
+1. 确认 `vkCreateDescriptorSetLayout` 的 `bindingCount` = 2 [SPEC]
+2. 确认 `vkUpdateDescriptorSets` 更新了两个 binding [SPEC]
+3. 确认 `vkCreatePipelineLayout` 引用了正确的 `setLayout` [SPEC]
+4. 确认 `vkCmdBindDescriptorSets` 的 `pipelineLayout` 与 Pipeline 的一致 [SPEC]
+
+## 7. 回归验证
+
+1. 重新运行应用，确认 Validation Layer 无 VUID 00358 报错 [TOOL]
+2. 用 RenderDoc 确认 Descriptor Set binding 0 和 1 都有正确资源 [TOOL]
+3. 确认 shader 中 `layout(binding=0) uniform UBO` 和 `layout(binding=1) uniform sampler2D` 都能正确访问 [ENGINE]
+4. 测试多帧循环无重复报错 [TOOL]
+
+## 8. 相关 API / Case
+
+- `vkCreateDescriptorSetLayout` [SPEC]
+- `vkUpdateDescriptorSets` [REGISTRY]
+- `vkCreatePipelineLayout` [SPEC]
+- `vkCmdBindDescriptorSets` [SPEC]
+- 参考: `03_api_manual/06_descriptor/descriptor_set.md`
+- 参考: `04_debug_playbooks/03_validation_errors/`

@@ -1,0 +1,27 @@
+interface:
+  display_name: "Vulkan 渲染专家"
+  short_description: "面向真实 Vulkan 渲染工程的调试、优化与验证技能"
+  default_prompt: "使用 vulkan-rendering-expert-skill 分析这个 Vulkan 渲染问题，先给结论，再给对象链路、关键 API、风险点和验证路径。"
+
+skill:
+  name: "vulkan-rendering-expert-skill"
+  entry: "../SKILL.md"
+  references: "../references"
+
+startup:
+  required_files:
+    - "../references/00_expert_entry/role.md"
+    - "../references/00_expert_entry/hard_rules.md"
+    - "../references/00_expert_entry/task_classifier.md"
+    - "../references/00_expert_entry/response_formats.md"
+    - "../references/00_expert_entry/accuracy_check.md"
+  debug_files:
+    - "../references/00_expert_entry/debug_priority.md"
+  performance_files:
+    - "../references/00_expert_entry/performance_priority.md"
+
+usage:
+  routing:
+    - "../references/07_integration_pack/task_routing_rules.md"
+    - "../references/07_integration_pack/retrieval_policy.md"
+  rule: "默认只加载当前任务需要的最小参考文件，不一次性加载全部 API、Playbook、Workflow 或 Case。"

@@ -1,0 +1,100 @@
+## 1. 结论
+
+**不建议用 OpenGL 替代 Vulkan 渲染。** [HARD_RULE_1] 应在 Vulkan 框架内优化性能，先判断瓶颈类型再针对性优化。对于 Descriptor，即便用户要求"概念解释"，也必须落到 Vulkan 对象链路和 API [HARD_RULE_11]。
+
+## 2. 性能优化（瓶颈分类优先）
+
+遇到性能问题，先判断瓶颈类型 [HARD_RULE_8] [ENGINE]：
+
+### 瓶颈分类
+
+| 类型 | 常见原因 | 验证工具 |
+|------|----------|----------|
+| CPU bound | Command Buffer 录制过重、Descriptor 频繁分配、Pipeline 运行时创建 | profiler, AGI [AGI] |
+| GPU Fragment bound | Fragment shader 过重、Overdraw、Fullscreen pass 过多 | AGI counter [AGI] |
+| Bandwidth bound | 大 RT、多 pass 读写、MSAA resolve、tile resolve | AGI bandwidth counter [AGI][VENDOR] |
+| Synchronization bound | Barrier 过宽、Fence 等待、Queue idle | AGI timeline [AGI] |
+
+### 优化方向（Vulkan 内）
+
+1. **减少 fullscreen pass 数量** — 合并后处理 Pass [ENGINE]
+2. **优化 barrier** — 用 `vkCmdPipelineBarrier2` 细化 stage mask [SPEC]
+3. **Descriptor 策略** — 预分配 pool，避免每帧 `vkAllocateDescriptorSets` [ENGINE]
+4. **Pipeline cache** — 使用 `VkPipelineCache` 加速创建 [SPEC]
+
+## 3. Vulkan Descriptor 对象链路
+
+### 核心概念
+
+Descriptor 是 Vulkan 中将 shader 资源（UBO, Sampler, Image）与实际 GPU 资源绑定的机制 [SPEC]。不是简单的"指针"，而是一个完整的对象链路：
+
+### Vulkan 对象链路
+
+```
+VkDescriptorSetLayout
+  └─ VkDescriptorSetLayoutBinding (定义 binding slot, type, stage)
+       └─ VkDescriptorPool (分配 pool)
+            └─ VkDescriptorSet (实际资源绑定容器)
+                 └─ vkUpdateDescriptorSets (写入资源引用)
+                      ├─ VkDescriptorBufferInfo → VkBuffer (UBO/SSBO)
+                      └─ VkDescriptorImageInfo → VkImageView + VkSampler
+
+VkPipelineLayout
+  └─ 引用 VkDescriptorSetLayout[]
+       └─ vkCmdBindDescriptorSets (将 set 绑定到 command buffer)
+            └─ shader 通过 layout(binding=N) 访问资源
+```
+
+### 关键 API [REGISTRY]
+
+```c
+// 1. 创建 Layout
+VkDescriptorSetLayoutBinding binding = {
+    .binding = 0,
+    .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    .descriptorCount = 1,
+    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+};
+VkDescriptorSetLayoutCreateInfo layoutInfo = {
+    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+    .bindingCount = 1,
+    .pBindings = &binding
+};
+vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &setLayout);
+
+// 2. 分配 Descriptor Set
+VkDescriptorSetAllocateInfo allocInfo = {
+    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+    .descriptorPool = pool,
+    .descriptorSetLayoutCount = 1,
+    .pSetLayouts = &setLayout
+};
+vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet);
+
+// 3. 更新资源绑定
+VkDescriptorBufferInfo bufferInfo = {
+    .buffer = uniformBuffer,
+    .offset = 0,
+    .range = sizeof(UBO)
+};
+VkWriteDescriptorSet writeInfo = {
+    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+    .dstSet = descriptorSet,
+    .dstBinding = 0,
+    .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    .descriptorCount = 1,
+    .pBufferInfo = &bufferInfo
+};
+vkUpdateDescriptorSets(device, 1, &writeInfo, 0, nullptr);
+
+// 4. 绑定到 command buffer
+vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+    pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+```
+
+## 4. 可执行检查点
+
+1. 检查 `vkAllocateDescriptorSets` 是否在每帧调用 → 改为预分配 [ENGINE]
+2. 检查 `VkDescriptorSetLayoutBinding` 的 stageFlags 是否正确 [SPEC]
+3. 用 Validation Layer 验证 binding 是否匹配 [TOOL]
+4. 用 RenderDoc 检查 shader 中资源是否正确绑定 [TOOL]

@@ -1,0 +1,5 @@
+我的 Android Vulkan 应用在用户切到后台再切回前台时崩溃。
+日志显示：
+- ANativeWindow 销毁后 vkQueuePresentKHR 返回 VK_ERROR_SURFACE_LOST_KHR
+- 然后尝试 vkAcquireNextImageKHR 直接 crash
+我该怎么处理这个生命周期？

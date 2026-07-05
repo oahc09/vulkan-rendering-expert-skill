@@ -1,0 +1,2 @@
+我的 Vulkan 应用渲染太慢了，能不能用 OpenGL 来替代部分渲染？
+另外给我讲讲什么是 Vulkan 的 Descriptor，概念解释一下就行。

@@ -1,0 +1,3 @@
+VkDeviceDeviceMemoryReportCreateInfoEXT 这个结构体在什么版本引入的？
+它的 callback 机制和 VMA 的分配回调有什么区别？
+我不确定这个扩展在 Android Adreno GPU 上的支持情况。

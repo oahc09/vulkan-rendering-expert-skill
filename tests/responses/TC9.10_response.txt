@@ -1,0 +1,142 @@
+## 1. 最可能原因排序
+
+画面闪烁问题，按 `debug_priority.md` 闪烁类排查 [ENGINE][TOOL]：
+
+1. **Fence 调用顺序错误** — `vkResetFences → vkQueueSubmit → vkWaitForFences` 顺序不对，正确应为 `vkWaitForFences → vkResetFences → vkQueueSubmit` [SPEC]
+2. **UBO 竞争条件** — `vkMapMemory + memcpy` 直接更新 UBO，2 frames-in-flight 下 CPU 写入时 GPU 仍在读取同一块内存 [SPEC][ENGINE]
+3. **Swapchain image 重复写入** — Command Buffer 录制了错误 imageIndex 的渲染操作 [ENGINE]
+4. **Command Buffer 错误复用** — Command Buffer 在 recording 状态下被重新提交 [SPEC]
+
+## 2. 快速验证路径
+
+1. 检查 Fence 调用顺序：确认 `vkWaitForFences` 在 `vkResetFences` 之前 [SPEC]
+2. 检查 UBO 更新方式：确认每个 frame-in-flight 有独立的 UBO buffer [ENGINE]
+3. 用 RenderDoc 抓多帧，对比闪烁帧和正常帧的差异 [TOOL]
+4. 用 Validation Layer 检查是否有同步相关报错 [TOOL]
+5. 用 AGI 检查 GPU timeline，确认 CPU/GPU 重叠情况 [AGI]
+
+## 3. Vulkan 对象链路排查
+
+```
+Frame N:
+  CPU: vkWaitForFences[frameN-1] → vkResetFences[frameN] → memcpy(ubo) → vkQueueSubmit[frameN]
+  GPU: ←------- rendering frame N-1 -------→ ←-- rendering frame N --→
+
+问题分析:
+  如果 Fence 顺序错误:
+  CPU: vkResetFences → vkQueueSubmit → vkWaitForFences (立即返回，因为刚 reset)
+  GPU: 还在渲染上一帧，但 CPU 已经开始写入同一 UBO → 竞争！
+```
+
+### Fence 正确顺序 [SPEC]
+
+```c
+// 正确顺序:
+vkWaitForFences(device, 1, &frameFences[currentFrame], VK_TRUE, UINT64_MAX);
+vkResetFences(device, 1, &frameFences[currentFrame]);
+// ... 录制 command buffer ...
+vkQueueSubmit(queue, 1, &submitInfo, frameFences[currentFrame]);
+```
+
+### UBO 竞争分析 [SPEC][ENGINE]
+
+```
+2 frames-in-flight:
+  Frame 0: UBO offset=0, GPU 正在读取
+  Frame 1: CPU 写入 offset=0 ← 竞争！GPU 还在读
+
+正确做法:
+  Frame 0: UBO offset=0, GPU 正在读取
+  Frame 1: CPU 写入 offset=uniformDataSize ← 不同 offset, 无竞争
+```
+
+## 4. 工具证据
+
+- **Validation Layer**: 启用 `VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT` 检查同步错误 [TOOL]
+- **RenderDoc**: 抓取闪烁帧，检查 attachment 内容和 draw call [TOOL]
+- **AGI**: 检查 CPU/GPU timeline，确认是否有重叠写入 [AGI]
+
+## 5. 修复方案
+
+### 修复 1: Fence 调用顺序
+
+```c
+// 错误顺序（当前）:
+// vkResetFences → vkQueueSubmit → vkWaitForFences
+
+// 正确顺序:
+void renderFrame() {
+    // 1. 等待当前 frame 的 fence (上一轮该 frame 的 GPU 操作完成)
+    vkWaitForFences(device, 1, &frameFences[currentFrame], VK_TRUE, UINT64_MAX);  // [SPEC]
+
+    // 2. Reset fence
+    vkResetFences(device, 1, &frameFences[currentFrame]);  // [SPEC]
+
+    // 3. Acquire image
+    vkAcquireNextImageKHR(device, swapchain, UINT64_MAX,
+        imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+
+    // 4. 更新 UBO (使用 per-frame offset)
+    memcpy((char*)uniformMapped + currentFrame * uniformDataSize,
+           &uboData, sizeof(uboData));
+
+    // 5. Submit
+    VkSubmitInfo submitInfo = {
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &imageAvailableSemaphores[currentFrame],
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &renderFinishedSemaphores[currentFrame],
+        .commandBufferCount = 1,
+        .pCommandBuffers = &commandBuffers[currentFrame]
+    };
+    vkQueueSubmit(queue, 1, &submitInfo, frameFences[currentFrame]);  // [SPEC]
+
+    // 6. Present
+    vkQueuePresentKHR(presentQueue, &presentInfo);
+
+    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+}
+```
+
+### 修复 2: UBO Ring Buffer（多 buffer）
+
+```c
+// 为每个 frame-in-flight 分配独立 UBO 空间
+#define MAX_FRAMES_IN_FLIGHT 2
+
+// 创建一个大 buffer，每个 frame 用不同 offset
+VkDeviceSize uniformDataSize = sizeof(UniformBufferObject);
+// 对齐到 minUniformBufferOffsetAlignment
+VkDeviceSize alignedSize = (uniformDataSize + minAlignment - 1) & ~(minAlignment - 1);
+
+// Per-frame 更新
+void* frameUboAddr = (char*)uniformMapped + currentFrame * alignedSize;
+memcpy(frameUboAddr, &uboData, uniformDataSize);  // [SPEC][ENGINE]
+
+// Descriptor Set 更新
+VkDescriptorBufferInfo bufferInfo = {
+    .buffer = uniformBuffer,
+    .offset = currentFrame * alignedSize,  // 使用 per-frame offset
+    .range = uniformDataSize
+};
+```
+
+### 修复 3: 使用 vkUpdateDescriptorSets（替代重新分配）
+
+如果 UBO offset 变化，用 `vkUpdateDescriptorSets` 更新 binding [SPEC]。或使用 `VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC` + `vkCmdBindDescriptorSets` 的 dynamic offset [SPEC]。
+
+## 6. 回归验证
+
+1. 连续运行 1000 帧无闪烁 [ENGINE]
+2. 用 RenderDoc 抓 100 帧，确认所有帧 attachment 内容正确 [TOOL]
+3. 用 AGI 确认 CPU/GPU 无竞争 [AGI]
+4. 用 Validation Layer 确认无同步报错 [TOOL]
+5. 测试不同 frames-in-flight 数量 (1, 2, 3) [ENGINE]
+
+## 7. 相关 API / Case
+
+- `vkWaitForFences`, `vkResetFences`, `vkQueueSubmit` [SPEC]
+- `vkMapMemory`, `memcpy` (UBO 更新) [SPEC]
+- `vkUpdateDescriptorSets` [REGISTRY]
+- 参考: `04_debug_playbooks/02_sync_issues/flicker.md`
+- 参考: `02_core_mental_model/synchronization_lifecycle.md`

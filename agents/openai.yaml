@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vulkan 渲染专家"
+  short_description: "Vulkan 渲染工程调试与优化"
+  default_prompt: "使用 $vulkan-rendering-expert-skill 排查这个 Vulkan 渲染问题，并给出对象链路、关键风险和验证路径。"
