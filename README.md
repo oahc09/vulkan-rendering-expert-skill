@@ -2,7 +2,7 @@
 
 ![Vulkan 渲染专家技能介绍图](assets/vulkan-rendering-expert-banner.png)
 
-这是一个面向 Codex 技能体系的 Vulkan 渲染工程专家技能。它不是 Vulkan 入门教程，而是为真实渲染工程任务准备的运行时知识包：帮助 AI 在回答 Vulkan 设计、实现、调试、优化和验证问题时，按工程链路组织判断、引用规则、API 细节、调试路径和回归验证。
+这是一个 Vulkan 渲染工程专家技能包。它不是 Vulkan 入门教程，而是为真实渲染工程任务准备的运行时知识库：用于在处理 Vulkan 设计、实现、调试、优化和验证问题时，按工程链路组织判断、引用规则、API 细节、调试路径和回归验证。
 
 ## 适用场景
 
@@ -11,14 +11,14 @@
 - 排查黑屏、闪烁、崩溃、GPU hang、device lost、Validation Error、image layout、descriptor binding 等问题。
 - 分析移动端 Vulkan 性能瓶颈，包括 bandwidth、fullscreen pass、barrier、descriptor 更新和 pipeline 创建卡顿。
 - 处理 Android Vulkan 的 `ANativeWindow`、Surface 生命周期、pause/resume、横竖屏和 swapchain recreate。
-- 在不确定 API 细节时，要求 AI 区分规范来源、经验判断和需要回查的内容。
+- 在不确定 API 细节时，区分规范来源、经验判断和需要回查的内容。
 
 ## 技能结构
 
 ```text
 .
 ├── SKILL.md                 # 技能入口，定义触发、加载顺序和输出规则
-├── agents/openai.yaml       # Codex UI 元数据
+├── agents/                  # 可选的工具或平台集成配置
 ├── assets/                  # README 和发布页使用的图片资产
 ├── references/              # Vulkan 专家知识库，按任务渐进加载
 └── tests/                   # 结构、内容、引用、模板和触发行为测试
@@ -39,7 +39,7 @@
 
 ## 核心能力
 
-这个技能要求 AI 回答时始终给出可执行的 Vulkan 路径，而不是停留在概念解释：
+这个技能要求输出始终给出可执行的 Vulkan 路径，而不是停留在概念解释：
 
 1. 先给结论和最高优先级判断。
 2. 给出 Vulkan 对象链路、关键 API、资源状态、layout 或同步关系。
@@ -51,8 +51,8 @@
 
 把仓库根目录作为技能目录使用即可。技能入口是根目录下的 `SKILL.md`，运行时资料在 `references/` 中按需加载。
 
-示例调用：
+示例任务：
 
 ```text
-使用 $vulkan-rendering-expert-skill 排查 Android Vulkan 前后台切换后黑屏的问题，给出对象链路、最可能原因和验证步骤。
+排查 Android Vulkan 前后台切换后黑屏的问题，给出对象链路、最可能原因和验证步骤。
 ```
