@@ -5,7 +5,7 @@ license: MIT
 metadata:
   author: Vulkan 渲染专家技能贡献者
   version: 1.0.1
-  last-updated: '2026-07-02'
+  last-updated: '2026-07-18'
   keywords:
     - vulkan
     - rendering
