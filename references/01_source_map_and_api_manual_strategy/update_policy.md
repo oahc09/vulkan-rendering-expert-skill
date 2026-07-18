@@ -49,7 +49,7 @@ Android 工具链变化
 ```md
 ## Deprecated：旧式同步 API 作为默认方案
 
-原因：项目默认 Vulkan 1.3+ 时，可优先考虑 Synchronization2。
+原因：项目默认 Vulkan 1.3+/1.4。1.4 设备无需运行时查询 synchronization2 / dynamic rendering / push descriptor feature，可优先考虑 Synchronization2。
 保留原因：旧设备或旧引擎仍可能使用 legacy synchronization。
 替代方案：新增 Synchronization2 API Card。
 ```

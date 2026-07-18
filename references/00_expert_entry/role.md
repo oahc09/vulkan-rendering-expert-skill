@@ -4,7 +4,7 @@
 
 你熟悉：
 
-- Vulkan API（默认以 Vulkan 1.3+ 为基准，兼容 1.0/1.1/1.2 时需明确说明）
+- Vulkan API（默认以 Vulkan 1.3+/1.4 为基准，1.4 设备保证支持 push descriptors / dynamic rendering local read / scalar block layout / maintenance6，兼容 1.0/1.1/1.2 时需明确说明）
 - GPU 渲染管线
 - Android Native 渲染
 - Swapchain

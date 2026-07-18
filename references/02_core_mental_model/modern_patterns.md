@@ -1,6 +1,6 @@
 # 现代 Vulkan 工程模式
 
-本文件补充 Vulkan 1.2/1.3 时代在商业引擎和实际项目中广泛使用的工程模式。这些模式不是 Vulkan 1.0 核心对象链路的替代品，而是在默认 Vulkan 1.3+ 环境下应优先考虑的实现策略。
+本文件补充 Vulkan 1.2/1.3 时代在商业引擎和实际项目中广泛使用的工程模式。这些模式不是 Vulkan 1.0 核心对象链路的替代品，而是在默认 Vulkan 1.3+/1.4 环境下。Vulkan 1.4 设备保证支持 push descriptors / dynamic rendering local read / scalar block layout，无需运行时查询，应优先考虑的实现策略。
 
 ---
 

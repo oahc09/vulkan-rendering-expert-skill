@@ -243,6 +243,28 @@ Buffer 同步（用 `VkBufferMemoryBarrier`）；同 render pass 内 attachment 
 
 ---
 
+## 14.5 Vulkan 1.4 变更
+
+Vulkan 1.4 对 Image Memory Barrier 的主要变更：
+
+### Synchronization2 promote 为 mandatory feature
+
+1.4 设备保证支持 `VkImageMemoryBarrier2`，`oldLayout`/`newLayout` 语义与 1.0 版本一致；但 mandatory feature 仍需通过 `VkPhysicalDeviceVulkan13Features.synchronization2 = VK_TRUE`（或 `VkPhysicalDeviceSynchronization2Features.synchronization2`）显式启用后才能使用 sync2 API。`synchronization2` 是 Vulkan 1.3 promote，字段位于 `VkPhysicalDeviceVulkan13Features`，**不在 `VkPhysicalDeviceVulkan14Features`**。[SPEC]
+
+### Dynamic Rendering Local Read
+
+1.4 将 local read promote 为 mandatory feature（保证被支持，仍需启用 `VkPhysicalDeviceVulkan14Features.dynamicRenderingLocalRead`）。input attachment 的 layout transition **不会自动处理**，应用必须显式录制 image memory barrier：[SPEC]
+
+- attachment image 必须通过 `VkImageMemoryBarrier2` 转入 `VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR`；
+- 在 input-reading draw 与 attachment-writing draw 之间通过 by-region pipeline barrier 建立可见性（`vkCmdPipelineBarrier2` + `VkDependencyInfo`，`dependencyFlags` 含 `VK_DEPENDENCY_BY_REGION_BIT`）；
+- depth/stencil aspect 与 MSAA attachment 的 local read 受 `VkPhysicalDeviceVulkan14Properties.dynamicRenderingLocalReadDepthStencilAttachments` / `dynamicRenderingLocalReadMultisampledAttachments` 两个独立字段限制，需运行时查询（不存在独立的 `VkPhysicalDeviceDynamicRenderingLocalReadPropertiesKHR` 结构）。
+
+### Host Image Copy 交互
+
+`VK_EXT_host_image_copy` 在 Vulkan 1.4 中将 API promote 进 core，但 `hostImageCopy` feature **仍为可选**（非 mandatory），必须通过 `VkPhysicalDeviceHostImageCopyFeaturesEXT` 查询并在 `VkDeviceCreateInfo.pNext` 中启用后才能调用 `vkTransitionImageLayoutEXT` / `vkCopyImageToImageEXT` 等 host 侧 API。[SPEC]
+
+---
+
 ## 15. 需要回查官方文档的情况
 
 1. 具体 format 支持的 image layout 列表及 layout 转换限制。

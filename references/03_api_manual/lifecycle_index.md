@@ -27,6 +27,9 @@
 | `VkShaderModule` | `06_pipeline/shader_module.md` | pipeline 创建后可销毁，但复用期间需保留。 |
 | `VkFence` | `08_synchronization/fence.md` | signal 前 reset 是非法的；destroy 前确保不被等待。 |
 | `VkSemaphore` | `08_synchronization/semaphore.md` | 每个 signal 必须对应一次 wait；不能重置。 |
+| Timeline Semaphore | `08_synchronization/timeline_semaphore.md` | value 单调递增；允许 wait-before-signal，只需最终存在可满足该 wait 的 signal 并维持 forward progress。 |
+| Frames in Flight | `03_command_buffer/frames_in_flight.md` | per-frame 资源在 fence signal 前不能复用。 |
+| `VkQueryPool` | `04_buffer_image_memory/query_pool.md` | 查询结果在 available 前不能读取；reset 后不能立即使用。 |
 
 ---
 

@@ -19,3 +19,10 @@
 ## 待调整
 
 - v0.2 是否加入项目级文件修改模板。（已解决：当前通过 `hard_rules.md` 第 6 条覆盖核心修改要求，v0.2 不再单独加入模板。）
+
+## v1.0.1
+
+- 补充 Vulkan 1.4 知识：核心化扩展、强制功能、最低限制提升。[GUIDE][SPEC]
+- 新增 15 张卡片（vulkan_1_4_overview、timeline_semaphore、descriptor_indexing 等）。
+- 增量补充 5 张已有卡片（dynamic_rendering、synchronization2 等）。
+- 全局版本基线从 Vulkan 1.3+ 更新为 Vulkan 1.3+/1.4。

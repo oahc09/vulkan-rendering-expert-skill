@@ -247,6 +247,44 @@
 
 ---
 
+## 14.5 Vulkan 1.4 变更
+
+Vulkan 1.4 对 Synchronization2 的主要变更：
+
+### promote 为 mandatory feature
+
+Vulkan 1.4 将 `VK_KHR_synchronization2` 的 API promote 进 core，并提升为 mandatory feature（保证被支持）。[SPEC]
+
+- 1.4 设备保证支持 synchronization2，无需运行时查询 feature 即可确认能力存在；但 **mandatory feature 仍需在 `VkDeviceCreateInfo.pNext` 中通过 `VkPhysicalDeviceVulkan13Features.synchronization2 = VK_TRUE`（或独立结构 `VkPhysicalDeviceSynchronization2Features.synchronization2`）显式启用** 后才能调用 sync2 API（`vkCmdPipelineBarrier2` / `vkQueueSubmit2` / `VkImageMemoryBarrier2` 等）。注意 `synchronization2` 是 Vulkan 1.3 promote，因此字段位于 `VkPhysicalDeviceVulkan13Features`，**不在 `VkPhysicalDeviceVulkan14Features`**。[SPEC]
+- 启用后可省略 `vkCmdPipelineBarrier` 的 fallback 路径。[ENGINE]
+- 判断条件：`VkPhysicalDeviceProperties.apiVersion >= VK_VERSION_1_4` 且 device 创建时已启用 `synchronization2` feature。[SPEC]
+
+### 与 Timeline Semaphore 的深度配合
+
+1.4 时代 timeline semaphore + synchronization2 是默认同步模型：
+
+- `vkQueueSubmit2` + `VkSemaphoreSubmitInfo.value` 直接嵌入 timeline value。[SPEC]
+- 一个 timeline semaphore 可表达多个帧的完成点，替代 per-frame binary semaphore 数组。[ENGINE]
+- CPU 侧通过 `vkGetSemaphoreCounterValue` 查询帧完成状态，无需 `vkWaitForFences` 阻塞。[ENGINE]
+
+### 完整帧同步模型（1.4 推荐）
+
+```text
+Frame N:
+  vkAcquireNextImageKHR (binary semaphore: acquireSem)
+  vkQueueSubmit2:
+    wait: acquireSem (binary), timelineSem value >= N-2 (等待最老帧完成)
+    signal: timelineSem value = N
+  vkQueuePresentKHR (binary semaphore: renderSem)
+  CPU: vkGetSemaphoreCounterValue(timelineSem) >= N-2 时可复用 Frame N-2 资源
+```
+
+### maintenance6 对同步的影响
+
+`VK_KHR_maintenance6`（1.4 核心）引入简化同步表达。[SPEC]
+
+---
+
 ## 15. 需要回查官方文档的情况
 
 1. `VkPipelineStageFlags2` 与旧版 `VkPipelineStageFlags` 的具体映射关系及新增 stage 的精确语义。

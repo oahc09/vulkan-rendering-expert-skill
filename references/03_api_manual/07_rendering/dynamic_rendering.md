@@ -240,6 +240,59 @@ Dynamic rendering 适合“attachment 组合多变、render pass 对象爆炸”
 
 ---
 
+## 14.5 Vulkan 1.4 变更
+
+Vulkan 1.4 对 Dynamic Rendering 的主要变更：
+
+### Dynamic Rendering Local Read promote 为 mandatory feature
+
+Vulkan 1.4 将 `VK_KHR_dynamic_rendering_local_read` 的 API promote 进 core，并提升为 mandatory feature（保证被支持）。[SPEC]
+
+- 1.4 设备保证支持 local read，无需运行时查询 feature 即可确认能力存在；但 **仍需在 `VkDeviceCreateInfo.pNext` 中通过 `VkPhysicalDeviceVulkan14Features.dynamicRenderingLocalRead = VK_TRUE` 显式启用** 后才能调用相关 API。[SPEC]
+- 仅基础 color attachment local read 在所有 1.4 设备上保证可用；**depth/stencil aspect 与 MSAA attachment 的 local read 受独立 properties 限制** —— 两个能力字段位于 `VkPhysicalDeviceVulkan14Properties`：`dynamicRenderingLocalReadDepthStencilAttachments` 与 `dynamicRenderingLocalReadMultisampledAttachments`，需运行时查询。[SPEC]
+- 允许在 dynamic rendering pass 内读取同 pass 的 attachment 作为 input attachment，无需创建 `VkFramebuffer` 或显式 `VkRenderPass`。[SPEC]
+- shader 仍使用 `subpassInput` / `subpassLoad` 机制（非普通 texture read），并通过 `VkRenderingInputAttachmentIndexInfo` 建立 input attachment index 映射。[SPEC]
+
+### 新增 API
+
+| API / 结构体 | 说明 | 来源 |
+|---|---|---|
+| `VkRenderingAttachmentLocationInfo` | 控制 attachment 在 fragment shader 中的 location 映射 | [SPEC] |
+| `VkRenderingInputAttachmentIndexInfo` | 为 input attachment 提供 index 映射 | [SPEC] |
+
+### Local Read 使用流程
+
+```text
+Step 1: device 创建时启用 dynamicRenderingLocalRead feature
+  -> VkPhysicalDeviceVulkan14Features.dynamicRenderingLocalRead = VK_TRUE
+  -> 通过 pNext 加入 VkDeviceCreateInfo
+
+Step 2: pipeline 创建
+  -> VkPipelineRenderingCreateInfo 中声明 input attachment 的 format
+
+Step 3: 录制 dynamic rendering pass
+  -> vkCmdBeginRendering
+  -> vkCmdSetRenderingAttachmentLocations / vkCmdSetRenderingInputAttachmentIndices（按需）
+  -> fragment shader 通过 subpassInput + subpassLoad 读取同 pass attachment
+  -> vkCmdEndRendering
+
+Step 4: 同步
+  -> attachment image 必须处于 VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR
+  -> 通过 by-region pipeline barrier（vkCmdPipelineBarrier2 + VkDependencyInfo）
+     在 input-reading draw 与 writing draw 之间建立可见性
+  -> depth/stencil 与 MSAA local read 需先查询 properties 确认可用
+```
+
+无需在 pipeline 创建时指定 render pass，`VkPipelineRenderingCreateInfo` 即可。[SPEC]
+
+### 与 Vulkan 1.3 的兼容性
+
+- 1.3 设备仍需查询并启用 `VK_KHR_dynamic_rendering` feature；如需 local read，还需查询并启用 `VK_KHR_dynamic_rendering_local_read` 扩展。[SPEC]
+- 1.4 设备保证 dynamic rendering 与基础 local read 可用，但 **mandatory feature 仍需通过 `VkPhysicalDeviceVulkan14Features` 显式启用**；depth/stencil / MSAA local read 仍受 properties 限制。[SPEC]
+- 旧代码无需修改即可在 1.4 上运行。[GUIDE]
+
+---
+
 ## 15. 需要回查官方文档的情况
 
 1. Dynamic rendering 与 multiview / fragment shading rate 的交互。

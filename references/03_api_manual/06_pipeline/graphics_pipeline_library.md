@@ -228,6 +228,34 @@ Graphics pipeline library 最适合“阶段组合固定、但整体组合爆炸
 
 ---
 
+## 14.5 Vulkan 1.4 变更
+
+Vulkan 1.4 对 Graphics Pipeline Library 的主要变更：
+
+### 扩展状态
+
+`VK_EXT_graphics_pipeline_library` 仍为扩展，未在 1.4 核心化。[SPEC]
+
+### 1.4 设备支持率提升
+
+1.4 设备的驱动版本更新，pipeline library 支持率更高。[ANDROID]
+
+### 与 Dynamic Rendering + Dynamic State 的三重配合
+
+pipeline library + dynamic rendering + extended dynamic state 是 1.3/1.4 时代的标准 pipeline 策略：[ENGINE]
+
+- Pipeline library 拆分减少编译开销。[ENGINE]
+- Dynamic rendering 消除 render pass 依赖。[SPEC]
+- Extended dynamic state 减少 pipeline 数量。[ENGINE]
+
+### Android 驱动支持矩阵
+
+- Adreno 7xx+：支持较好。[VENDOR]
+- Mali Valhall+：支持。[VENDOR]
+- 旧设备可能不支持，需运行时查询。[ANDROID]
+
+---
+
 ## 15. 需要回查官方文档的情况
 
 1. 设备对 `VK_EXT_graphics_pipeline_library` 的具体支持子集。

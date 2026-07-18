@@ -26,6 +26,8 @@
 |---|---|
 | `VkInstance` | `01_instance_device_queue/instance.md` |
 | `VkDevice` / Logical Device | `01_instance_device_queue/logical_device.md` |
+| `VkPhysicalDevice` | `01_instance_device_queue/physical_device.md` |
+| Maintenance 扩展系列 | `01_instance_device_queue/maintenance_extensions.md` |
 
 ---
 
@@ -56,6 +58,8 @@
 | `vkQueueSubmit` | `03_command_buffer/queue_submit.md` |
 | Command Buffer 生命周期 | `03_command_buffer/command_buffer_lifetime.md` |
 | `VkFence` / `VkSemaphore` 对比 | `03_command_buffer/fence_semaphore.md` |
+| Frames in Flight | `03_command_buffer/frames_in_flight.md` |
+| Indirect Draw / Dispatch | `03_command_buffer/indirect_commands.md` |
 
 ---
 
@@ -70,6 +74,10 @@
 | `VkFramebuffer` | `04_buffer_image_memory/framebuffer.md` |
 | Image Layout | `04_buffer_image_memory/image_layout.md` |
 | `VkSampler` | `04_buffer_image_memory/sampler.md` |
+| Copy / Blit / Resolve 命令 | `04_buffer_image_memory/copy_blit_resolve.md` |
+| Host Image Copy | `04_buffer_image_memory/host_image_copy.md` |
+| `VkQueryPool` | `04_buffer_image_memory/query_pool.md` |
+| VMA (Vulkan Memory Allocator) | `04_buffer_image_memory/vma_usage.md` |
 
 ---
 
@@ -84,6 +92,9 @@
 | Sampled Image Descriptor | `05_descriptor/sampled_image_descriptor.md` |
 | Storage Buffer / Image Descriptor | `05_descriptor/storage_buffer_image_descriptor.md` |
 | Uniform Buffer Descriptor | `05_descriptor/uniform_buffer_descriptor.md` |
+| Push Descriptor | `05_descriptor/push_descriptor.md` |
+| Descriptor Indexing | `05_descriptor/descriptor_indexing.md` |
+| Descriptor Buffer | `05_descriptor/descriptor_buffer.md` |
 
 ---
 
@@ -99,6 +110,7 @@
 | Graphics Pipeline Library | `06_pipeline/graphics_pipeline_library.md` |
 | `VkPipelineCache` | `06_pipeline/pipeline_cache.md` |
 | Specialization Constants | `06_pipeline/specialization_constants.md` |
+| Dynamic State | `06_pipeline/dynamic_state.md` |
 
 ---
 
@@ -119,6 +131,7 @@
 |---|---|
 | `VkFence` | `08_synchronization/fence.md` |
 | `VkSemaphore` | `08_synchronization/semaphore.md` |
+| Timeline Semaphore | `08_synchronization/timeline_semaphore.md` |
 | `vkCmdPipelineBarrier` | `08_synchronization/pipeline_barrier.md` |
 | `VkImageMemoryBarrier` | `08_synchronization/image_memory_barrier.md` |
 | `VkBufferMemoryBarrier` | `08_synchronization/buffer_memory_barrier.md` |

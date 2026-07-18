@@ -234,6 +234,26 @@
 
 ---
 
+## 14.5 Vulkan 1.4 变更
+
+Vulkan 1.4 对 Pipeline Barrier 的主要变更：
+
+### Synchronization2 promote 为 mandatory feature
+
+1.4 设备保证支持 `vkCmdPipelineBarrier2` / `VkDependencyInfo`；但 mandatory feature 仍需通过 `VkPhysicalDeviceVulkan13Features.synchronization2 = VK_TRUE`（1.3 promote，**不在 Vulkan14Features**）显式启用后才能使用 sync2 API，启用后无需 fallback 到 `vkCmdPipelineBarrier`。[SPEC]
+
+### maintenance6 简化
+
+`VK_KHR_maintenance6`（1.4 核心）引入简化同步表达选项。[SPEC]
+
+### 推荐 barrier 策略
+
+- 1.4 设备统一使用 `vkCmdPipelineBarrier2`。[ENGINE]
+- `VkMemoryBarrier2` 的 stage/access flag 比 1.0 版本更精确。[SPEC]
+- 与 timeline semaphore 配合可实现跨帧依赖。[ENGINE]
+
+---
+
 ## 15. 需要回查官方文档的情况
 
 1. 具体 pipeline stage 与 access flag 的合法组合表。

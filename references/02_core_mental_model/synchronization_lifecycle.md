@@ -152,6 +152,7 @@ vkCmdPipelineBarrier2
 
 - 新项目或已声明 Vulkan 1.3+ 的环境，优先使用 `vkCmdPipelineBarrier2` 与 `VkDependencyInfo`。
 - 需兼容 Vulkan 1.2 以下或目标设备不支持 Synchronization2 时，保留旧版 `vkCmdPipelineBarrier` 作为 fallback，并显式说明版本约束。
+- Vulkan 1.4 设备保证支持 synchronization2，可省略 fallback 路径。判断条件：`VkPhysicalDeviceProperties.apiVersion >= VK_VERSION_1_4`。[SPEC]
 
 [SPEC][GUIDE]
 
