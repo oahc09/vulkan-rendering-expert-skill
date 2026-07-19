@@ -113,3 +113,21 @@
 3. 必须保留：结论、关键链路、最高优先级检查项、最小验证方式。
 
 使用模块：与判断出的主类型一致。
+
+## 10. 第三方库集成类
+
+用户问：如何集成 ImGui / glfw / glm / tinygltf / stb / Assimp 等第三方库到 Vulkan 工程；ImGui + Vulkan backend 初始化、glTF 模型加载、PBR 渲染管线搭建。
+
+使用模块：
+
+1. `00_expert_entry`（含 `../00_expert_entry/accuracy_check.md` 的第三方库 API 准确性规则）
+2. `02_core_mental_model`
+3. `05_workflows`（按任务类型加载对应 workflow；若无对应文件，提示用户参考相关 API card 与 debug playbook）
+4. 必要时引用 `03_api_manual`（如 `../03_api_manual/06_pipeline/graphics_pipeline.md`、`../03_api_manual/05_descriptor/descriptor_set.md`、`../05_workflows/05_resource_management/manage_resource_lifetime.md`）
+
+处理规则：
+
+1. **必须先核对版本**：引用第三方库 API 前必须按 `../00_expert_entry/accuracy_check.md` 的"Third-Party Library API Accuracy"规则标注版本号，超过 6 个月的版本必须回查最新稳定版 API 变更说明。
+2. **Vulkan backend 双重标注**：若涉及第三方库的 Vulkan backend（如 `ImGui_ImplVulkan_*`），必须同时标注第三方库版本与适配的 Vulkan API 版本。
+3. **API 版本变更点显式列出**：若某 API 在不同版本间存在签名 / 参数 / 行为变更，必须显式列出，避免用户使用过时签名。
+4. **不确定时不编造**：若无法确认 API 签名的版本归属，明确说明并提示用户核对所用版本，**不允许编造 API 签名**。

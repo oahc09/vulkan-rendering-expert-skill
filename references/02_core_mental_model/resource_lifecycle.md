@@ -143,6 +143,30 @@ Compute 写 storage buffer
 3. 延迟销毁队列，等 N 帧后销毁。
 4. Render Graph 中记录资源最后使用点。
 
+## 幂等销毁
+
+Vulkan spec 允许 `vkDestroy*` / `vkFree*` 在 handle 为 `VK_NULL_HANDLE` 时执行 no-op，这是设计幂等 shutdown 的基础 [SPEC]。
+
+```text
+VulkanApp::shutdown():
+    if isShutdown: return              // 幂等入口
+    isShutdown = true
+    vkDeviceWaitIdle(device)           // 幂等 [SPEC]
+    按依赖顺序销毁：下游 → 上游
+    每个 handle destroy 后立即置 VK_NULL_HANDLE
+```
+
+关键规则：
+
+1. `vkDeviceWaitIdle` 是幂等的，shutdown 入口可无条件调用 [SPEC]。
+2. 每个 `vkDestroy*` 后立即把 handle 置 `VK_NULL_HANDLE`，防止 destructor 与显式 shutdown 双重销毁同一 handle [ENGINE]。
+3. AllocationCallbacks 必须与创建时一致，destroy 时传不同 pAllocator 是 undefined behavior [SPEC]。
+4. swapchain recreate 与 shutdown 共用清理函数时，必须通过 flag 区分"仅 swapchain-dependent 资源"与"全部资源" [ENGINE]。
+5. destructor 必须调用 shutdown 并能容忍"对象从未成功创建"场景：所有 handle 为 NULL，wrapper 走 no-op 路径 [ENGINE]。
+6. device lost 后不能依赖 fence signal；应跳过 fence 等待直接销毁对象 [TOOL]。
+7. `vkDestroyDescriptorSet` 不存在；descriptor set 由 `vkResetDescriptorPool` / `vkDestroyDescriptorPool` 统一回收，幂等设计需作用在 pool 层 [SPEC]。
+8. swapchain image / implicit dispatchable handle 由父对象拥有，应用不能直接 destroy，幂等设计需跳过 [SPEC]。
+
 ## 专家规则
 
 ```text

@@ -74,3 +74,14 @@
 - 0～2 个 case
 
 除非用户明确要求完整方案或文档。
+
+## 5. 第三方库 API 检索规则
+
+引用第三方库（ImGui / glfw / glm / tinygltf / stb / Assimp 等）API 时，必须遵守以下检索规则（与 `00_expert_entry/accuracy_check.md` 的"Third-Party Library API Accuracy"配合）：
+
+1. **必须标注版本号**：检索到的 API 引用必须显式标注所参考的版本号（例如 `ImGui v1.91.5`、`glm 0.9.9+`、`tinygltf 2.5.0`），版本号写在 API 引用附近的括号或 metadata 中。
+2. **优先加载最新稳定版 API 变更说明**：检索时优先加载最新稳定版的官方 release notes / migration guide / changelog；不优先使用旧版本教程或第三方博客。
+3. **超过 6 个月必须回查**：若引用的版本距当前时间超过 6 个月，必须回查最新稳定版 API 变更说明，确认 API 签名是否已变更或废弃。
+4. **Vulkan backend 双重标注**：检索第三方库的 Vulkan backend（如 `ImGui_ImplVulkan_*`）时，必须同时记录：第三方库版本 + 所适配的 Vulkan API 版本。
+5. **API 版本变更点显式列出**：若某 API 在不同版本间存在签名 / 参数 / 行为变更，必须显式列出变更点，引导用户使用正确版本签名。
+6. **不确定时不编造**：若检索结果无法确认 API 签名的版本归属，必须明确说明"该 API 签名基于 vXXX，请在使用前核对所用版本"，**不允许编造 API 签名**。

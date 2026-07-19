@@ -31,6 +31,17 @@
 8. 对于 Android Vulkan 细节，优先回查 Android NDK 文档。
 9. 对于性能结论，优先用 profiler / trace / counter / frame capture 验证。
 
+## Third-Party Library API Accuracy
+
+引用第三方库（ImGui / glfw / glm / tinygltf / stb / Assimp / GLM / DirectXMath / Eigen 等）API 时必须满足：
+
+1. **必须标注版本号**：引用任何第三方库 API（函数名、签名、结构体字段）时，必须明确标注所参考的版本号（例如 `ImGui v1.91.5`、`glm 0.9.9+`、`tinygltf 2.5.0`）。版本号写在 API 引用附近的括号或 metadata 中。
+2. **超过 6 个月必须回查**：若引用的版本距当前时间超过 6 个月，必须回查该库最新稳定版的 API 变更说明（changelog / release notes），确认 API 签名是否已变更或废弃。若已变更，必须更新引用并标注"已对齐 vXXX"。
+3. **不确定时明确说明**：若无法确认 API 签名的版本归属，必须明确说明"该 API 签名基于 vXXX，请在使用前核对所用版本"，**不允许编造 API 签名**。
+4. **Vulkan backend 集成需双重标注**：当引用第三方库的 Vulkan backend（如 `ImGui_ImplVulkan_*`）时，必须同时标注：第三方库版本 + 所适配的 Vulkan API 版本（例如 `ImGui v1.91.5 + Vulkan 1.3`）。
+5. **API 版本变更点必须显式列出**：若某 API 在不同版本间存在签名 / 参数 / 行为变更（如 ImGui v1.90 vs v1.91 的 `ImGui_ImplVulkan_Init` 从双参数变为单参数），必须显式列出变更点，避免用户使用过时签名。
+6. **检索优先级**：检索第三方库 API 时，优先加载最新稳定版的官方 API 变更说明（release notes / migration guide）；不优先使用旧版本教程或第三方博客。
+
 ## Recommended Label Usage
 
 示例：

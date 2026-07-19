@@ -153,6 +153,107 @@ Application Object
 10. **调试支持**：
     - 输出当前 alive resource count、deferred queue size、in-flight resource count；
     - 在 validation layer 报 lifetime 错误时，打印资源创建堆栈或 handle [TOOL]。
+11. **幂等销毁设计（shutdown safety）**：
+
+    Vulkan spec 允许 `vkDestroy*` / `vkFree*` 在 handle 为 `VK_NULL_HANDLE` 时执行 no-op，这是设计幂等 shutdown 的基础 [SPEC]。但 wrapper 仍需主动置空，避免异常路径双重销毁。
+
+    ```text
+    SafeDestroy(VkBuffer& buf, VkDevice device, const VkAllocationCallbacks* pAllocator):
+        if buf != VK_NULL_HANDLE:
+            vkDestroyBuffer(device, buf, pAllocator)
+            buf = VK_NULL_HANDLE
+
+    VulkanApp::shutdown():
+        if isShutdown: return              // 幂等入口
+        isShutdown = true
+        vkDeviceWaitIdle(device)           // 幂等，可重复调用 [SPEC]
+        DestroySwapchainDependent()         // view / framebuffer / depth / scene RT
+        DrainDeferredDeletionQueue()        // 等待所有 fence 或跳过（device lost）
+        DestroyLongLived()                  // pipeline / pipeline_layout / descriptor_pool
+        DestroyBase()                       // command_pool / device / instance
+        device = VK_NULL_HANDLE
+    ```
+
+    关键规则：
+
+    - `vkDeviceWaitIdle` 是幂等的，shutdown 入口可无条件调用 [SPEC]。
+    - 每个 `vkDestroy*` 后立即把 handle 置 `VK_NULL_HANDLE`，防止 destructor 与显式 shutdown 双重销毁同一 handle [ENGINE]。
+    - AllocationCallbacks 必须与创建时一致，destroy 时传不同 pAllocator 是 undefined behavior [SPEC]。
+    - swapchain recreate 与 shutdown 共用清理函数时，必须通过 flag 区分"仅 swapchain-dependent 资源"与"全部资源"，避免 recreate 误销毁长生命周期对象 [ENGINE]。
+    - destructor 必须调用 shutdown 并能容忍"对象从未成功创建"场景：所有 handle 为 NULL，wrapper 走 no-op 路径 [ENGINE]。
+    - device lost 后 shutdown 不能依赖 fence signal；应跳过 fence 等待直接销毁对象并重建 renderer [TOOL]。
+    - `vkDestroyDescriptorSet` 不存在；descriptor set 由 `vkResetDescriptorPool` / `vkDestroyDescriptorPool` 统一回收，幂等设计需作用在 pool 层 [SPEC]。
+    - swapchain image / implicit dispatchable handle 由父对象拥有，应用不能直接 destroy，幂等设计需跳过这些对象 [SPEC]。
+
+### 常见多次调用场景
+
+幂等设计的真正价值在于异常路径与组合调用，必须显式覆盖以下场景：
+
+1. **main 显式调用 + 析构调用**：
+
+   ```text
+   int main() {
+       VulkanApp app;
+       app.init();
+       app.run();
+       app.shutdown();      // 显式调用 1
+   }   // 析构再次调用 shutdown —— 必须走 no-op 路径
+   ```
+
+   应对：`isShutdown` flag 在 shutdown 入口检查并置位；析构调用时 flag 已 true 直接 return [ENGINE]。
+
+2. **异常路径 + 正常路径**：
+
+   ```text
+   VulkanApp::init():
+       CreateInstance()           // 成功
+       CreateDevice()             // 失败抛异常
+       CreateSwapchain()          // 未执行
+   } catch (...) {
+       shutdown();                // 异常路径调用，部分对象已创建
+   }
+   ```
+
+   应对：shutdown 必须容忍"对象从未成功创建"场景，所有 handle 为 `VK_NULL_HANDLE`，wrapper 走 no-op 路径 [ENGINE]。
+
+3. **窗口关闭 + 析构**：
+
+   ```text
+   OnWindowClose():
+       app.shutdown()             // 用户关闭窗口触发
+   }   // app 析构再次调用 shutdown
+   ```
+
+   应对：同场景 1，`isShutdown` flag 防双重销毁 [ENGINE]。
+
+4. **swapchain recreate + shutdown 共用清理函数**：
+
+   ```text
+   OnResize():
+       DestroySwapchainDependent()  // 仅销毁 swapchain-dependent 资源
+   VulkanApp::shutdown():
+       DestroySwapchainDependent()  // 同一函数被复用
+       DestroyLongLived()           // 销毁长生命周期资源
+       DestroyBase()
+   ```
+
+   应对：清理函数本身必须幂等（handle 置空），shutdown 通过 flag 区分"仅 swapchain-dependent"与"全部资源" [ENGINE]。
+
+5. **device lost 后清理 + 正常析构**：
+
+   ```text
+   OnDeviceLost():
+       emergencyShutdown()          // 跳过 fence 等待，直接销毁
+   }   // 析构再次调用 shutdown
+   ```
+
+   应对：emergencyShutdown 也必须设置 `isShutdown` flag；device lost 后不能依赖 fence signal，应跳过 fence 等待直接销毁对象 [TOOL]。
+
+通用规则：
+
+- 所有清理函数（包括 DestroySwapchainDependent / DestroyLongLived / DestroyBase）必须**独立幂等**，被重复调用不崩溃 [ENGINE]。
+- `isShutdown` flag 是入口幂等保障；handle 置空是函数级幂等保障，两者必须同时存在 [ENGINE]。
+- 析构函数应无条件调用 shutdown，确保异常路径下资源也能释放 [ENGINE]。
 
 ---
 
