@@ -310,7 +310,7 @@ Application Object
 
 - `../../04_debug_playbooks/02_crash_hang/device_lost.md`
 - `../../04_debug_playbooks/02_crash_hang/gpu_hang.md`
-- `../../04_debug_playbooks/03_validation_errors/synchronization_hazard.md`
+- `../../04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md`
 - `../../04_debug_playbooks/03_validation_errors/memory_leak.md`
 - `../../04_debug_playbooks/05_android_specific/android_surface_lifecycle.md`
 

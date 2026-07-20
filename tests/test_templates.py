@@ -79,7 +79,12 @@ def test_debug_playbooks_have_required_sections():
         if not _is_playbook(path):
             continue
         text = path.read_text(encoding="utf-8")
-        sections = _extract_h2_titles(text)
+        # Merged playbook files contain one or more "## Debug Playbook:" anchors
+        # and use ### for per-playbook sections. Single-playbook files use ## directly.
+        if "\n## Debug Playbook:" in text:
+            sections = [m.group(1).strip() for m in re.finditer(r"^###\s+(.+)$", text, re.M)]
+        else:
+            sections = _extract_h2_titles(text)
         missing = [s for s in core if s not in sections]
         if missing:
             failures.append(f"{path.relative_to(SKILL_DIR)} missing {missing}")
@@ -126,7 +131,11 @@ def test_cases_have_required_sections():
         if not _is_case(path):
             continue
         text = path.read_text(encoding="utf-8")
-        sections = _extract_h2_titles(text)
+        # Merged case files start with "# Cases:" and use ### for per-case sections
+        if text.startswith("# Cases:"):
+            sections = [m.group(1).strip() for m in re.finditer(r"^###\s+(.+)$", text, re.M)]
+        else:
+            sections = _extract_h2_titles(text)
         missing = [s for s in core if s not in sections]
         if missing:
             failures.append(f"{path.relative_to(SKILL_DIR)} missing {missing}")

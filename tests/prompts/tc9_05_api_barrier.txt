@@ -1,3 +1,0 @@
-解释一下 vkCmdPipelineBarrier 的作用和正确用法。
-特别是 srcStageMask、dstStageMask、srcAccessMask、dstAccessMask 怎么设置。
-我在做 image layout transition 时经常出错。

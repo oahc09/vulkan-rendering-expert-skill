@@ -4,7 +4,7 @@
 
 `04_debug_playbooks` 是 Vulkan Expert Skill 的调试专家手册模块。
 
-它以真实工程问题为入口，不以 API 为入口。  
+它以真实工程问题为入口，不以 API 为入口。
 它的目标是让 AI 像高级 Vulkan 渲染工程师一样，根据现象快速建立排查路径：
 
 ```text
@@ -97,11 +97,9 @@
 │
 ├── 03_validation_errors/
 │   ├── validation_error_decode.md
-│   ├── descriptor_binding_error.md
-│   ├── image_layout_error.md
-│   ├── synchronization_hazard.md
-│   ├── memory_leak.md
-│   └── pipeline_layout_error.md
+│   ├── descriptor_pipeline_layout_errors.md   （合并 descriptor_binding_error + pipeline_layout_error）
+│   ├── layout_sync_hazard_errors.md           （合并 image_layout_error + synchronization_hazard）
+│   └── memory_leak.md
 │
 ├── 04_resource_sync/
 │   ├── compute_no_output.md
@@ -111,16 +109,14 @@
 │   └── android_surface_lifecycle.md
 │
 └── 06_performance_symptoms/
-    ├── cpu_frame_time_high.md
+    ├── cpu_overhead_symptoms.md        （合并 cpu_frame_time_high + descriptor_update_overhead）
     ├── gpu_frame_time_high.md
-    ├── bandwidth_high.md
-    ├── barrier_overuse.md
-    ├── descriptor_update_overhead.md
-    ├── fullscreen_pass_cost.md
-    ├── draw_call_bottleneck.md
-    ├── pipeline_creation_stutter.md
-    └── startup_time_high.md
+    ├── bandwidth_fullscreen_cost.md    （合并 bandwidth_high + fullscreen_pass_cost）
+    ├── barrier_draw_call_stall.md      （合并 barrier_overuse + draw_call_bottleneck）
+    └── pipeline_startup_stutter.md     （合并 pipeline_creation_stutter + startup_time_high）
 ```
+
+> 每个合并文件内部以 `## Debug Playbook: <原 playbook 名>` 作为锚点保留全部内容，向量检索仍可命中原 playbook 主题。
 
 ---
 
@@ -132,27 +128,21 @@
 01_visual_issues/black_screen.md
 01_visual_issues/flickering.md
 01_visual_issues/depth_test_wrong.md
-03_validation_errors/validation_error_decode.md
-03_validation_errors/descriptor_binding_error.md
-03_validation_errors/image_layout_error.md
-03_validation_errors/synchronization_hazard.md
-03_validation_errors/memory_leak.md
-03_validation_errors/pipeline_layout_error.md
 02_crash_hang/swapchain_recreate_crash.md
 02_crash_hang/gpu_hang.md
 02_crash_hang/device_lost.md
-05_android_specific/android_surface_lifecycle.md
+03_validation_errors/validation_error_decode.md
+03_validation_errors/descriptor_pipeline_layout_errors.md
+03_validation_errors/layout_sync_hazard_errors.md
+03_validation_errors/memory_leak.md
 04_resource_sync/compute_no_output.md
 04_resource_sync/compute_graphics_sync_error.md
-06_performance_symptoms/cpu_frame_time_high.md
+05_android_specific/android_surface_lifecycle.md
+06_performance_symptoms/cpu_overhead_symptoms.md
 06_performance_symptoms/gpu_frame_time_high.md
-06_performance_symptoms/bandwidth_high.md
-06_performance_symptoms/barrier_overuse.md
-06_performance_symptoms/descriptor_update_overhead.md
-06_performance_symptoms/fullscreen_pass_cost.md
-06_performance_symptoms/draw_call_bottleneck.md
-06_performance_symptoms/pipeline_creation_stutter.md
-06_performance_symptoms/startup_time_high.md
+06_performance_symptoms/bandwidth_fullscreen_cost.md
+06_performance_symptoms/barrier_draw_call_stall.md
+06_performance_symptoms/pipeline_startup_stutter.md
 ```
 
 这些 Playbook 覆盖黑屏、闪烁、Crash、GPU Hang、Device Lost、Validation Error、Descriptor、Image Layout、Sync Hazard、Compute 无输出、Android 生命周期和常见性能症状。

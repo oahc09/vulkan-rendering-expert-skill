@@ -11,7 +11,7 @@
 
 ### 不适用
 
-- 纯 graphics pass 内部同步问题（优先看 synchronization_hazard.md）。
+- 纯 graphics pass 内部同步问题（优先看 layout_sync_hazard_errors.md）。
 - Compute shader 本身输出错误（优先看 compute_no_output.md）。
 - 资源上传错误（如 staging buffer 未 flush）。
 

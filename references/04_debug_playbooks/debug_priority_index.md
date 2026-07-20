@@ -64,7 +64,7 @@
 
 - `03_validation_errors/validation_error_decode.md`
 - `03_validation_errors/memory_leak.md`
-- `03_validation_errors/pipeline_layout_error.md`
+- `03_validation_errors/descriptor_pipeline_layout_errors.md`
 
 ---
 
@@ -84,7 +84,7 @@ Shader set/binding
 
 相关 Playbook：
 
-- `03_validation_errors/descriptor_binding_error.md`
+- `03_validation_errors/descriptor_pipeline_layout_errors.md`
 
 ---
 
@@ -103,7 +103,7 @@ Image usage
 
 相关 Playbook：
 
-- `03_validation_errors/image_layout_error.md`
+- `03_validation_errors/layout_sync_hazard_errors.md`
 
 ---
 
@@ -189,7 +189,7 @@ Image usage
 
 相关 Playbook：
 
-- `03_validation_errors/synchronization_hazard.md`
+- `03_validation_errors/layout_sync_hazard_errors.md`
 
 ---
 
@@ -214,15 +214,15 @@ Image usage
 
 | 症状 | Playbook |
 |---|---|
-| CPU frame time 高 | `06_performance_symptoms/cpu_frame_time_high.md` |
+| CPU frame time 高 | `06_performance_symptoms/cpu_overhead_symptoms.md` |
 | GPU frame time 高 | `06_performance_symptoms/gpu_frame_time_high.md` |
-| Bandwidth 高 | `06_performance_symptoms/bandwidth_high.md` |
-| Barrier 过多 | `06_performance_symptoms/barrier_overuse.md` |
-| Descriptor update 开销高 | `06_performance_symptoms/descriptor_update_overhead.md` |
-| Draw call 瓶颈 | `06_performance_symptoms/draw_call_bottleneck.md` |
-| Fullscreen pass 开销高 | `06_performance_symptoms/fullscreen_pass_cost.md` |
-| Pipeline 创建卡顿 | `06_performance_symptoms/pipeline_creation_stutter.md` |
-| 启动时间过长 | `06_performance_symptoms/startup_time_high.md` |
+| Bandwidth 高 | `06_performance_symptoms/bandwidth_fullscreen_cost.md` |
+| Barrier 过多 | `06_performance_symptoms/barrier_draw_call_stall.md` |
+| Descriptor update 开销高 | `06_performance_symptoms/cpu_overhead_symptoms.md` |
+| Draw call 瓶颈 | `06_performance_symptoms/barrier_draw_call_stall.md` |
+| Fullscreen pass 开销高 | `06_performance_symptoms/bandwidth_fullscreen_cost.md` |
+| Pipeline 创建卡顿 | `06_performance_symptoms/pipeline_startup_stutter.md` |
+| 启动时间过长 | `06_performance_symptoms/pipeline_startup_stutter.md` |
 
 ---
 

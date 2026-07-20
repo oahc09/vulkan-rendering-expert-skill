@@ -57,48 +57,28 @@
 ├── case_tags.md
 │
 ├── 01_black_screen/
-│   ├── case_black_screen_image_layout.md
-│   ├── case_black_screen_no_submit.md
-│   ├── case_black_screen_wrong_viewport.md
-│   └── case_black_screen_depth_cull.md
+│   └── case_black_screen.md              （合并 4 个原 case）
 │
 ├── 02_descriptor_pipeline/
-│   ├── case_descriptor_binding_mismatch.md
-│   ├── case_pipeline_layout_mismatch.md
-│   ├── case_descriptor_old_image_after_resize.md
-│   └── case_uniform_alignment_error.md
+│   └── case_descriptor_pipeline.md       （合并 4 个原 case）
 │
 ├── 03_sync_layout/
-│   ├── case_compute_to_fragment_missing_barrier.md
-│   ├── case_transfer_to_shader_missing_transition.md
-│   ├── case_frame_resource_overwrite.md
-│   └── case_command_buffer_reset_in_flight.md
+│   └── case_sync_layout.md               （合并 4 个原 case）
 │
 ├── 04_swapchain_android/
-│   ├── case_android_rotation_old_imageview.md
-│   ├── case_surface_destroy_present_crash.md
-│   ├── case_pause_resume_black_screen.md
-│   └── case_extent_zero_swapchain_create.md
+│   └── case_swapchain_android.md         （合并 4 个原 case）
 │
 ├── 05_compute/
-│   ├── case_compute_dispatch_zero.md
-│   ├── case_storage_image_layout_wrong.md
-│   ├── case_storage_buffer_not_visible.md
-│   └── case_compute_output_overwritten.md
+│   └── case_compute.md                   （合并 4 个原 case）
 │
 ├── 06_performance/
-│   ├── case_fullscreen_pass_bandwidth_high.md
-│   ├── case_descriptor_update_cpu_overhead.md
-│   ├── case_pipeline_creation_stutter.md
-│   ├── case_barrier_overuse_gpu_stall.md
-│   └── case_mobile_tile_resolve_high.md
+│   └── case_performance.md               （合并 5 个原 case）
 │
 └── 07_engine_architecture/
-    ├── case_render_graph_resource_lifetime.md
-    ├── case_per_frame_resource_design.md
-    ├── case_swapchain_dependent_resource_group.md
-    └── case_pipeline_cache_strategy.md
+    └── case_engine_architecture.md       （合并 4 个原 case）
 ```
+
+> 每个合并文件内部以 `## Case: <原 case 名>` 作为锚点保留全部内容，向量检索仍可命中原 case 主题。
 
 ---
 
@@ -108,27 +88,27 @@
 
 ### 黑屏类
 
-- `01_black_screen/case_black_screen_image_layout.md`
-- `01_black_screen/case_black_screen_no_submit.md`
-- `01_black_screen/case_black_screen_wrong_viewport.md`
+- `01_black_screen/case_black_screen.md`
+- `01_black_screen/case_black_screen.md`
+- `01_black_screen/case_black_screen.md`
 
 ### Descriptor / Pipeline 类
 
-- `02_descriptor_pipeline/case_descriptor_binding_mismatch.md`
-- `02_descriptor_pipeline/case_pipeline_layout_mismatch.md`
-- `02_descriptor_pipeline/case_descriptor_old_image_after_resize.md`
+- `02_descriptor_pipeline/case_descriptor_pipeline.md`
+- `02_descriptor_pipeline/case_descriptor_pipeline.md`
+- `02_descriptor_pipeline/case_descriptor_pipeline.md`
 
 ### 同步 / Layout 类
 
-- `03_sync_layout/case_compute_to_fragment_missing_barrier.md`
-- `03_sync_layout/case_frame_resource_overwrite.md`
-- `03_sync_layout/case_command_buffer_reset_in_flight.md`
+- `03_sync_layout/case_sync_layout.md`
+- `03_sync_layout/case_sync_layout.md`
+- `03_sync_layout/case_sync_layout.md`
 
 ### Android Swapchain 类
 
-- `04_swapchain_android/case_android_rotation_old_imageview.md`
-- `04_swapchain_android/case_surface_destroy_present_crash.md`
-- `04_swapchain_android/case_extent_zero_swapchain_create.md`
+- `04_swapchain_android/case_swapchain_android.md`
+- `04_swapchain_android/case_swapchain_android.md`
+- `04_swapchain_android/case_swapchain_android.md`
 
 ---
 

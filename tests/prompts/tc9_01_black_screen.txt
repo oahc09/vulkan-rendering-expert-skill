@@ -1,5 +1,0 @@
-我的 Vulkan 应用在 Android 设备上运行时出现黑屏。
-设备是 Snapdragon 888，Vulkan 1.1。
-渲染流程是：创建 Swapchain -> 录制 Command Buffer -> vkQueueSubmit -> vkQueuePresentKHR。
-没有 Validation Layer 报错，但屏幕全黑。
-帮我排查。

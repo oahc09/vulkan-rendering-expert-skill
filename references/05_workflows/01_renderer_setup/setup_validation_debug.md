@@ -228,9 +228,9 @@ Render Pass / Draw / Dispatch / Barrier
 ## 13. 相关 Debug Playbook
 
 - `../../04_debug_playbooks/03_validation_errors/validation_error_decode.md`
-- `../../04_debug_playbooks/03_validation_errors/image_layout_error.md`
-- `../../04_debug_playbooks/03_validation_errors/descriptor_binding_error.md`
-- `../../04_debug_playbooks/03_validation_errors/synchronization_hazard.md`
+- `../../04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md`
+- `../../04_debug_playbooks/03_validation_errors/descriptor_pipeline_layout_errors.md`
+- `../../04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md`
 - `../../04_debug_playbooks/05_android_specific/android_surface_lifecycle.md`
 
 ---

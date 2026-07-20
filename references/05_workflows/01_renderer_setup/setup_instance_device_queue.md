@@ -231,7 +231,7 @@ Application
 - `../../04_debug_playbooks/03_validation_errors/validation_error_decode.md`
 - `../../04_debug_playbooks/02_crash_hang/device_lost.md`
 - `../../04_debug_playbooks/05_android_specific/android_surface_lifecycle.md`
-- `../../04_debug_playbooks/03_validation_errors/descriptor_binding_error.md`
+- `../../04_debug_playbooks/03_validation_errors/descriptor_pipeline_layout_errors.md`
 
 ---
 

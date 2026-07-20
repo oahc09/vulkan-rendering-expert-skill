@@ -1,7 +1,0 @@
-我在设计一个 Vulkan 渲染引擎的 Render Graph 系统。
-需要支持：
-- 动态 Pass 依赖关系
-- 自动 Barrier 插入
-- 资源别名（Resource Aliasing）
-- 移动端兼容
-请给我架构设计建议。

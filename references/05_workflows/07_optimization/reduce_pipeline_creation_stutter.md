@@ -228,9 +228,9 @@ Pipeline 状态：
 
 ## 13. 相关 Debug Playbook
 
-- `../../04_debug_playbooks/06_performance_symptoms/pipeline_creation_stutter.md`
-- `../../04_debug_playbooks/06_performance_symptoms/startup_time_high.md`
-- `../../04_debug_playbooks/06_performance_symptoms/cpu_frame_time_high.md`
+- `../../04_debug_playbooks/06_performance_symptoms/pipeline_startup_stutter.md`
+- `../../04_debug_playbooks/06_performance_symptoms/pipeline_startup_stutter.md`
+- `../../04_debug_playbooks/06_performance_symptoms/cpu_overhead_symptoms.md`
 - `../../04_debug_playbooks/02_crash_hang/device_lost.md`
 - `../../04_debug_playbooks/05_android_specific/android_surface_lifecycle.md`
 

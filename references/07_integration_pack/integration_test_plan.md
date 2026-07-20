@@ -18,7 +18,7 @@ Android Vulkan 工程运行后黑屏，没有 crash，怎么排查？
 → 03_api_manual/03_command_buffer/command_buffer.md
 → 03_api_manual/06_pipeline/graphics_pipeline.md
 → 03_api_manual/05_descriptor/descriptor_set.md
-→ 06_cases/01_black_screen/case_black_screen_image_layout.md
+→ 06_cases/01_black_screen/case_black_screen.md
 ```
 
 合格输出必须覆盖：
@@ -50,7 +50,7 @@ Android Vulkan 工程运行后黑屏，没有 crash，怎么排查？
 → 03_api_manual/05_descriptor/descriptor_set.md
 → 03_api_manual/06_pipeline/graphics_pipeline.md
 → 03_api_manual/08_synchronization/pipeline_barrier.md
-→ 04_debug_playbooks/03_validation_errors/image_layout_error.md
+→ 04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md
 ```
 
 合格输出必须覆盖：
@@ -80,7 +80,7 @@ Android 横竖屏切换后 Vulkan crash。
 → 02_core_mental_model/android_surface_swapchain_lifecycle.md
 → 04_debug_playbooks/02_crash_hang/swapchain_recreate_crash.md
 → 05_workflows/04_android_integration/handle_swapchain_recreate.md
-→ 06_cases/04_swapchain_android/case_android_rotation_old_imageview.md
+→ 06_cases/04_swapchain_android/case_swapchain_android.md
 ```
 
 合格输出必须覆盖：
@@ -110,7 +110,7 @@ Compute 写 storage image 后给 fragment shader 采样，结果是黑的。
 根目录 SKILL.md
 → 05_workflows/03_compute_workflows/compute_to_graphics_sync.md
 → 04_debug_playbooks/04_resource_sync/compute_no_output.md
-→ 06_cases/03_sync_layout/case_compute_to_fragment_missing_barrier.md
+→ 06_cases/03_sync_layout/case_sync_layout.md
 → 03_api_manual/08_synchronization/image_memory_barrier.md
 ```
 
@@ -138,8 +138,8 @@ Vulkan 后处理 pass 开启后 GPU 很高，怎么优化？
 ```text
 根目录 SKILL.md
 → 05_workflows/07_optimization/optimize_fullscreen_pass.md
-→ 04_debug_playbooks/06_performance_symptoms/fullscreen_pass_cost.md
-→ 06_cases/06_performance/case_fullscreen_pass_bandwidth_high.md
+→ 04_debug_playbooks/06_performance_symptoms/bandwidth_fullscreen_cost.md
+→ 06_cases/06_performance/case_performance.md
 ```
 
 合格输出必须覆盖：
@@ -165,11 +165,11 @@ Validation 报 descriptor binding 不匹配，怎么定位？
 
 ```text
 根目录 SKILL.md
-→ 04_debug_playbooks/03_validation_errors/descriptor_binding_error.md
+→ 04_debug_playbooks/03_validation_errors/descriptor_pipeline_layout_errors.md
 → 03_api_manual/05_descriptor/descriptor_set_layout.md
 → 03_api_manual/05_descriptor/descriptor_set.md
 → 03_api_manual/06_pipeline/pipeline_layout.md
-→ 06_cases/02_descriptor_pipeline/case_descriptor_binding_mismatch.md
+→ 06_cases/02_descriptor_pipeline/case_descriptor_pipeline.md
 ```
 
 合格输出必须覆盖：
@@ -196,7 +196,7 @@ Compute 输出给 Fragment 采样黑屏，有没有类似案例？
 
 ```text
 根目录 SKILL.md
-→ 06_cases/03_sync_layout/case_compute_to_fragment_missing_barrier.md
+→ 06_cases/03_sync_layout/case_sync_layout.md
 → 04_debug_playbooks/04_resource_sync/compute_no_output.md
 → 03_api_manual/08_synchronization/pipeline_barrier.md
 ```

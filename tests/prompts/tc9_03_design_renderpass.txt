@@ -1,6 +1,0 @@
-我需要在一个新的 Vulkan 引擎中实现一个基础的前向渲染管线。
-要求：
-- 支持 1 个 directional light
-- 支持多个 point light（动态数量）
-- 目标平台：桌面 + Android
-请给我设计方案。

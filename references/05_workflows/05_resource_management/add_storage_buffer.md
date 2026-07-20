@@ -189,7 +189,7 @@ CPU Data / Compute Output
 
 ## 13. 相关 Debug Playbook
 
-- `../../04_debug_playbooks/03_validation_errors/synchronization_hazard.md`
+- `../../04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md`
 - `../../04_debug_playbooks/04_resource_sync/compute_graphics_sync_error.md`
 - `../../04_debug_playbooks/04_resource_sync/compute_no_output.md`
 - `../../04_debug_playbooks/02_crash_hang/device_lost.md`

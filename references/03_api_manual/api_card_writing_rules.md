@@ -157,7 +157,7 @@ black_screen.md
 ```
 
 ```text
-descriptor_binding_error.md
+descriptor_pipeline_layout_errors.md
 应引用：
 - descriptor_set_layout.md
 - descriptor_set.md

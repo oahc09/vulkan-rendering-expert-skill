@@ -82,7 +82,7 @@ VkImage
 
 ## 6. Pipeline / Descriptor 设计
 
-当前 pass 输出不一定需要 descriptor。  
+当前 pass 输出不一定需要 descriptor。
 如果后续 pass 采样 offscreen image：
 
 | Shader set/binding | Vulkan Descriptor | 资源 | Stage |
@@ -169,6 +169,6 @@ VkImage
 
 ## 13. 相关 Debug Playbook
 
-- `../../04_debug_playbooks/03_validation_errors/image_layout_error.md`
+- `../../04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md`
 - `../../04_debug_playbooks/02_crash_hang/swapchain_recreate_crash.md`
-- `../../04_debug_playbooks/06_performance_symptoms/bandwidth_high.md`
+- `../../04_debug_playbooks/06_performance_symptoms/bandwidth_fullscreen_cost.md`

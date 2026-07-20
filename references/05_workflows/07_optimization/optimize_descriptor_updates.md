@@ -198,8 +198,8 @@ VkDescriptorSetLayout
 
 ## 13. 相关 Debug Playbook
 
-- `../../04_debug_playbooks/06_performance_symptoms/descriptor_update_overhead.md`
-- `../../04_debug_playbooks/03_validation_errors/descriptor_binding_error.md`
+- `../../04_debug_playbooks/06_performance_symptoms/cpu_overhead_symptoms.md`
+- `../../04_debug_playbooks/03_validation_errors/descriptor_pipeline_layout_errors.md`
 - `../../04_debug_playbooks/02_crash_hang/device_lost.md`
 - `../../04_debug_playbooks/05_android_specific/android_surface_lifecycle.md`
 

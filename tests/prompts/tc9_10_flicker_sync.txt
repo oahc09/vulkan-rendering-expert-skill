@@ -1,5 +1,0 @@
-我的 Vulkan 应用画面闪烁，每隔几帧出现一次错误画面。
-使用 2 frames-in-flight。
-Fence 使用方式：vkResetFences -> vkQueueSubmit -> vkWaitForFences。
-Uniform Buffer 每帧用 vkMapMemory + memcpy 更新。
-帮我排查。

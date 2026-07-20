@@ -1,4 +1,0 @@
-我的 Vulkan 游戏在 Android 手机上帧率只有 25fps，目标是 60fps。
-渲染管线包含：G-Buffer Pass（3 个 attachment）-> Lighting Pass（全屏）-> Bloom Pass（全屏）-> Tone Mapping Pass（全屏）。
-设备是 Mali-G78，分辨率 2560x1440。
-没有做 MSAA。怎么优化？

@@ -206,8 +206,8 @@ Pipeline 状态：
 
 ## 13. 相关 Debug Playbook
 
-- `../../04_debug_playbooks/06_performance_symptoms/bandwidth_high.md`
-- `../../04_debug_playbooks/06_performance_symptoms/fullscreen_pass_cost.md`
+- `../../04_debug_playbooks/06_performance_symptoms/bandwidth_fullscreen_cost.md`
+- `../../04_debug_playbooks/06_performance_symptoms/bandwidth_fullscreen_cost.md`
 - `../../04_debug_playbooks/06_performance_symptoms/gpu_frame_time_high.md`
 - `../../04_debug_playbooks/05_android_specific/android_surface_lifecycle.md`
 - `../../04_debug_playbooks/01_visual_issues/flickering.md`

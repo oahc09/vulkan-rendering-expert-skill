@@ -30,11 +30,11 @@
 
 | Message 关键词 | 典型根因 | 优先 Debug Playbook | 优先 API Card |
 |---|---|---|---|
-| `descriptor set layout binding mismatch` | shader binding 与 layout 不一致 | `../04_debug_playbooks/03_validation_errors/descriptor_binding_error.md` | `05_descriptor/descriptor_set_layout.md` |
-| `pipeline layout incompatible` | 绑定的 layout 与 pipeline 不兼容 | `../04_debug_playbooks/03_validation_errors/descriptor_binding_error.md` | `06_pipeline/pipeline_layout.md` |
-| `descriptor image layout` | descriptor imageLayout 与实际 layout 不一致 | `../04_debug_playbooks/03_validation_errors/image_layout_error.md` | `05_descriptor/descriptor_update.md`<br>`04_buffer_image_memory/image.md` |
-| `image layout mismatch` / `TRANSFER_DST_OPTIMAL` | 缺少 layout transition | `../04_debug_playbooks/03_validation_errors/image_layout_error.md` | `08_synchronization/image_memory_barrier.md` |
-| `synchronization hazard` / `WRITE_AFTER_READ` | 缺少 barrier / stage-access 错误 | `../04_debug_playbooks/03_validation_errors/synchronization_hazard.md` | `08_synchronization/pipeline_barrier.md` |
+| `descriptor set layout binding mismatch` | shader binding 与 layout 不一致 | `../04_debug_playbooks/03_validation_errors/descriptor_pipeline_layout_errors.md` | `05_descriptor/descriptor_set_layout.md` |
+| `pipeline layout incompatible` | 绑定的 layout 与 pipeline 不兼容 | `../04_debug_playbooks/03_validation_errors/descriptor_pipeline_layout_errors.md` | `06_pipeline/pipeline_layout.md` |
+| `descriptor image layout` | descriptor imageLayout 与实际 layout 不一致 | `../04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md` | `05_descriptor/descriptor_update.md`<br>`04_buffer_image_memory/image.md` |
+| `image layout mismatch` / `TRANSFER_DST_OPTIMAL` | 缺少 layout transition | `../04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md` | `08_synchronization/image_memory_barrier.md` |
+| `synchronization hazard` / `WRITE_AFTER_READ` | 缺少 barrier / stage-access 错误 | `../04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md` | `08_synchronization/pipeline_barrier.md` |
 | `command buffer reset in flight` | 复用仍在 pending 的 command buffer | `../04_debug_playbooks/03_validation_errors/validation_error_decode.md` | `03_command_buffer/command_buffer_lifetime.md` |
 | `VUID-vkAcquireNextImageKHR-surface-*` | surface 无效或已改变 | `../04_debug_playbooks/05_android_specific/android_surface_lifecycle.md` | `02_surface_swapchain/surface.md` |
 | `VUID-vkQueuePresentKHR-surface-*` | present 时 surface/swapchain 状态不匹配 | `../04_debug_playbooks/02_crash_hang/swapchain_recreate_crash.md` | `02_surface_swapchain/swapchain.md` |
@@ -45,14 +45,14 @@
 
 | 现象 | 优先 Debug Playbook | 优先 API Card | 参考 Case |
 |---|---|---|---|
-| 黑屏 | `../04_debug_playbooks/01_visual_issues/black_screen.md` | `06_pipeline/graphics_pipeline.md`<br>`08_synchronization/image_memory_barrier.md` | `../06_cases/01_black_screen/case_black_screen_image_layout.md` |
-| 闪烁 | `../04_debug_playbooks/01_visual_issues/flickering.md` | `08_synchronization/fence.md`<br>`05_descriptor/descriptor_set.md` | `../06_cases/03_sync_layout/case_frame_resource_overwrite.md` |
-| 纹理黑 / 采样异常 | `../04_debug_playbooks/03_validation_errors/descriptor_binding_error.md` | `05_descriptor/descriptor_update.md`<br>`04_buffer_image_memory/image.md` | `../06_cases/01_black_screen/case_black_screen_image_layout.md` |
-| Compute 无输出 | `../04_debug_playbooks/04_resource_sync/compute_no_output.md`<br>`../04_debug_playbooks/04_resource_sync/compute_graphics_sync_error.md` | `06_pipeline/compute_pipeline.md`<br>`08_synchronization/pipeline_barrier.md` | `../06_cases/05_compute/case_compute_dispatch_zero.md` |
+| 黑屏 | `../04_debug_playbooks/01_visual_issues/black_screen.md` | `06_pipeline/graphics_pipeline.md`<br>`08_synchronization/image_memory_barrier.md` | `../06_cases/01_black_screen/case_black_screen.md` |
+| 闪烁 | `../04_debug_playbooks/01_visual_issues/flickering.md` | `08_synchronization/fence.md`<br>`05_descriptor/descriptor_set.md` | `../06_cases/03_sync_layout/case_sync_layout.md` |
+| 纹理黑 / 采样异常 | `../04_debug_playbooks/03_validation_errors/descriptor_pipeline_layout_errors.md` | `05_descriptor/descriptor_update.md`<br>`04_buffer_image_memory/image.md` | `../06_cases/01_black_screen/case_black_screen.md` |
+| Compute 无输出 | `../04_debug_playbooks/04_resource_sync/compute_no_output.md`<br>`../04_debug_playbooks/04_resource_sync/compute_graphics_sync_error.md` | `06_pipeline/compute_pipeline.md`<br>`08_synchronization/pipeline_barrier.md` | `../06_cases/05_compute/case_compute.md` |
 | GPU hang / TDR | `../04_debug_playbooks/02_crash_hang/gpu_hang.md` | `08_synchronization/pipeline_barrier.md`<br>`06_pipeline/graphics_pipeline.md` | — |
-| Device lost | `../04_debug_playbooks/02_crash_hang/device_lost.md` | `03_command_buffer/queue_submit.md` | `../06_cases/04_swapchain_android/case_surface_destroy_present_crash.md` |
-| Swapchain recreate crash | `../04_debug_playbooks/02_crash_hang/swapchain_recreate_crash.md` | `02_surface_swapchain/swapchain_recreate.md` | `../06_cases/04_swapchain_android/case_android_rotation_old_imageview.md` |
-| Android pause/resume 黑屏 | `../04_debug_playbooks/05_android_specific/android_surface_lifecycle.md` | `02_surface_swapchain/swapchain_recreate.md`<br>`08_synchronization/fence.md` | `../06_cases/04_swapchain_android/case_pause_resume_black_screen.md` |
+| Device lost | `../04_debug_playbooks/02_crash_hang/device_lost.md` | `03_command_buffer/queue_submit.md` | `../06_cases/04_swapchain_android/case_swapchain_android.md` |
+| Swapchain recreate crash | `../04_debug_playbooks/02_crash_hang/swapchain_recreate_crash.md` | `02_surface_swapchain/swapchain_recreate.md` | `../06_cases/04_swapchain_android/case_swapchain_android.md` |
+| Android pause/resume 黑屏 | `../04_debug_playbooks/05_android_specific/android_surface_lifecycle.md` | `02_surface_swapchain/swapchain_recreate.md`<br>`08_synchronization/fence.md` | `../06_cases/04_swapchain_android/case_swapchain_android.md` |
 
 ---
 
@@ -61,10 +61,10 @@
 | 症状 | 优先 Debug Playbook | 优先 Workflow |
 |---|---|---|
 | GPU frame time 高 | `../04_debug_playbooks/06_performance_symptoms/gpu_frame_time_high.md` | `../05_workflows/07_optimization/optimize_frame_time.md` |
-| Bandwidth 高 | `../04_debug_playbooks/06_performance_symptoms/bandwidth_high.md` | `../05_workflows/07_optimization/optimize_mobile_bandwidth.md` |
-| Barrier 过多 | `../04_debug_playbooks/06_performance_symptoms/barrier_overuse.md` | `../05_workflows/07_optimization/optimize_barriers.md` |
-| Descriptor update 开销高 | `../04_debug_playbooks/06_performance_symptoms/descriptor_update_overhead.md` | `../05_workflows/07_optimization/optimize_descriptor_updates.md` |
-| Fullscreen pass 重 | `../04_debug_playbooks/06_performance_symptoms/fullscreen_pass_cost.md` | `../05_workflows/07_optimization/optimize_fullscreen_pass.md` |
+| Bandwidth 高 | `../04_debug_playbooks/06_performance_symptoms/bandwidth_fullscreen_cost.md` | `../05_workflows/07_optimization/optimize_mobile_bandwidth.md` |
+| Barrier 过多 | `../04_debug_playbooks/06_performance_symptoms/barrier_draw_call_stall.md` | `../05_workflows/07_optimization/optimize_barriers.md` |
+| Descriptor update 开销高 | `../04_debug_playbooks/06_performance_symptoms/cpu_overhead_symptoms.md` | `../05_workflows/07_optimization/optimize_descriptor_updates.md` |
+| Fullscreen pass 重 | `../04_debug_playbooks/06_performance_symptoms/bandwidth_fullscreen_cost.md` | `../05_workflows/07_optimization/optimize_fullscreen_pass.md` |
 
 ---
 

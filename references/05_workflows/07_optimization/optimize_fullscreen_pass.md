@@ -199,6 +199,6 @@ Input Image
 
 ## 13. 相关 Debug Playbook
 
-- `../../04_debug_playbooks/06_performance_symptoms/fullscreen_pass_cost.md`
-- `../../04_debug_playbooks/06_performance_symptoms/bandwidth_high.md`
-- `../../04_debug_playbooks/06_performance_symptoms/barrier_overuse.md`
+- `../../04_debug_playbooks/06_performance_symptoms/bandwidth_fullscreen_cost.md`
+- `../../04_debug_playbooks/06_performance_symptoms/bandwidth_fullscreen_cost.md`
+- `../../04_debug_playbooks/06_performance_symptoms/barrier_draw_call_stall.md`

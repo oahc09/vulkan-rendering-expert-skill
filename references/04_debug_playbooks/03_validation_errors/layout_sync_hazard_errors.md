@@ -1,6 +1,190 @@
-# Debug Playbook: Synchronization Hazard
+# Debug Playbook: Image Layout / Sync Hazard Validation Errors
 
-## 0. 适用范围
+> 合并自 2 个原 playbook 文件。
+
+---
+
+## Debug Playbook: Image Layout Error
+
+### 0. 适用范围
+
+### 适用
+
+- Validation 报 image layout mismatch。
+- texture 采样为黑色。
+- attachment 写入后下一个 pass 读不到。
+- compute 写 storage image 后 graphics 采样异常。
+- transfer 上传后 shader 采样异常。
+
+### 不适用
+
+- descriptor binding 本身错误。
+- image 数据上传内容错误但 layout 正确。
+- shader 坐标错误导致采样区域不对。
+
+---
+
+### 1. 现象
+
+常见表现：
+
+- Validation 提到 `imageLayout`、`oldLayout`、`newLayout`。
+- RenderDoc 中 image 内容存在，但 shader 采样为黑。
+- 后处理 pass 输入为空。
+- compute output 没有被 graphics 正确读取。
+
+---
+
+### 2. 最可能原因排序
+
+| 优先级 | 可能原因 | 判断依据 | 关联对象 |
+|---|---|---|---|
+| P0 | producer pass 后没有 barrier | 上一 pass 写，下一 pass 读异常 | Image / Barrier |
+| P0 | descriptor imageLayout 填错 | VUID 提到 descriptor layout | Descriptor / Image |
+| P0 | oldLayout / newLayout 错误 | VUID 提到 transition 不匹配 | ImageMemoryBarrier |
+| P1 | stage/access 不匹配真实访问 | sync validation 报 hazard | Barrier |
+| P1 | usage flag 不支持当前用途 | VUID 提到 usage | Image |
+| P2 | subresource range 错误 | mip / layer / aspect 不匹配 | ImageView / Barrier |
+
+---
+
+### 3. 快速验证路径
+
+1. 找 image 的所有使用点。
+2. 标记每个 pass 是 producer 还是 consumer。
+3. 检查每次使用时期望 layout。
+4. 检查 barrier 的 oldLayout / newLayout。
+5. 检查 descriptor imageLayout。
+6. 用 RenderDoc 看 pass 前后 image 状态和内容。
+
+---
+
+### 4. Vulkan 对象链路排查
+
+```text
+VkImage
+→ Usage Flags
+→ VkImageView
+→ Producer Pass
+→ Image Memory Barrier
+→ Layout Transition
+→ Descriptor / Attachment
+→ Consumer Pass
+```
+
+重点检查：
+
+- Image 创建时 usage 是否覆盖所有用途。
+- ImageView aspect/mip/layer 是否正确。
+- Attachment layout 或 dynamic rendering layout 是否正确。
+- Descriptor 中填写的 imageLayout 是否和实际使用一致。
+- barrier 是否覆盖正确 subresource range。
+- producer stage/access 和 consumer stage/access 是否匹配。
+
+---
+
+### 5. 高频根因
+
+1. `COLOR_ATTACHMENT_OPTIMAL` 后直接 shader sampled，没有 transition 到 `SHADER_READ_ONLY_OPTIMAL`。
+2. transfer 上传后没有 transition 到 shader read。
+3. compute 写 storage image 后 fragment 采样没有 barrier。
+4. descriptor imageLayout 写死但实际 layout 已变化。
+5. depth image aspectMask 错误。
+6. mip level / array layer barrier 只覆盖部分资源。
+7. oldLayout 写成错误状态，导致 transition 无法表达真实状态。
+
+---
+
+### 6. 修复方案
+
+### 最小修复
+
+- 明确 producer / consumer。
+- 补充 image memory barrier。
+- 修正 descriptor imageLayout。
+- 修正 subresource range。
+
+### 稳定修复
+
+- 建立资源状态跟踪。
+- 建立 render graph 自动插入 barrier。
+- 为每个 pass 声明 input/output layout。
+- 对 image usage 和 layout 建立 debug assertion。
+
+---
+
+### 7. 回归验证
+
+- [ ] Validation 不再报 image layout 相关错误。
+- [ ] RenderDoc 中 pass 输入输出正确。
+- [ ] 后处理链路正常。
+- [ ] compute output 能被 graphics 正确读取。
+- [ ] resize / recreate 后 layout 逻辑仍正确。
+
+---
+
+### 8. 相关 API 卡片
+
+- `../../03_api_manual/04_buffer_image_memory/image.md`
+- `../../03_api_manual/04_buffer_image_memory/image_view.md`
+- `../../03_api_manual/08_synchronization/pipeline_barrier.md`
+- `../../03_api_manual/08_synchronization/image_memory_barrier.md`
+- `../../03_api_manual/08_synchronization/synchronization2.md`
+- `../../03_api_manual/07_rendering/render_target_layout.md`
+
+---
+
+### 9. 工具证据
+
+### Validation Layer
+
+关注：
+
+- layout mismatch
+- descriptor imageLayout
+- attachment layout
+- synchronization hazard
+
+### RenderDoc / AGI
+
+关注：
+
+- pass 前后 texture 内容。
+- render target 输出。
+- sampled image 是否有内容。
+- storage image 是否写入成功。
+
+---
+
+### 10. Android 分支
+
+Android 上额外检查：
+
+1. swapchain image layout 是否正确进入 present。
+2. rotation 后新 swapchain image 是否重新建立 layout 流程。
+3. offscreen render target 是否跟随尺寸重建。
+4. old image view 是否仍被 descriptor 引用。
+
+---
+
+### 11. 不确定时如何处理
+
+需要补充：
+
+- image 创建 usage
+- image view 创建参数
+- producer pass
+- consumer pass
+- barrier 代码
+- descriptor image info
+- Validation message / VUID
+
+
+---
+
+## Debug Playbook: Synchronization Hazard
+
+### 0. 适用范围
 
 ### 适用
 
@@ -11,13 +195,13 @@
 
 ### 不适用
 
-- 纯 image layout 错误（优先看 image_layout_error.md）。
-- 纯 descriptor binding 错误（优先看 descriptor_binding_error.md）。
+- 纯 image layout 错误（优先看 layout_sync_hazard_errors.md）。
+- 纯 descriptor binding 错误（优先看 descriptor_pipeline_layout_errors.md）。
 - CPU 侧线程同步问题（如 `std::mutex` 死锁）。
 
 ---
 
-## 1. 现象
+### 1. 现象
 
 - Validation 报告 hazard 及类似 `SYNC-HAZARD-READ_AFTER_WRITE` 的 VUID。
 - 资源被写后读，读到旧数据或随机数据。
@@ -28,7 +212,7 @@
 
 ---
 
-## 2. 最可能原因排序
+### 2. 最可能原因排序
 
 | 优先级 | 可能原因 | 判断依据 | 关联对象 |
 |---|---|---|---|
@@ -42,7 +226,7 @@
 
 ---
 
-## 3. 快速验证路径
+### 3. 快速验证路径
 
 1. **开启 `VK_LAYER_KHRONOS_validation` 的 sync 分支**，复现并保存完整日志。`[TOOL]`
 2. **定位 hazard 报告的资源 handle**，确认该资源在代码中的所有 producer / consumer。`[TOOL]`
@@ -53,7 +237,7 @@
 
 ---
 
-## 4. Vulkan 对象链路排查
+### 4. Vulkan 对象链路排查
 
 ```text
 Producer Command (Draw / Dispatch / Transfer)
@@ -76,7 +260,7 @@ Producer Command (Draw / Dispatch / Transfer)
 
 ---
 
-## 5. 高频根因
+### 5. 高频根因
 
 1. Compute dispatch 写 storage buffer 后，graphics draw 读该 buffer 没有 barrier。`[SPEC]`
 2. `vkCmdCopyBuffer` / `vkCmdUpdateBuffer` 后 shader 直接使用，未做 transfer → shader 的 barrier。`[SPEC]`
@@ -88,7 +272,7 @@ Producer Command (Draw / Dispatch / Transfer)
 
 ---
 
-## 6. 修复方案
+### 6. 修复方案
 
 ### 最小修复
 
@@ -112,7 +296,7 @@ Producer Command (Draw / Dispatch / Transfer)
 
 ---
 
-## 7. 回归验证
+### 7. 回归验证
 
 - [ ] Validation Layer sync 分支不再报任何 hazard。
 - [ ] 多帧运行资源读写结果一致，无闪烁 / 黑屏 / 随机数据。
@@ -123,7 +307,7 @@ Producer Command (Draw / Dispatch / Transfer)
 
 ---
 
-## 8. 相关 API 卡片
+### 8. 相关 API 卡片
 
 - `../../03_api_manual/04_buffer_image_memory/buffer.md`
 - `../../03_api_manual/04_buffer_image_memory/image.md`
@@ -138,7 +322,7 @@ Producer Command (Draw / Dispatch / Transfer)
 
 ---
 
-## 9. 工具证据
+### 9. 工具证据
 
 ### Validation Layer
 
@@ -166,7 +350,7 @@ Producer Command (Draw / Dispatch / Transfer)
 
 ---
 
-## 10. Android 分支
+### 10. Android 分支
 
 Android 上同步 hazard 常与 Surface / ANativeWindow / Swapchain 生命周期及 tile-based GPU 行为相关，额外检查：
 
@@ -178,7 +362,7 @@ Android 上同步 hazard 常与 Surface / ANativeWindow / Swapchain 生命周期
 
 ---
 
-## 11. 不确定时如何处理
+### 11. 不确定时如何处理
 
 如果无法确认根因：
 
@@ -199,3 +383,6 @@ Android 上同步 hazard 常与 Surface / ANativeWindow / Swapchain 生命周期
    - `[ENGINE]` 若基于资源状态机或 render graph 推断。
    - `[HEUR]` 若尚未拿到工具证据，仅为可能性排序。
    - `[ANDROID]` 若涉及 tile-based GPU 或 Surface 生命周期。
+
+
+---

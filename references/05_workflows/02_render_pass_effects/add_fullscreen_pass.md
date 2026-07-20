@@ -185,6 +185,6 @@ Pipeline 状态：
 ## 13. 相关 Debug Playbook
 
 - `../../04_debug_playbooks/01_visual_issues/black_screen.md`
-- `../../04_debug_playbooks/03_validation_errors/descriptor_binding_error.md`
-- `../../04_debug_playbooks/03_validation_errors/image_layout_error.md`
-- `../../04_debug_playbooks/06_performance_symptoms/fullscreen_pass_cost.md`
+- `../../04_debug_playbooks/03_validation_errors/descriptor_pipeline_layout_errors.md`
+- `../../04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md`
+- `../../04_debug_playbooks/06_performance_symptoms/bandwidth_fullscreen_cost.md`
