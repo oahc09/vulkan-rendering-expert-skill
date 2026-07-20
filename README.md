@@ -20,8 +20,7 @@
 ├── SKILL.md                 # 技能入口，定义触发、加载顺序和输出规则
 ├── agents/                  # 可选的工具或平台集成配置
 ├── assets/                  # README 和发布页使用的图片资产
-├── references/              # Vulkan 专家知识库，按任务渐进加载
-└── tests/                   # 结构、内容、引用、模板和触发行为测试
+└── references/              # Vulkan 专家知识库，按任务渐进加载
 ```
 
 `references/` 按职责拆分为 8 个模块：

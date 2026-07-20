@@ -4,5 +4,5 @@ __pycache__/
 v1.0.1/
 test_report.html
 
-# TC9 prompt fixtures - 测试输入数据，非技能本体，本地保留但不跟踪
-tests/prompts/*.txt
+# 测试目录非技能本体，本地保留但不跟踪
+tests/
