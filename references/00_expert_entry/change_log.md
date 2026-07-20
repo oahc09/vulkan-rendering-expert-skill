@@ -53,3 +53,35 @@
 ### 行尾规范化
 
 - `../05_workflows/workflow_index.md`、`../07_integration_pack/retrieval_policy.md` 由 CRLF 转 LF。
+
+## v1.0.3
+
+### 文件数量精简（248 → 196，满足 ClawHub ≤200 限制）
+
+为满足 ClawHub 提交的 200 文件上限，分三阶段精简文件数量，总计减少 52 个文件。所有合并文件保留原内容，仅做层级调整以保持向量检索命中率。
+
+#### Phase 1：排除测试输入数据（248 → 236，-12）
+
+- `.gitignore` 新增 `tests/prompts/*.txt` 规则，TC9 提示词 fixture 本地保留但不跟踪。
+
+#### Phase 2a：合并 `06_cases/`（236 → 214，-22）
+
+- 7 个子目录各合并为 1 个文件，33 → 11 文件。
+- 合并文件 H1 使用 `# Cases: <Category>`，原 case 降级为 `## Case: <原 case 名>` 锚点，原 `##` 段落降级为 `###`。
+- 涉及文件：`01_black_screen`、`02_descriptor_pipeline`、`03_sync_layout`、`04_swapchain_android`、`05_compute`、`06_performance`、`07_engine_architecture`。
+- 同步更新 `case_index.md`、`06_cases/README.md`、`MODULE_SUMMARY.md`（33→11）和 3 个交叉引用文件。
+
+#### Phase 2b：合并 `04_debug_playbooks/`（214 → 196，-6）
+
+- 6 组合并，28 → 22 文件。
+- 合并文件以 `## Debug Playbook: <原 playbook 名>` 作为锚点，原 `##` 段落降级为 `###`。
+- 涉及合并组：
+  - `03_validation_errors/`：`descriptor_binding_error` + `pipeline_layout_error` → `descriptor_pipeline_layout_errors.md`；`image_layout_error` + `synchronization_hazard` → `layout_sync_hazard_errors.md`。
+  - `06_performance_symptoms/`：`bandwidth_high` + `fullscreen_pass_cost` → `bandwidth_fullscreen_cost.md`；`barrier_overuse` + `draw_call_bottleneck` → `barrier_draw_call_stall.md`；`cpu_frame_time_high` + `descriptor_update_overhead` → `cpu_overhead_symptoms.md`；`pipeline_creation_stutter` + `startup_time_high` → `pipeline_startup_stutter.md`。
+- `tests/test_templates.py` 增加 `## Debug Playbook:` 前缀检测，合并文件使用 `###` 段落校验。
+- 同步更新 `04_debug_playbooks/README.md`、`debug_priority_index.md`、`MODULE_SUMMARY.md`（28→22）和 52 个交叉引用文件。
+
+### 行尾规范化（Phase 2b 副产物）
+
+- `_fix_pb_refs.py` 批量替换留下的 CRLF 行尾统一为 LF，涉及 43 个文件。
+- `git diff --check` 全部干净。
