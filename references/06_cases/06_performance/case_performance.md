@@ -113,20 +113,18 @@ Pass B execution: 0.6 ms
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 将 barrier 的 `srcStageMask` / `dstStageMask` 从 `ALL_COMMANDS` 或 `ALL_GRAPHICS` 改为具体 stage（如 `COLOR_ATTACHMENT_OUTPUT` → `FRAGMENT_SHADER`）。
 - 将 `srcAccessMask` / `dstAccessMask` 从 `MEMORY_READ_BIT | MEMORY_WRITE_BIT` 改为具体 access（如 `COLOR_ATTACHMENT_WRITE` → `SHADER_SAMPLED_READ`）。
 - 合并相邻且依赖相同的 barrier：多张 image 合并到一个 `vkCmdPipelineBarrier` 调用中。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 引入 RenderGraph / FrameGraph，由系统自动推导所需 barrier，避免手写保守 barrier。
 - 对可预测的资源依赖使用 `VkSubpassDependency` 或 Dynamic Rendering 的 `VkSubpassBeginInfo` / `VkRenderingAttachmentInfo` 内建同步。
 - 使用 `VK_KHR_synchronization2`（`vkCmdPipelineBarrier2KHR`），通过 `VkImageMemoryBarrier2` 更精确地表达 stage/access `[SPEC]`。
 - 区分 intra-frame transient resource 与 cross-frame persistent resource，对前者放宽 barrier。
-
-### 工程化修复
 
 - 建立 barrier 审计规则：禁止 `ALL_COMMANDS` 作为 stage mask，除非有明确理由。
 - CI 中运行 AGI frame capture，检测 GPU idle bubble 比例；超过阈值自动报警。
@@ -313,20 +311,18 @@ Frame CPU: 18 ms
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 为常用 material 预分配并复用 descriptor set，不再每帧重新 allocate。
 - 使用 `vkCmdBindDescriptorSets` 的 `pDynamicOffsets` 参数，配合 `VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC` 区分 per-object UBO，而不是更新 buffer info。
 - 对只切换贴图的场景，将贴图数组化到 texture array 或 bindless descriptor，减少 descriptor write。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 建立 material descriptor set cache：按 material + 贴图组合缓存 descriptor set，命中时直接复用。
 - 对 per-object 数据统一使用 dynamic uniform buffer / storage buffer + dynamic offset。
 - 对 skeletal / instance 数据使用 push constants 或 storage buffer，避免 descriptor 更新。
 - 使用 `VkDescriptorUpdateTemplate` 批量生成 descriptor write，降低单次更新开销 `[SPEC]`。
-
-### 工程化修复
 
 - 引入 bindless descriptor（`VK_EXT_descriptor_indexing`）：所有纹理、buffer 注册到全局 descriptor array，shader 通过 index 访问，几乎零 per-draw descriptor 更新。
 - 在材质系统中区分 static descriptor（material）和 dynamic data（object），前者缓存，后者用 dynamic offset / push constant。
@@ -416,8 +412,8 @@ Per-frame 变化的贴图：使用 texture array 或 bindless。
 
 ### 1. 现象
 
-开启后处理效果后，GPU frame time 明显升高。  
-移动端设备发热，帧率下降。  
+开启后处理效果后，GPU frame time 明显升高。
+移动端设备发热，帧率下降。
 Shader ALU 看起来不复杂，但 AGI 中 bandwidth 或 render target 读写压力明显。
 
 ---
@@ -501,14 +497,14 @@ GPU 算力不够；
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 将部分 blur / bloom 中间 pass 降到 half / quarter resolution。
 - 减少采样次数。
 - 合并可合并的 fullscreen pass。
 - 降低中间 RT format 精度。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 为后处理链路建立 pass cost 表。
 - 对每个 pass 记录：
@@ -518,8 +514,6 @@ GPU 算力不够；
   - load/store
   - input/output
 - 对移动端默认使用降分辨率中间 RT。
-
-### 工程化修复
 
 - 引入 render graph。
 - 自动标记 transient attachment。
@@ -542,7 +536,7 @@ GPU 算力不够；
 
 ### 9. 经验抽象
 
-移动端后处理性能不能只盯 shader ALU。  
+移动端后处理性能不能只盯 shader ALU。
 Fullscreen pass 的核心成本经常来自：
 
 ```text
@@ -705,20 +699,18 @@ Tile Write:            1.1 GB/s
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 对不需要 downstream 读取的 render target，将 `storeOp` 改为 `VK_ATTACHMENT_STORE_OP_DONT_CARE`。
 - 对临时 depth buffer，在 render pass 结束时不 store depth。
 - 避免在相邻 pass 之间对同一张 image 做 `STORE` → `LOAD`。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 使用 Vulkan subpass 和 `VkSubpassDependency`，将多个读写步骤合并到同一个 render pass 内，数据保留在 tile memory 中。
 - 使用 `INPUT_ATTACHMENT` 在 subpass 间共享 on-chip 数据，而不是 store/load external image。
 - 对 MSAA，使用 resolve attachment 让 resolve 发生在 tile memory 内，而不是先 store 再 compute resolve。
 - 使用 transient attachment（`VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT` + lazily allocated memory）存放中间结果 `[SPEC]`。
-
-### 工程化修复
 
 - 建立 RenderGraph，自动识别 transient resource 并分配 transient attachment。
 - 在 material/postprocess 系统中显式声明 attachment 的 downstream 使用意图，驱动 store/load 决策。
@@ -901,20 +893,18 @@ First draw of shader "Particles_Additive_Soft": vkCreateGraphicsPipelines = 120 
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 确保启用 `VkPipelineCache`，并在启动时从磁盘加载缓存、退出时保存缓存。
 - 对已知会在当前关卡使用的 material / shader variant，在加载界面或启动阶段预创建对应 pipeline。
 - 避免在 render loop 中首次调用 `vkCreateGraphicsPipelines`。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 在后台线程异步创建 pipeline，主线程在 pipeline ready 前使用 fallback pipeline 或跳过渲染。
 - 使用 `VK_EXT_pipeline_creation_cache_control` 的 `VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT`，将同步编译失败转换为可异步处理的 `VK_PIPELINE_COMPILE_REQUIRED`。
 - 建立 shader variant 预热清单，按关卡/场景预编译。
 - 使用 `VK_EXT_graphics_pipeline_library` 将 vertex input、fragment output、pre-rasterization、fragment shader 分阶段缓存，减少完整 pipeline 创建耗时 `[SPEC]`。
-
-### 工程化修复
 
 - 建立 pipeline 预热系统：根据关卡、角色、特效配置自动生成预热列表，在加载时异步编译。
 - CI 中跑全量 shader variant 离线编译，生成稳定的 pipeline cache 文件并随包发布。

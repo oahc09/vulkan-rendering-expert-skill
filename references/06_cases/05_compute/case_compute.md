@@ -109,7 +109,7 @@ vkCmdDispatch(cmd, imageWidth, imageHeight, 1);   // 错误：直接以像素尺
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 使用向上取整计算 group count：
 
@@ -122,13 +122,11 @@ groupCountZ = (depth + localSizeZ - 1) / localSizeZ;
 - 在调用 `vkCmdDispatch` 前断言 `groupCountX > 0 && groupCountY > 0 && groupCountZ > 0`。
 - 当资源尺寸为 0 时，跳过 dispatch 而不是传入 0。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 封装 `DispatchCompute(width, height, depth, localSizeX, localSizeY, localSizeZ)` 辅助函数，内部自动处理向上取整和零尺寸保护。
 - 在 shader 编译或反射阶段读取 `local_size`，确保 CPU 侧 group count 计算与 shader 一致。
 - 对 1D / 2D / 3D dispatch 分别提供类型安全的封装。
-
-### 工程化修复
 
 - 在 compute pass 描述中声明 `local_size` 和 dispatch domain，由 RenderGraph / pass system 自动计算 group count。
 - CI 中加入小尺寸资源（1×1、2×2）的 compute 测试，确保 edge case 下有输出。
@@ -308,7 +306,7 @@ vkCmdBeginRenderPass(cmd, &rpBegin, ...); // fragment shader 采样 A，缺少 b
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 在 compute write 与后续 read / write 之间插入 `vkCmdPipelineBarrier`：
 
@@ -327,14 +325,12 @@ oldLayout = GENERAL
 newLayout = GENERAL 或 SHADER_READ_ONLY_OPTIMAL（取决于后续用途）
 ```
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 每个 compute pass 显式声明输出资源及后续 consumer。
 - 在 command buffer recorder 中按 producer/consumer 关系自动推导并插入 barrier。
 - 对 storage image 使用专用 layout 状态机，确保 GENERAL → shader read 转换完整。
 - 对 frame-in-flight 资源采用 ping-pong 或多 buffering，避免读写重叠。
-
-### 工程化修复
 
 - 建立 RenderGraph，自动推导 dispatch 间和 compute-graphics 间的 dependency，并生成 barrier。
 - 使用 `VK_KHR_synchronization2` 的 explicit sync，减少 stage/access 组合误配。
@@ -549,7 +545,7 @@ vkUnmapMemory(device, memory);
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 **Device-local / 同 queue compute → graphics：**
 
@@ -585,14 +581,12 @@ flush / invalidate 的 offset 和 size 必须按 `nonCoherentAtomSize` 对齐 `[
 
 使用 semaphore 或 timeline semaphore 保证 compute submit signal 后再执行 graphics submit `[SPEC]`。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 封装 SSBO 资源类，根据 memory type 自动处理 flush / invalidate。
 - 在 command buffer recorder 中自动推导 compute write → graphics read 的 barrier。
 - 对 host-visible coherent buffer 优先使用 `HOST_COHERENT` flag，减少手动 flush；对性能敏感的大 buffer 仍用 device-local + explicit barrier。
 - 对 frame-in-flight SSBO 采用多缓冲，避免读写重叠。
-
-### 工程化修复
 
 - 建立 RenderGraph，自动推导 storage buffer 的 producer / consumer 并生成 barrier。
 - 使用 `VK_KHR_synchronization2` 明确 stage / access，降低 barrier 误配。
@@ -777,7 +771,7 @@ vkCmdDispatch(cmd, groupsX, groupsY, 1); // 此时 image 仍是 COLOR_ATTACHMENT
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 在 compute dispatch 前插入 image memory barrier，将 storage image 从当前 layout transition 到 `VK_IMAGE_LAYOUT_GENERAL`：
 
@@ -793,13 +787,11 @@ dstAccess = SHADER_STORAGE_READ / SHADER_STORAGE_WRITE
 - 更新 descriptor 时，将 `VkDescriptorImageInfo.imageLayout` 显式设为 `VK_IMAGE_LAYOUT_GENERAL`。
 - compute 写完后如需被 graphics 采样，再 transition 回 `SHADER_READ_ONLY_OPTIMAL`。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 为 storage image 维护当前 layout 状态机；compute pass 使用前自动 transition 到 `GENERAL`。
 - descriptor update 辅助函数根据 descriptor type 自动填充 `imageLayout`，避免手动填写错误。
 - 在 compute pass 描述中声明 input / output layout，由系统生成 barrier。
-
-### 工程化修复
 
 - 使用 RenderGraph / FrameGraph 自动推导 storage image 的 layout 和 barrier。
 - 在 debug build 中增加断言：storage image descriptor 的 imageLayout 必须为 `GENERAL`。

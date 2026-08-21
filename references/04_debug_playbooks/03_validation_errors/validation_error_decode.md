@@ -115,18 +115,22 @@ Producer Access
 
 ## 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
+
+- 临时注释掉触发 validation 的调用以恢复运行（会掩盖问题，仅用于隔离定位）。`[TOOL]`
+
+### Minimal Fix（针对根因的最小修复）
 
 - 先按 VUID 定位具体 API。
 - 不要一次改多个地方。
 - 对照 object handle 找到对应资源。
 - 先修第一条 validation error。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
-- 为 Vulkan 对象设置 debug name。
-- 建立 VUID 处理记录。
-- 对 descriptor / image layout / command buffer state 建立统一检查辅助函数。
+- 为 Vulkan 对象设置 debug name。`[TOOL]`
+- 建立 VUID 处理记录。`[ENGINE]`
+- 对 descriptor / image layout / command buffer state 建立统一检查辅助函数。`[ENGINE]`
 
 ---
 
@@ -151,7 +155,7 @@ Producer Access
 
 ## 9. 工具证据
 
-Validation message 是主要证据。  
+Validation message 是主要证据。
 必须保留：
 
 - 完整 message

@@ -64,7 +64,7 @@ Create
 3. 沿对象链路定位创建点。
 4. 沿 command buffer 定位使用点。
 5. 使用 RenderDoc / AGI 查看实际绑定状态。
-6. 给出最小复现和最小修复。
+6. 给出最小复现和 Workaround / Minimal Fix / Structural Fix。
 
 ## 专家经验
 

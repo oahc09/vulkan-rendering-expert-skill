@@ -101,18 +101,22 @@ Shader Resource Declaration
 
 ### 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
+
+- 临时按 validation 报错跳过出错的 draw call，先恢复其余画面（接口不一致仍存在，仅应急）。`[ENGINE]`
+
+### Minimal Fix（针对根因的最小修复）
 
 - 以 shader reflection / shader 源码为准，修正 descriptor layout。
 - 修正 descriptor type / binding / set index。
 - 确认 pipeline layout 包含正确 descriptor set layout。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
-- 建立 shader reflection 自动生成 descriptor layout。
-- 建立 descriptor binding 表。
-- 为 per-frame descriptor 建立 frame index 隔离。
-- swapchain recreate 时更新引用尺寸相关 image 的 descriptor。
+- 建立 shader reflection 自动生成 descriptor layout。`[ENGINE]`
+- 建立 descriptor binding 表。`[ENGINE]`
+- 为 per-frame descriptor 建立 frame index 隔离。`[ENGINE]`
+- swapchain recreate 时更新引用尺寸相关 image 的 descriptor。`[ENGINE]`
 
 ---
 
@@ -278,22 +282,23 @@ Shader Module (SPIR-V)
 
 ### 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
+
+- 临时把 shader 中冲突的 set / binding 注释掉恢复运行（接口仍不一致，仅应急）。`[ENGINE]`
+
+### Minimal Fix（针对根因的最小修复）
 
 - 根据 shader reflection 更新 pipeline layout，确保每个 set / binding 都有对应 descriptor set layout 条目。`[SPEC]`
 - 修正 `vkCmdBindDescriptorSets` 的 layout 参数为当前 graphics / compute pipeline 的 layout。`[SPEC]`
 - 修正 push constant range 的 `stageFlags`、`offset`、`size` 与 shader 声明一致。`[SPEC]`
 - 对动态 descriptor 类型，确保 `vkCmdBindDescriptorSets` 的 `dynamicOffsetCount` 与 layout 中 dynamic descriptor 数量一致。`[SPEC]`
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 建立 shader reflection 自动生成 pipeline layout 的流程，避免手动维护 set / binding 映射。`[ENGINE]`
 - 对相似 shader 变体使用兼容的 descriptor set layout，但为差异变体创建独立 layout。`[SPEC]`
 - 把 push constant 定义放在共享头文件中，确保 CPU 侧 range 与 shader 一致。`[ENGINE]`
 - 在创建 pipeline 前验证 shader 接口与 layout 的兼容性，提前报错而非等到 bind 阶段。`[ENGINE]`
-
-### 工程化修复
-
 - CI 中集成 `spirv-reflect` 检查，自动比对 shader 与 pipeline layout 定义。`[TOOL]`
 - 对 pipeline layout 做缓存和引用计数，避免重复创建和提前销毁。`[ENGINE]`
 - 建立 layout 兼容性测试矩阵，覆盖所有 shader 变体。`[ENGINE]`

@@ -92,13 +92,17 @@ SurfaceView / SurfaceHolder
 
 ## 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
 
-- Surface destroyed 时停止 render loop。
-- ANativeWindow 失效时不再 acquire / present。
-- surface changed 时触发 swapchain recreate。
+- 临时锁定屏幕方向，并在 pause 时走完整销毁 / resume 时完整重建的保守路径（恢复慢但状态简单；仅应急）。`[ANDROID]`
 
-### 稳定修复
+### Minimal Fix（针对根因的最小修复）
+
+- Surface destroyed 时停止 render loop。`[ANDROID]`
+- ANativeWindow 失效时不再 acquire / present。`[ANDROID]`
+- surface changed 时触发 swapchain recreate。`[ANDROID]`
+
+### Structural Fix（结构性 / 防复发修复）
 
 - 建立 Android lifecycle 状态机：
   - NoSurface
@@ -107,14 +111,11 @@ SurfaceView / SurfaceHolder
   - Rendering
   - Paused
   - Destroyed
-- render thread 根据状态机运行。
-- 所有 surface-dependent resource 统一重建。
-
-### 工程化修复
-
-- Java/Kotlin 与 native 层建立明确事件队列。
-- native render thread 不直接依赖 UI thread 临时状态。
-- 建立 surface generation id，防止旧 surface 被使用。
+- render thread 根据状态机运行。`[ANDROID]`
+- 所有 surface-dependent resource 统一重建。`[ANDROID]`
+- Java/Kotlin 与 native 层建立明确事件队列。`[ANDROID]`
+- native render thread 不直接依赖 UI thread 临时状态。`[ANDROID]`
+- 建立 surface generation id，防止旧 surface 被使用。`[ANDROID]`
 
 ---
 
@@ -165,8 +166,8 @@ SurfaceView / SurfaceHolder
 
 ## 10. Android 分支
 
-本 Playbook 本身就是 Android 分支。  
-如果使用 SurfaceView，需要重点检查 SurfaceHolder 生命周期。  
+本 Playbook 本身就是 Android 分支。
+如果使用 SurfaceView，需要重点检查 SurfaceHolder 生命周期。
 如果使用 NativeActivity，需要重点检查 native window 回调。
 
 ---

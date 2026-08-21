@@ -114,21 +114,19 @@ submit(cmd[frameIndex], signalFence = frameFence[frameIndex]);
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 为每个 frame-in-flight 索引分配独立的 command buffer、fence、semaphore。
 - 将 uniform buffer ring buffer 按 `FRAME_IN_FLIGHT` 数量分段，每段只由对应索引的帧写入。
 - 等待 fence 后再 reset command buffer 和写入 per-frame buffer。
 - 确保 descriptor set 按 frame 索引分配，或全局缓存的 set 在写入前等待所有使用方完成。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 引入 `FrameContext` 结构，封装单帧所需的所有资源：command buffer、fence、semaphore、UBO offset、descriptor set。
 - 使用 `FrameResourcePool` 按 frame index 管理资源，禁止跨帧复用。
 - 统一 current frame index、swapchain image index、frame-in-flight index 的命名与计算。
 - 对 dynamic uniform buffer 使用 `vkCmdBindDescriptorSets` 的 `pDynamicOffsets` 参数，offset 从 `FrameContext` 获取。
-
-### 工程化修复
 
 - 在 debug 构建中assert：任何 per-frame 资源的写入必须在对应 frame fence signal 之后。
 - 引入资源使用范围追踪：记录每块 UBO / descriptor 的 GPU 使用区间，自动延迟回收。
@@ -316,13 +314,13 @@ vkCreatePipelineCache(device, &ci, nullptr, &cache);
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 在 `vkCreatePipelineCache` 时加载磁盘 cache 数据，并在应用退出时调用 `vkGetPipelineCacheData` 保存。
 - 在 cache 文件头中加入版本字段：`app version`、`driver version`、`vendorID`、`deviceID`、`shader hash prefix`。
 - 启动时校验版本，不匹配则创建空 cache 并重新预热。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 在 CI 中离线编译所有已知 shader variant，生成基础 pipeline cache 文件并随包发布。
 - 运行时 cache 分为两层：
@@ -330,8 +328,6 @@ vkCreatePipelineCache(device, &ci, nullptr, &cache);
   - `user cache`：可写，保存运行时首次遇到的新 variant。
 - 启动时合并两层 cache，运行时只写 user cache。
 - 为不同 GPU 架构生成独立的 base cache（Adreno、Mali、PowerVR 等），按设备选择加载。
-
-### 工程化修复
 
 - 引入 pipeline cache 元数据服务：记录每个 cache 文件对应的 driver、GPU、app 版本、shader 集合 hash。
 - 运行时 telemetry：记录 cache 命中率、首次遇到的 variant、创建耗时，用于补充预热清单。
@@ -517,20 +513,18 @@ ShadowMap    Pass0   Pass0    Pass1   <-- 生命周期过短
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 将出现问题的资源生命周期从 `Transient` 改为 `Persistent`（跨帧）。
 - 扩展资源的 last-used pass 到真正的最后一个 consumer。
 - 在多 consumer 之间插入显式同步点，确保所有读取完成后再释放或复用。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 在 RenderGraph 编译阶段做生命周期检查：对 declared lifetime 与实际使用区间做静态验证，不一致时 assert 或警告。
 - 引入 sub-resource 级别的 lifetime 跟踪：同一 image 的不同 mip/层可独立管理。
 - 对 multi-consumer 资源，使用引用计数或“最后完成 pass”算法确定销毁点。
 - 对需要跨帧保持的资源，明确标记为 `Persistent`，不参与 aliasing。
-
-### 工程化修复
 
 - 建立 resource aliasing 安全规则：只有生命周期区间完全不重叠且格式/尺寸兼容的资源才能 alias。
 - 在 RenderGraph 中集成 automatic lifetime inference：根据 pass 的 read/write 声明自动推导最小区间，同时允许手动覆盖。
@@ -714,20 +708,18 @@ MSAA resolve extent: 1080x1920 <-- 未更新
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 在 swapchain recreate 回调中，统一列出并重建所有按 swapchain extent 派生的资源。
 - 至少包含：depth stencil image、MSAA color/depth resolve image、offscreen color image、framebuffers。
 - 更新 viewport、scissor、dynamic rendering 的 `renderingArea`、postprocess 的 UV 和 resolution uniform。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 建立 `SwapchainDependentResourceGroup` 抽象：注册所有尺寸随 swapchain 变化的资源，swapchain recreate 时统一触发重建。
 - 每个资源声明其尺寸计算函数（如 `extent = swapchainExtent` 或 `extent = swapchainExtent / 2`）。
 - 重建顺序：swapchain → depth/MSAA/offscreen images → framebuffers → render passes / pipelines（若依赖尺寸）→ viewport / scissor / uniforms。
 - 在 Android  lifecycle 中，将 `APP_CMD_TERM_WINDOW` / `APP_CMD_INIT_WINDOW` / `onSurfaceChanged` 统一映射为 `RecreateSwapchainDependentResources` 事件。
-
-### 工程化修复
 
 - 引入 resolution scale 配置：将内部渲染分辨率与 swapchain 分辨率解耦，swapchain 变化时内部分辨率按策略调整。
 - 建立资源依赖图：自动检测哪些 image/buffer 的尺寸直接或间接依赖 swapchain extent，并在变化时自动重建。

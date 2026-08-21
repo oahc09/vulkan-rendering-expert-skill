@@ -96,23 +96,24 @@ Texture / Buffer / Attachment
 
 ### 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
 
-- 对高带宽 texture：降低分辨率、启用 mipmap、使用压缩格式。`[HEUR]`
-- 对高带宽 attachment：降低 render target 分辨率、使用 16 位或 11-11-10 格式、关闭不必要的 MSAA。`[HEUR]`
-- 合并相邻 fullscreen pass，减少中间 attachment 读写。`[ENGINE]`
-- 移除不必要的 `vkCmdCopyImage` / `vkCmdBlitImage` / `vkCmdResolveImage`。`[ENGINE]`
+- 降低 texture / render target 分辨率或临时关闭 MSAA：带宽 counter 回落，但过度采样 / 后处理链过长等根因仍在；仅用于先恢复帧率或验证瓶颈归属。`[HEUR]`
+- 临时把画质档位降到最低（低分辨率 texture、跳过非关键后处理 pass）：掩盖现象，交付前必须继续定位根因。`[HEUR]`
 
-### 稳定修复
+### Minimal Fix（针对根因的最小修复）
 
-- 建立 texture 导入管线，按平台自动选择 ASTC / BC / ETC2 格式和 mipmap。`[ENGINE]`
-- 建立 render target 池，根据画质等级自动选择分辨率、format、MSAA。`[ENGINE]`
-- 对后处理使用 subpass input attachment 或 tile-based 本地读取，减少全局内存读写。`[ANDROID]`
+- 对高带宽 texture：启用 mipmap、换用 ASTC / BC / ETC2 压缩格式，直接降低采样带宽与 cache miss。`[HEUR]`（适用条件：目标平台支持对应压缩格式；需重新生成资源。）
+- 对高带宽 attachment：render target 改用 16 位或 R11G11B10 等低精度格式，关闭超出场景需求的 MSAA。`[HEUR]`（适用条件：画质损失在可接受范围内。）
+- 合并相邻 fullscreen pass，移除不必要的 `vkCmdCopyImage` / `vkCmdBlitImage` / `vkCmdResolveImage`，减少中间 attachment 读写。`[ENGINE]`
+- 对后处理使用 subpass input attachment 或 tile-based 本地读取，减少全局内存读写。`[ANDROID]`（适用条件：tile-based GPU，且 pass 间数据流可表达为同一 render pass 的 subpass。）
 - 对 MSAA 使用 custom resolve 或降低 sample 数。`[HEUR]`
 - 对 UBO / SSBO 使用 cache-friendly 布局和合并访问。`[ENGINE]`
 
-### 工程化修复
+### Structural Fix（结构性 / 防复发修复）
 
+- 建立 texture 导入管线，按平台自动选择 ASTC / BC / ETC2 格式和 mipmap。`[ENGINE]`
+- 建立 render target 池，根据画质等级自动选择分辨率、format、MSAA。`[ENGINE]`
 - CI 集成 bandwidth counter 自动检测，设定 per-pass / per-frame 带宽预算。`[TOOL]`
 - 在低端设备上启用 aggressive 画质降级：低分辨率 texture、低精度 attachment、无 MSAA。`[ENGINE]`
 - 使用 framebuffer compression 和 memoryless attachment（若平台支持 `VK_ANDROID_external_memory_android_hardware_buffer` 或 `VK_EXT_image_drm_format_modifier` 等）。`[ANDROID]`
@@ -301,23 +302,24 @@ Fullscreen Vertex Buffer / Procedural Triangle
 
 ### 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
 
-- 简化 fragment shader，减少 texture 采样次数和 ALU 运算。`[HEUR]`
+- 临时跳过或关闭高耗时 fullscreen pass（如 SSR / DOF / 高级 bloom）：帧时间恢复但效果缺失，pass 链路过长的根因仍在；仅用于先恢复帧率或验证瓶颈归属。`[HEUR]`
+- 临时降低整体渲染分辨率掩盖该 pass 成本：架构性问题未修，交付前必须继续定位根因。`[HEUR]`
+
+### Minimal Fix（针对根因的最小修复）
+
+- 简化热点 fragment shader，减少 texture 采样次数和 ALU 运算。`[HEUR]`
 - 合并相邻 fullscreen pass，减少中间 attachment 数量。`[ENGINE]`
-- 对 bloom / blur 等效果使用 half / quarter resolution。`[HEUR]`
-- 降低 fullscreen pass output format 精度（如 `RGBA16F` → `RGBA8` 或 `R11G11B10F`）。`[HEUR]`
-
-### 稳定修复
-
-- 建立后处理管线，自动合并可合并的 fullscreen pass。`[ENGINE]`
+- 对 bloom / blur 等效果使用 half / quarter resolution，建立 downsample / upsample 链避免全分辨率采样。`[HEUR]`（适用条件：效果允许低分辨率中间结果；上采样质量损失可接受。）
+- 降低 fullscreen pass output format 精度（如 `RGBA16F` → `RGBA8` 或 `R11G11B10F`）。`[HEUR]`（适用条件：画质损失在可接受范围内。）
 - 使用 subpass input attachment 在 tile memory 内读取上一 pass 输出（尤其 mobile）。`[ANDROID]`
-- 对常用后处理效果建立 downsample / upsample 链，避免全分辨率采样。`[ENGINE]`
-- 使用 compute shader 替代部分 fullscreen pass，可能更高效（需结合平台实测）。`[HEUR]`
 - 对 UI 全屏层进行 batch 和剔除，减少重叠绘制。`[ENGINE]`
 
-### 工程化修复
+### Structural Fix（结构性 / 防复发修复）
 
+- 建立后处理管线，自动合并可合并的 fullscreen pass。`[ENGINE]`
+- 使用 compute shader 替代部分 fullscreen pass，可能更高效（需结合平台实测）。`[HEUR]`
 - CI 集成 per-pass GPU time 预算，fullscreen pass 超过阈值自动告警。`[TOOL]`
 - 根据设备性能自动调整后处理质量等级（分辨率、采样数、pass 数）。`[ENGINE]`
 - 在 mobile 上优先使用 subpass / input attachment，并自动检测平台支持。`[ANDROID]`

@@ -93,21 +93,23 @@ Shader Module
 
 ### 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
+
+- 卡顿发生时临时显示 loading 提示或暂停渲染等待创建完成：卡顿被 UI 掩盖，但主线程同步创建的根因仍在，仅应急。`[ENGINE]`
+- 临时对新变体使用简单 fallback shader 先渲染：画质降级，仅用于验证变体是否为卡顿源头，交付前必须替换。`[ENGINE]`
+
+### Minimal Fix（针对根因的最小修复）
 
 - 启用 `VkPipelineCache` 并在应用退出时把 cache 数据保存到磁盘，启动时读取。`[SPEC]`（适用条件：所有支持 Vulkan 的设备；cache 数据需与 shader / 应用版本匹配。）
 - 把运行期首次遇到的变体在加载画面或后台线程预创建。`[ENGINE]`（适用条件：变体集合可枚举或预测；对开放世界等不可预测场景需结合 streaming。）
 - 将 pipeline 创建移到独立线程，主线程继续渲染并使用 fallback pipeline 或简单 shader。`[ENGINE]`（适用条件：可接受新变体前几帧使用低质量渲染；需要处理创建完成后的切换同步。）
+- 对 hot path 的材质变体做 warmup，在场景加载时同步创建关键变体。`[ENGINE]`（适用条件：关键变体集合已知且数量有限。）
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 使用 `VK_EXT_graphics_pipeline_library` 拆分 pipeline，让状态变化只影响局部 library，减少组合爆炸。`[SPEC]`（适用条件：设备支持该扩展；需处理 library pipeline 的 linking 开销和兼容 layout。）
 - 建立 shader 变体数据库，离线枚举所有可能变体并在构建或安装时预编译。`[ENGINE]`（适用条件：变体数量可控；对 UGC 或运行时生成 shader 不适用。）
 - 实现 pipeline 编译线程池和优先级队列，优先编译当前帧需要的变体。`[ENGINE]`（适用条件：运行期变体较多且无法完全预编译。）
-- 对 hot path 的材质变体做 warmup，在场景加载时同步创建关键变体。`[ENGINE]`（适用条件：关键变体集合已知且数量有限。）
-
-### 工程化修复
-
 - CI 统计各场景首次进入的 pipeline 创建数量与耗时，设定 budget。`[TOOL]`
 - 对 cache 文件做版本校验（shader hash + 应用版本 + driver 版本），失效时自动重建。`[ENGINE]`
 - 实现 pipeline 创建热点分析，自动识别并预编译高频变体。`[ENGINE]`
@@ -291,22 +293,24 @@ Instance / Device Create
 
 ### 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
+
+- 临时延长 splash / logo 动画或增加 loading 提示掩盖启动耗时：启动工作量本身未减少，仅应急。`[ENGINE]`
+- 临时用占位 / 低分辨率资源先显示首屏：资源加载慢的根因仍在，交付前必须恢复并继续定位。`[HEUR]`
+
+### Minimal Fix（针对根因的最小修复）
 
 - 启用并持久化 `VkPipelineCache`，启动时读取上次保存的 cache 数据。`[SPEC]`（适用条件：所有支持 Vulkan 的设备；cache 数据需与 shader / 应用版本匹配。）
 - 把 shader 预编译为 SPIR-V，避免运行期从 GLSL/HLSL 编译。`[ENGINE]`（适用条件：所有项目；运行时编译仅用于特殊工具场景。）
 - 只创建首屏必需的 pipeline，其余延迟到首次使用时异步创建。`[ENGINE]`（适用条件：可接受后续场景首次进入时的轻量编译；需配合 loading 提示。）
 - 把资源加载放到后台线程，主线程只等待首屏最小资源集。`[ENGINE]`（适用条件：资源之间存在依赖关系可解耦；需处理线程同步。）
-
-### 稳定修复
-
-- 实现异步资源加载系统：IO → 解压 → upload 到 staging buffer → 提交 copy command → 通知主线程可用。`[ENGINE]`（适用条件：资源数量大或尺寸大；需要管理资源生命周期和引用计数。）
 - 对关键变体在启动时同步 warmup，非关键变体按优先级队列后台编译。`[ENGINE]`（适用条件：关键渲染路径明确，非关键变体可延迟。）
 - 使用 dedicated transfer queue 做 buffer / image upload，与 graphics queue 并行。`[SPEC]`（适用条件：设备存在独立的 transfer queue family；否则使用异步 graphics submit。）
 - 压缩 texture 格式（如 ASTC/ETC/BC）并预生成 mipmap，减少 IO 和 upload 量。`[HEUR]`（适用条件：目标 GPU 支持对应压缩格式；需注意 alpha 通道质量。）
 
-### 工程化修复
+### Structural Fix（结构性 / 防复发修复）
 
+- 实现异步资源加载系统：IO → 解压 → upload 到 staging buffer → 提交 copy command → 通知主线程可用。`[ENGINE]`（适用条件：资源数量大或尺寸大；需要管理资源生命周期和引用计数。）
 - CI 集成启动时间测试，监控各阶段耗时回归。`[TOOL]`
 - 建立首屏资源清单和启动预算，超出时自动告警。`[ENGINE]`
 - 对 cache 文件做版本校验（shader hash + 应用版本 + driver 版本），失效时重建并提示用户。`[ENGINE]`

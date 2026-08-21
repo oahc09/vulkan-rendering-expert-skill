@@ -39,6 +39,7 @@ pipeline_descriptor_relationship.md      # Shader / Descriptor / PipelineLayout 
 render_target_model.md                   # Render Target / RenderPass / Dynamic Rendering 模型
 android_surface_swapchain_lifecycle.md   # Android Surface / Swapchain 生命周期
 compute_graphics_relationship.md         # Compute 与 Graphics 交互关系
+regression_reasoning.md                  # 修改影响面推理（依赖传播规则）
 mental_model_checklist.md                # 回答前检查清单
 common_misconceptions.md                 # 高频误区
 ```

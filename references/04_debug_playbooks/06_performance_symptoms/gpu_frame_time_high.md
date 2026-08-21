@@ -92,23 +92,24 @@ Command Buffer Submit
 
 ## 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
 
-- 对 fragment 瓶颈：降低渲染分辨率、降低 overdraw、简化 shader。`[HEUR]`
-- 对 vertex 瓶颈：减少 draw call（batch / instancing）、LOD、减少 vertex attribute。`[HEUR]`
-- 对 barrier 瓶颈：合并 barrier、移除不必要的 `vkDeviceWaitIdle`。`[ENGINE]`
-- 对 compute 瓶颈：将 compute 拆小并与 graphics 交错 submit，或调整 dispatch 尺寸。`[HEUR]`
+- 降低渲染分辨率或整体画质档位：帧时间回落，但 overdraw / shader 复杂度 / 带宽架构等根因仍在；仅用于先恢复可玩性或验证瓶颈归属。`[HEUR]`
+- 临时跳过高耗时 pass（如 SSAO / SSR / 高级后处理）或锁定帧率（present mode 用 `FIFO`）：掩盖现象，交付前必须继续定位根因。`[HEUR]`
 
-### 稳定修复
+### Minimal Fix（针对根因的最小修复）
 
-- 实施延迟渲染、forward+ 等降低 overdraw 的架构。`[ENGINE]`
-- 建立 LOD、occlusion culling、depth prepass 降低 vertex / fragment 工作量。`[ENGINE]`
+- Fragment / ROP 瓶颈：精简热点 shader 的采样次数与 ALU；对透明 pass 按深度排序，用 depth prepass / early-z 降低 overdraw。`[ENGINE]`
+- Vertex 瓶颈：启用 LOD、occlusion culling、减少 vertex attribute，对重复 mesh 使用 instancing。`[ENGINE]`
+- Barrier / wait 瓶颈：合并相邻 barrier、把全局 barrier 收窄为实际 stage / access，移除每帧 `vkDeviceWaitIdle` 与多余的 `vkQueueWaitIdle`。`[SPEC]`
+- Compute 瓶颈：把长耗时 dispatch 拆小并与 graphics 交错 submit，避免长时间独占 GPU。`[ENGINE]`
+- 运行期编译尖峰：启用并持久化 `VkPipelineCache`，避免重复编译。`[SPEC]`
+
+### Structural Fix（结构性 / 防复发修复）
+
+- 实施延迟渲染、forward+ 等降低 overdraw 的渲染架构。`[ENGINE]`
 - 使用 bindless / multi-draw indirect 减少 draw call 和 descriptor 切换。`[ENGINE]`
 - 建立 render graph 自动合并 barrier 并减少 global barrier。`[ENGINE]`
-- 预编译 pipeline 并使用 `VkPipelineCache` 持久化。`[SPEC]`
-
-### 工程化修复
-
 - CI 集成性能测试，自动回归 GPU frame time。`[TOOL]`
 - 建立 per-pass GPU time budget 和自动告警。`[ENGINE]`
 - 对低端设备启用动态分辨率、动态 LOD、画质分级。`[ENGINE]`

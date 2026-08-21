@@ -109,20 +109,21 @@ depthClearValue = 0.0f; // 与 LESS 配合时所有新 fragment 都大于 0，�
 
 ### 7. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
 
-- 临时将 `cullMode` 设为 `VK_CULL_MODE_NONE` 验证几何体是否出现；确认后改回 `BACK` 并同步修正 `frontFace`。
+- 临时将 `cullMode` 设为 `VK_CULL_MODE_NONE` 验证几何体是否出现：现象恢复仅证明剔除配置是根因方向，确认后必须改回 `BACK` 并修正 `frontFace`，不得停留在 `NONE`。
+
+### Minimal Fix（针对根因的最小修复）
+
 - 根据 mesh winding 设置正确的 `frontFace`：CCW 用 `VK_FRONT_FACE_COUNTER_CLOCKWISE`，CW 用 `VK_FRONT_FACE_CLOCKWISE`。
 - 根据投影矩阵和 depth convention 设置 `depthCompareOp`：标准 Z 用 `LESS` 或 `LESS_OR_EQUAL`；reverse-Z 用 `GREATER` 或 `GREATER_OR_EQUAL`。
 - 确保 depth clear value 与 compare op 一致（标准 far = 1.0；reverse-Z far = 0.0）。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 在 mesh import 阶段记录并统一 winding order，导出时翻转以匹配引擎约定。
 - 为材质 / pipeline 建立 depth mode 枚举（Standard / Reverse / Disabled），集中管理 compare op 和 clear value。
 - 在 pipeline 创建时断言 `cullMode` / `frontFace` 与 mesh 元数据一致。
-
-### 工程化修复
 
 - 引入 shader / pipeline manifest，明确声明 coordinate system、winding、depth convention。
 - 在 CI 中增加回归测试：渲染简单 cube 并比较像素值，检测 cull / depth 配置错误。
@@ -205,8 +206,8 @@ depth clear value  vs  compare op
 
 ### 1. 现象
 
-App 正常运行，无 crash。  
-clear color 可见，但新增 fullscreen 后处理 pass 后画面变黑。  
+App 正常运行，无 crash。
+clear color 可见，但新增 fullscreen 后处理 pass 后画面变黑。
 RenderDoc 中可以看到 draw call，pipeline 也绑定成功，但 fragment shader 采样 input texture 后输出为黑色。
 
 ---
@@ -233,7 +234,7 @@ sampler 创建错误；
 纹理内容为空。
 ```
 
-但 RenderDoc 中前一个 pass 的 offscreen image 实际有内容，descriptor 也绑定到了正确 image view。  
+但 RenderDoc 中前一个 pass 的 offscreen image 实际有内容，descriptor 也绑定到了正确 image view。
 后续排查发现是 pass 间缺少 layout transition。
 
 ---
@@ -290,7 +291,7 @@ sampler 创建错误；
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 在 producer pass 结束后、consumer pass 开始前插入 image memory barrier：
 
@@ -304,13 +305,11 @@ dstAccess = SHADER_SAMPLED_READ
 newLayout = SHADER_READ_ONLY_OPTIMAL
 ```
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 每个 pass 显式声明 input / output layout。
 - 每个 image 维护当前 layout。
 - descriptor imageLayout 必须与实际 consumer layout 一致。
-
-### 工程化修复
 
 - 建立 RenderGraph。
 - 由 RenderGraph 根据 producer / consumer 自动插入 barrier。
@@ -484,19 +483,17 @@ vkQueuePresentKHR(graphicsQueue, &presentInfo);
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 在 `vkEndCommandBuffer` 后显式调用 `vkQueueSubmit`，并传入该帧对应的 fence。
 - 在复用 command buffer 或交换到下一帧之前，先 `vkWaitForFences` 等待 fence signaled。
 - 在 submit 之后调用 `vkQueuePresentKHR`，并确保 present wait semaphores 与 submit signal semaphores 一致。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 在 frame loop 中建立 `acquire → record → submit → wait → present` 的显式状态断言。
 - 每帧维护一个 FrameState 结构，记录是否已 submit、是否已 present；若某个分支提前 return，必须清理状态。
 - 对 `vkQueueSubmit` 和 `vkQueuePresentKHR` 的返回值做检查，遇到 `VK_ERROR_OUT_OF_DATE_KHR` / `VK_SUBOPTIMAL_KHR` 时触发 swapchain recreate。
-
-### 工程化修复
 
 - 封装 FrameLoop 类，把 acquire、record、submit、present 封装为不可跳过的固定阶段。
 - 引入 Tracy / custom GPU profiler marker，确保每个 frame 都能追踪到 submit / present 事件。
@@ -673,19 +670,17 @@ scissor.extent = {0, 0};             // 错误：裁剪区域为空
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 将 `vkCmdSetViewport` 的 `width` / `height` 设置为当前 render target 的 extent。
 - 将 `vkCmdSetScissor` 的 `extent` 设置为与 render target 相同或至少与 viewport 重叠的非零区域。
 - 若使用 OpenGL 风格坐标系，注意 Vulkan 默认 Y 向下；如需翻转需使用 `negativeViewportHeight` 并在管线中启用相关特性。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 在每次 resize 或 render target 变化时，统一重新计算 viewport 和 scissor。
 - 对 viewport / scissor 做范围校验：width > 0、height > 0、scissor extent > 0、rect 在 framebuffer 内。
 - 将 viewport / scissor 更新逻辑与 swapchain recreate 绑定，避免旧尺寸残留。
-
-### 工程化修复
 
 - 在 RenderGraph / FrameGraph 中根据当前 render target 自动推导 viewport 和 scissor。
 - 添加 debug overlay 显示当前 viewport / scissor 数值，便于快速定位异常。

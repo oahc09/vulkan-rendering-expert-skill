@@ -95,19 +95,22 @@ Compute Shader
 
 ## 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
 
-- 写固定 debug 色 / debug 值。
-- 把 dispatch group 改成明显非 0。
-- 确认 descriptor bind point 为 compute。
-- 添加 compute write → graphics read barrier。
+- 写固定 debug 色 / debug 值，先验证 compute → graphics 管线连通（不解决数据问题）。`[TOOL]`
 
-### 稳定修复
+### Minimal Fix（针对根因的最小修复）
 
-- 封装 dispatch size 计算。
-- 建立 compute resource state tracking。
-- 为 storage buffer/image 建立 usage assert。
-- 用 RenderDoc / AGI 验证每个 compute pass 输出。
+- 把 dispatch group 改成明显非 0。`[SPEC]`
+- 确认 descriptor bind point 为 compute。`[SPEC]`
+- 添加 compute write → graphics read barrier。`[SPEC]`
+
+### Structural Fix（结构性 / 防复发修复）
+
+- 封装 dispatch size 计算。`[ENGINE]`
+- 建立 compute resource state tracking。`[ENGINE]`
+- 为 storage buffer/image 建立 usage assert。`[ENGINE]`
+- 用 RenderDoc / AGI 验证每个 compute pass 输出。`[TOOL]`
 
 ---
 

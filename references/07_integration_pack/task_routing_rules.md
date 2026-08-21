@@ -131,3 +131,15 @@
 2. **Vulkan backend 双重标注**：若涉及第三方库的 Vulkan backend（如 `ImGui_ImplVulkan_*`），必须同时标注第三方库版本与适配的 Vulkan API 版本。
 3. **API 版本变更点显式列出**：若某 API 在不同版本间存在签名 / 参数 / 行为变更，必须显式列出，避免用户使用过时签名。
 4. **不确定时不编造**：若无法确认 API 签名的版本归属，明确说明并提示用户核对所用版本，**不允许编造 API 签名**。
+
+## 11. 统一出口：Verification Gate
+
+适用于第 2 / 3 / 4 / 5 / 6 / 8 / 10 类，以及任何输出修改方案或结论性判断的任务。
+
+处理规则：
+
+1. 给出最终结论（已完成 / 已解决 / 根因已修复 / 性能已优化）前，读取 `../00_expert_entry/verification_gate.md`，按 G1-G6 关卡检查。
+2. 涉及代码 / 资源修改的任务，先读取 `../02_core_mental_model/regression_reasoning.md` 推导影响面，再给出方案。
+3. 回归验证范围按 `../07_integration_pack/regression_checklist.md` 选择受影响类别执行。
+4. 回答末尾附加验证状态（每关标注已验证 / 未验证 / 不适用）；无法验证的关卡不得默认通过。
+5. 修复类结论必须区分 Workaround（临时绕过）/ Minimal Fix（根因修复）/ Structural Fix（结构性修复），禁止把现象消失等同于根因修复。

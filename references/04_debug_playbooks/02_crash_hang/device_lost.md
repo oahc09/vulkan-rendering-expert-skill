@@ -95,22 +95,23 @@ Logical Device
 
 ## 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
+
+- device lost 无法就地绕过：只能重启进程 / 重建 device 恢复运行；根因未除则必然复发，恢复后必须继续定位。`[ENGINE]`
+
+### Minimal Fix（针对根因的最小修复）
 
 - 在 producer / consumer 之间插入精确的 `vkCmdPipelineBarrier`，覆盖写读双方的 stage 和 access。`[SPEC]`
 - 修正 `VkGraphicsPipelineCreateInfo` 中的 `renderPass` 和 `subpass`，确保与 bind 时一致；必要时使用 `VK_NULL_HANDLE` dynamic rendering pipeline 或在 recreate render pass 后重新创建 pipeline。`[SPEC]`
 - 检查所有 descriptor 的 range / offset，确保 buffer / image 访问不越界。`[SPEC]`
 - 对多 queue 共享资源补充 semaphore 和 queue family ownership transfer。`[SPEC]`
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 启用 Validation Layer 全部分支（core、sync、best practice）并清零所有错误后再提交。`[TOOL]`
 - 建立资源生命周期跟踪，确保 command buffer retire 前不销毁其引用资源。`[ENGINE]`
 - 使用 per-frame ring buffer 管理 in-flight 资源，fence 确认 GPU 完成后再回收。`[ENGINE]`
 - 在 swapchain recreate、resize、rotation 时重建依赖旧 swapchain image 的 framebuffer 和 descriptor。`[ENGINE]`
-
-### 工程化修复
-
 - CI 集成 Validation Layer 和 address sanitizer，把 device lost 诱因拦截在开发阶段。`[TOOL]`
 - 建立 GPU crash dump 收集机制（如 VK_EXT_device_fault），捕获 device lost 时驱动提供的 fault 信息。`[TOOL]`
 - 封装 descriptor / buffer / image 使用范围断言，在 debug build 越界即断言。`[ENGINE]`

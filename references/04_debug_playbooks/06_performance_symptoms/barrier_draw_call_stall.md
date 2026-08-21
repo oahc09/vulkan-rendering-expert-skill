@@ -93,22 +93,25 @@ Producer Pass
 
 ### 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
+
+- 临时降低渲染分辨率或画质档位先恢复帧率：GPU 空泡与过度同步仍在，仅用于应急或验证瓶颈归属。`[HEUR]`
+- 过度同步没有安全的临时绕过：直接删除 barrier 可能引入 hazard；保守的全局 barrier 虽慢但正确，收窄参数前必须先明确 producer / consumer。`[SPEC]`
+
+### Minimal Fix（针对根因的最小修复）
 
 - 把全局 barrier 替换为针对具体资源的 `VkImageMemoryBarrier` / `VkBufferMemoryBarrier`。`[SPEC]`
 - 把 `ALL_COMMANDS` 替换为实际 producer / consumer stage（如 `COLOR_ATTACHMENT_OUTPUT` → `FRAGMENT_SHADER_BIT`）。`[SPEC]`
 - 把 `MEMORY_READ | MEMORY_WRITE` 替换为实际 access mask（如 `COLOR_ATTACHMENT_WRITE` → `SHADER_READ`）。`[SPEC]`
 - 移除每帧 `vkDeviceWaitIdle` 和多余的 `vkQueueWaitIdle`。`[ENGINE]`
-
-### 稳定修复
-
-- 建立资源状态跟踪，仅在状态真正变化时插入 barrier，避免冗余 transition。`[ENGINE]`
-- 使用 render graph / frame graph 全局分析 pass 依赖，批量生成最简 barrier 集合。`[ENGINE]`
+- 合并对同一资源的重复 barrier 与 layout transition；可在多个用途间保持统一 layout（在允许时）。`[SPEC]`
 - 在同一 render pass 内用 subpass dependency 替代 pipeline barrier。`[SPEC]`
 - 对可重叠的 compute / transfer / graphics 使用 timeline semaphore 表达阶段性依赖，而非完全串行。`[SPEC]`
 
-### 工程化修复
+### Structural Fix（结构性 / 防复发修复）
 
+- 建立资源状态跟踪，仅在状态真正变化时插入 barrier，避免冗余 transition。`[ENGINE]`
+- 使用 render graph / frame graph 全局分析 pass 依赖，批量生成最简 barrier 集合。`[ENGINE]`
 - 在 debug build 中对每个 barrier 进行“必要性”断言：若前后资源状态无变化则报警。`[ENGINE]`
 - CI 中统计每帧 barrier 数量和全局 barrier 比例，设定阈值。`[TOOL]`
 - 提供自动化工具对比开启 / 关闭某 barrier 后的 hazard 报告和性能变化。`[TOOL]`
@@ -292,22 +295,24 @@ Scene Culling / Sorting
 
 ### 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
+
+- 临时提高 culling 强度或隐藏非关键小物体（远景装饰、次要粒子）：CPU 帧率恢复但内容缺失，合批 / instancing 缺失的根因仍在，仅应急。`[HEUR]`
+- 临时锁定最低画质档（减半绘制密度、关闭非关键 pass）：掩盖现象，交付前必须继续定位根因。`[HEUR]`
+
+### Minimal Fix（针对根因的最小修复）
 
 - 按 pipeline / material / texture 对物体排序，减少状态切换。`[HEUR]`（适用条件：场景中存在大量同材质小物体；若材质种类本身极多，收益有限。）
 - 对同一 mesh 的多个副本启用 `vkCmdDrawIndexed` + `instanceCount`，instance data 用单独 vertex buffer 或 storage buffer。`[SPEC]`（适用条件：同一 mesh 在视野内出现多次；静态 / 动态 instance 均可。）
 - 把 per-object transform 从 push constant 改为 storage buffer 索引，减少 descriptor 切换。`[ENGINE]`（适用条件：每帧 transform 数量大且需要跨 draw 复用同一 pipeline/descriptor。）
 - 对小物体使用 simple LOD 或合并 mesh，减少 draw call 数量。`[HEUR]`（适用条件：远景小物体占 draw call 多数；近景大物体收益小。）
+- 引入 multi-draw indirect（`vkCmdDrawIndexedIndirect` / `vkCmdDrawIndirectCount`），把 draw 参数列表写入 buffer，一次调用提交多个 draw。`[SPEC]`（适用条件：draw 参数可由 CPU 或 GPU 计算生成，且 GPU 支持对应扩展；注意间接 draw 对某些 state 查询有限制。）
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 实现 mesh batcher：离线或运行期把相同材质的小 mesh 合并为单个 vertex/index buffer，一次 draw 绘制多个物体。`[ENGINE]`（适用条件：静态场景或变化频率低的物体；动态物体需权衡更新开销。）
-- 引入 multi-draw indirect（`vkCmdDrawIndexedIndirect` / `vkCmdDrawIndirectCount`），把 draw 参数列表写入 buffer，一次调用提交多个 draw。`[SPEC]`（适用条件：draw 参数可由 CPU 或 GPU 计算生成，且 GPU 支持对应扩展；注意间接 draw 对某些 state 查询有限制。）
 - 使用 bindless descriptor 或 descriptor indexing 减少 descriptor set 切换。`[SPEC]`（适用条件：设备支持 `VK_EXT_descriptor_indexing` 或相关 core 版本；需处理非 uniform resource indexing 限制。）
 - 建立 render queue，按 pass / material / depth 自动排序和 batch。`[ENGINE]`（适用条件：项目已有多 pass 渲染管线；透明物体需保留正确排序。）
-
-### 工程化修复
-
 - CI 集成 per-frame draw call budget，超限自动告警。`[TOOL]`
 - 实现 GPU-driven rendering：由 compute shader 做 culling 并生成 indirect draw buffer。`[ENGINE]`（适用条件：场景物体数量极大且支持 compute；开发成本高。）
 - 对低端设备动态启用 aggressive batching 和降低 instance 上限。`[ENGINE]`

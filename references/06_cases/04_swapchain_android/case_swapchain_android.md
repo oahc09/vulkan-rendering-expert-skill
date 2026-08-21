@@ -21,8 +21,8 @@
 
 ### 1. 现象
 
-Android 设备横竖屏切换后，Vulkan 画面黑屏或 native crash。  
-首次进入 App 渲染正常。  
+Android 设备横竖屏切换后，Vulkan 画面黑屏或 native crash。
+首次进入 App 渲染正常。
 rotation 后 `vkQueuePresentKHR` 或 command buffer 执行阶段出现异常。
 
 ---
@@ -48,7 +48,7 @@ shader 重新编译失败；
 present mode 不兼容。
 ```
 
-但 logcat 显示 Surface 已经 changed，swapchain 也重新创建了。  
+但 logcat 显示 Surface 已经 changed，swapchain 也重新创建了。
 最终发现 command buffer 或 framebuffer 仍引用旧 swapchain image view。
 
 ---
@@ -104,7 +104,7 @@ recreateSwapchain() 只重建了 VkSwapchainKHR，没有重建 framebuffer 或�
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - swapchain recreate 时重建 image views。
 - 重建 framebuffer 或 dynamic rendering attachment。
@@ -112,7 +112,7 @@ recreateSwapchain() 只重建了 VkSwapchainKHR，没有重建 framebuffer 或�
 - 更新引用尺寸相关 image 的 descriptor。
 - recreate 前等待 in-flight GPU work 完成。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 建立 swapchain-dependent resource group。
 - 统一管理：
@@ -124,8 +124,6 @@ recreateSwapchain() 只重建了 VkSwapchainKHR，没有重建 framebuffer 或�
   - command buffer
   - descriptor
 - 每次 surface extent 变化时整组重建。
-
-### 工程化修复
 
 - 引入 resource generation id。
 - command buffer 录制时绑定当前 generation。
@@ -146,7 +144,7 @@ recreateSwapchain() 只重建了 VkSwapchainKHR，没有重建 framebuffer 或�
 
 ### 9. 经验抽象
 
-Swapchain recreate 不是只重建 `VkSwapchainKHR`。  
+Swapchain recreate 不是只重建 `VkSwapchainKHR`。
 所有尺寸相关、引用 swapchain image view 的对象都必须一起处理。
 
 ---
@@ -289,19 +287,17 @@ vkCreateSwapchainKHR(device, &sci, nullptr, &swapchain);
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 在调用 `vkCreateSwapchainKHR` 前检查 `surfaceCapabilities.currentExtent.width > 0 && height > 0`。
 - 若 extent 为 0，跳过该帧渲染，等待窗口恢复或 surface 就绪后再次尝试创建。
 - 若 `currentExtent` 为 `0xFFFFFFFF`，根据窗口 / surface 尺寸在 `[minImageExtent, maxImageExtent]` 范围内选择合适的 extent。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 在 swapchain manager 中引入 `Ready` / `NotReady` 状态：extent 为 0 时标记 `NotReady`，暂停 acquire / submit / present。
 - 监听窗口 resize / surface 变化事件，仅在 extent 有效时触发 recreate。
 - 对 `vkCreateSwapchainKHR` 的输入做前置断言：width > 0、height > 0、在 min/max 范围内。
-
-### 工程化修复
 
 - 在窗口系统抽象层中统一处理“surface not ready”状态，向上层返回明确的枚举值。
 - 在 CI 中加入窗口最小化 / 恢复自动化测试，验证渲染循环不会 crash。
@@ -479,21 +475,19 @@ void renderFrame() {
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 在 `onPause` / `APP_CMD_TERM_WINDOW` 中调用 `vkDeviceWaitIdle`，停止渲染循环，销毁 swapchain、framebuffers、surface（按需），并记录暂停状态。
 - 在 `onResume` / `APP_CMD_INIT_WINDOW` 中等待新的 `ANativeWindow` 就绪后，重新创建 `VkSurfaceKHR`、swapchain、framebuffers 和必要的 descriptors。
 - resume 后重置所有 frame-in-flight fence 为 signaled 状态（或重新创建 fence），避免渲染线程因等待旧 fence 而阻塞。
 - resume 后的第一帧重新走完整的 `acquire → record → submit → present` 流程。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 建立 Android lifecycle 状态机：`Running` / `Paused` / `SurfaceLost` / `Resuming` / `Ready`。
 - 渲染线程每帧检查状态：只有 `Ready` 时才执行 acquire / submit / present。
 - 将 surface / swapchain / framebuffers 封装为可重建的 `SwapchainContext`，lifecycle 变化时自动重建。
 - 对 `vkAcquireNextImageKHR` / `vkQueuePresentKHR` 的所有返回值做分支处理，触发 recreate 或等待。
-
-### 工程化修复
 
 - 使用 Android Game Development Library 或自研 lifecycle 框架统一处理 surface 事件。
 - 在 CI 中加入自动化 pause / resume / rotation / 锁屏测试，用 AGI 或 screenshot 对比验证。
@@ -582,7 +576,7 @@ resume: 获取新 surface → 重建 swapchain → 重建依赖资源 → 重置
 
 ### 1. 现象
 
-Android App 切后台或销毁 Surface 后 native crash。  
+Android App 切后台或销毁 Surface 后 native crash。
 logcat 中可以看到 `surfaceDestroyed` 已触发，但 render thread 仍在调用 acquire / submit / present。
 
 ---
@@ -659,7 +653,7 @@ vkQueuePresentKHR called after surface destroyed
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - `surfaceDestroyed` 时设置 renderPaused / surfaceInvalid。
 - render thread 立即停止 acquire / submit / present。
@@ -667,7 +661,7 @@ vkQueuePresentKHR called after surface destroyed
 - 销毁 swapchain-dependent resources。
 - release ANativeWindow。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 建立 Android lifecycle 状态机：
   ```text
@@ -680,8 +674,6 @@ vkQueuePresentKHR called after surface destroyed
   ```
 - render thread 只在 `Rendering` 状态提交 GPU work。
 - Surface destroyed 和 App pause 都能安全进入非渲染状态。
-
-### 工程化修复
 
 - Java/Kotlin → native 使用事件队列。
 - render thread 统一消费 lifecycle event。
@@ -703,7 +695,7 @@ vkQueuePresentKHR called after surface destroyed
 
 ### 9. 经验抽象
 
-Android Vulkan 稳定性问题不能只看 Vulkan API。  
+Android Vulkan 稳定性问题不能只看 Vulkan API。
 Surface / ANativeWindow 生命周期和 render thread 状态机是同等重要的渲染链路组成部分。
 
 ---

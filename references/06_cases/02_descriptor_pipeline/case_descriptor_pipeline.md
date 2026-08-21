@@ -21,7 +21,7 @@
 
 ### 1. 现象
 
-Validation Layer 报 descriptor binding mismatch。  
+Validation Layer 报 descriptor binding mismatch。
 Shader 里声明了 texture 或 uniform buffer，但运行时 shader 读取不到资源，画面黑或参数不生效。
 
 ---
@@ -46,7 +46,7 @@ uniform buffer 没更新；
 fragment shader 采样坐标错误。
 ```
 
-但 RenderDoc 显示 shader resource binding 为空或不匹配。  
+但 RenderDoc 显示 shader resource binding 为空或不匹配。
 最终发现 shader binding 与 Vulkan 侧 descriptor layout 不一致。
 
 ---
@@ -108,7 +108,7 @@ stageFlags 只填 VERTEX，但资源在 FRAGMENT 中使用。
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 以 shader 中的 set/binding 为准修正 descriptor layout。
 - 修正 descriptorType。
@@ -116,13 +116,11 @@ stageFlags 只填 VERTEX，但资源在 FRAGMENT 中使用。
 - 重新创建 pipeline layout 和 pipeline。
 - 重新分配并更新 descriptor set。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 建立 shader binding 表。
 - 使用 shader reflection 自动生成 descriptor layout。
 - 在 pipeline 创建前校验 shader resource 与 descriptor layout。
-
-### 工程化修复
 
 - 引入统一 descriptor schema。
 - 对每个 shader pass 生成 descriptor manifest。
@@ -142,7 +140,7 @@ stageFlags 只填 VERTEX，但资源在 FRAGMENT 中使用。
 
 ### 9. 经验抽象
 
-Descriptor 错误不要只看 `vkUpdateDescriptorSets`。  
+Descriptor 错误不要只看 `vkUpdateDescriptorSets`。
 必须沿以下链路排查：
 
 ```text
@@ -299,19 +297,17 @@ void recreateSwapchain() {
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 在 swapchain recreate 完成后，重新分配并更新所有引用 swapchain image view 的 descriptor set。
 - 确保 `VkDescriptorImageInfo.imageView` 来自新 swapchain。
 - 若 descriptor pool 已满或需要释放旧 set，在 cleanup 阶段先释放 descriptor set，再销毁旧 image view。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 维护 swapchain-dependent resource group：swapchain、image views、framebuffers、descriptors 统一在 recreate 时重建。
 - 在 resource manager 中标记“swapchain 依赖资源”，resize 时自动失效并重新创建。
 - 对每帧 descriptor set 做版本管理，swapchain 版本号变化时强制重新 update。
-
-### 工程化修复
 
 - 使用 RenderGraph / FrameGraph 自动处理资源生命周期：resize 时重新分配依赖资源并更新所有 descriptor。
 - 引入 descriptor set allocator 与缓存，按 swapchain 版本隔离 descriptor set。
@@ -495,20 +491,18 @@ bindings[1].binding = 1; bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINE
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 以 shader reflection 结果为准，修正 `VkDescriptorSetLayoutBinding` 的 `binding`、`descriptorType`、`stageFlags`。
 - 确保 `VkPipelineLayoutCreateInfo` 的 `pSetLayouts` 覆盖 shader 使用的所有 set 索引。
 - 修改 pipeline layout 后，必须重新创建所有依赖该 layout 的 graphics / compute pipeline。
 - 更新 descriptor set 的 update 调用，使其与新的 layout 一致。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 使用 shader reflection 自动生成 descriptor set layout 和 pipeline layout，避免手工维护。
 - 在 pipeline 创建前增加校验：对比 shader resource manifest 与 pipeline layout 的兼容性。
 - 对 push constant range、set count、binding count 做自动化检查并报错。
-
-### 工程化修复
 
 - 为每个 shader pass 定义 descriptor manifest（YAML / JSON），由构建系统生成 C++ layout 代码。
 - CI 中运行 shader reflection diff：当 shader 的 set / binding 变化时，强制更新 manifest 并重新生成 pipeline layout。
@@ -695,7 +689,7 @@ struct UBO {
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 使用 `alignas(minUniformBufferOffsetAlignment)` 或手动向上取整计算 dynamic offset：
   ```text
@@ -712,14 +706,12 @@ struct UBO {
   ```
 - 在 GLSL 中显式指定 `layout(std140, set = 0, binding = 0) uniform UBO { ... };`。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 引入集中式 UBO 布局工具函数，统一处理 alignment 和 padding。
 - 使用 shader reflection 自动生成 C++ 侧镜像结构体或 offset 表。
 - 在 debug 构建中对所有 UBO dynamic offset 做 assert 校验。
 - 对 `minUniformBufferOffsetAlignment` 在启动期读取并缓存，所有 offset 计算都经过该值。
-
-### 工程化修复
 
 - 在 CI 中比较 shader UBO 字段 offset 与 C++ 结构体字段 offset，发现不一致立即报错。
 - 使用 `spirv-cross` 或自定义 reflection 生成 uniform block manifest。

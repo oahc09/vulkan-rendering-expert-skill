@@ -79,18 +79,21 @@ Frame Index
 
 ## 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
 
-- 降到单帧验证。
-- 每帧资源独立。
-- fence signal 后再复用资源。
+- 降到单帧（frames-in-flight = 1）验证：若闪烁消失，说明问题出在多帧资源复用；性能损失大，仅用于定位。`[ENGINE]`
 
-### 稳定修复
+### Minimal Fix（针对根因的最小修复）
 
-- 建立 per-frame resource 结构。
-- 明确区分 frame index 和 swapchain image index。
-- 对 uniform 使用 ring buffer 或 dynamic offset。
-- 对 descriptor 建立 per-frame set。
+- 每帧资源独立：per-frame 的 uniform / descriptor / command buffer 不跨帧复用。`[ENGINE]`
+- 资源在 fence signal（GPU 使用完成）后再复用或销毁。`[SPEC]`
+
+### Structural Fix（结构性 / 防复发修复）
+
+- 建立 per-frame resource 结构。`[ENGINE]`
+- 明确区分 frame index 和 swapchain image index。`[ENGINE]`
+- 对 uniform 使用 ring buffer 或 dynamic offset。`[ENGINE]`
+- 对 descriptor 建立 per-frame set。`[ENGINE]`
 
 ---
 

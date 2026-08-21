@@ -22,3 +22,5 @@
 13. **相机参数必须基于模型 bbox 计算**：相机 `target / distance / farP` 必须基于模型 AABB（累计 POSITION accessor min/max）计算，禁止硬编码（除非模型尺寸已知且固定）。[ENGINE]
 14. **PBR 光源参数必须按场景尺度缩放**：使用 `1/d²` 物理衰减时，光源强度必须按场景尺度缩放，公式：`intensity = targetRadiance × distance²`。同一组光源参数在不同尺度场景下重用会导致过曝/欠曝。[ENGINE][HEUR]
 15. **Vulkan 销毁函数必须幂等**：所有 Vulkan 销毁路径（包括 shutdown / destructor / swapchain recreate 共用清理函数）必须满足：开头检查 device handle 是否为空、销毁对象后同步置空 handle、`vkDeviceWaitIdle` 可重复调用。[SPEC]
+16. **现象消失不等于根因修复**：修复输出必须区分 Workaround（临时绕过）、Minimal Fix（根因最小修复）、Structural Fix（结构性修复）三级；使用 Workaround 后必须继续定位根因，或显式标注为临时绕过并说明剩余风险。[ENGINE]
+17. **Validation clean 不是唯一成功标准**：Validation Layer 只能证明 API 使用与显式声明的同步关系合法，不能证明渲染结果正确；结论性输出前必须按 `verification_gate.md` 过 G1-G6 关卡（无法验证的关卡显式标注，不得默认通过）。[TOOL][ENGINE]

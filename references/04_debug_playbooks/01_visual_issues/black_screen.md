@@ -101,21 +101,21 @@ Surface / Swapchain
 
 ## 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
 
 - 先确保 clear color 可见。[TOOL]
 - 用最小 triangle 验证 pipeline 和 command buffer。[TOOL]
 - 暂时关闭 depth test。[HEUR]
 - 暂时移除复杂 descriptor，只保留常量颜色输出。[HEUR]
 
-### 稳定修复
+### Minimal Fix（针对根因的最小修复）
 
 - 为 acquire / submit / present 增加返回值检查。[ENGINE]
 - 为 swapchain recreate 建立完整路径。[ENGINE]
 - 为 command buffer 录制增加状态日志。[TOOL]
 - 用 RenderDoc 验证每个 pass 的输入输出。[TOOL]
 
-### 工程化修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 建立 frame graph 或 render pass graph。[ENGINE]
 - 建立统一 swapchain-size resource recreate 机制。[ENGINE]

@@ -90,7 +90,11 @@ Compute Command Buffer
 
 ## 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
+
+- 临时在 compute submit 后立即 `vkDeviceWaitIdle`，再提交 graphics（串行化正确但慢，仅应急）。`[ENGINE]`
+
+### Minimal Fix（针对根因的最小修复）
 
 - 在 compute dispatch 后、graphics draw 前插入 `vkCmdPipelineBarrier`：
   - Buffer：`srcStage = COMPUTE_SHADER_BIT`、`srcAccess = SHADER_WRITE`、`dstStage = VERTEX_SHADER_BIT | FRAGMENT_SHADER_BIT | DRAW_INDIRECT`、`dstAccess = SHADER_READ | UNIFORM_READ | INDIRECT_COMMAND_READ`。`[SPEC]`
@@ -98,15 +102,12 @@ Compute Command Buffer
 - 对 indirect draw buffer，确保 `dstAccessMask` 包含 `VK_ACCESS_INDIRECT_COMMAND_READ_BIT`。`[SPEC]`
 - 若跨 queue，在 compute submit 的 `pSignalSemaphores` 与 graphics submit 的 `pWaitSemaphores` 之间建立 binary / timeline semaphore。`[SPEC]`
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 对 compute output 资源建立统一状态机，自动跟踪 `COMPUTE_WRITE` → `GRAPHICS_READ` / `INDIRECT_READ` 的转换。`[ENGINE]`
 - 封装 `ComputeDispatch` → `GraphicsPass` 的 barrier 模板，避免每次手写。`[ENGINE]`
 - 对跨 queue family 资源自动插入 ownership transfer barrier。`[ENGINE]`
 - 对 per-frame compute output 使用 triple buffering，确保 compute 写帧 N 与 graphics 读帧 N 对齐。`[ENGINE]`
-
-### 工程化修复
-
 - 引入 render graph / frame graph，声明 compute pass 和 graphics pass 的读写依赖，由框架自动插入 barrier 和 semaphore。`[ENGINE]`
 - CI 启用 sync validation，特别针对 compute → graphics 链路。`[TOOL]`
 - 在 debug build 中对每个 compute output 资源校验：消费前是否存在 barrier / semaphore。`[ENGINE]`

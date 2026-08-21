@@ -90,22 +90,23 @@ Render Pass / Subpass
 
 ## 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
+
+- 暂时关闭 depth test 先恢复画面输出（会引起绘制顺序错误；仅用于验证 depth 链路是否为问题源头，交付前必须恢复）。`[HEUR]`
+
+### Minimal Fix（针对根因的最小修复）
 
 - 把 `depthCompareOp` 改为与投影和清除值匹配的比较函数；标准前向渲染使用 `VK_COMPARE_OP_LESS` 并清除 depth 为 1.0。`[SPEC]`
 - 对需要写入 depth 的 pass 开启 `depthWriteEnable = VK_TRUE`。`[SPEC]`
 - 把 depth attachment 的 load op 设为 `VK_ATTACHMENT_LOAD_OP_CLEAR`，并在 `VkRenderPassBeginInfo::pClearValues` 中提供深度清除值。`[SPEC]`
 - 把投影矩阵调整为 Vulkan 的 [0,1] depth range，或启用 `VK_EXT_depth_clip_control` 使用 [-1,1]。`[SPEC]`
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 建立 pipeline state 描述系统，集中管理 depth test / write / compare op，避免硬编码错误。`[ENGINE]`
 - 对 shadow map 等敏感 pass 使用 slope-scaled depth bias 并做 bias 参数调优。`[ENGINE]`
 - 明确区分 opaque pass（depth write on）和 transparent pass（depth test on / depth write off）。`[ENGINE]`
 - 对 reverse-Z 方案统一使用 `VK_COMPARE_OP_GREATER` / `GREATER_OR_EQUAL` 并清除 depth 为 0.0，提高远距精度。`[ENGINE]`（适用条件：浮点 depth buffer 可用；需全项目统一 convention。）
-
-### 工程化修复
-
 - CI 中增加 depth buffer 可视化测试，自动检测全黑 / 反转 / Z-fighting。`[TOOL]`
 - 建立 render pass 模板，强制要求每个 subpass 声明 depth load/store op 和 compare op。`[ENGINE]`
 - 对复杂场景增加 depth 精度分析工具，远距离自动切换更高精度 depth format 或 reverse-Z。`[ENGINE]`

@@ -96,24 +96,25 @@ Application Logic
 
 ### 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
 
-- 关闭非必要的 Validation Layer 扩展或降低验证级别（仅 debug 临时使用，release 不应开启）。`[TOOL]`
+- 关闭非必要的 Validation Layer 扩展或降低验证级别：仅消除 validation 开销这一项，其余 CPU 根因仍在（仅 debug 临时使用，release 不应开启）。`[TOOL]`
+- 临时锁定低画质档（减少物体数 / draw call）：CPU 时间回落但提交架构的根因未修，仅用于应急或验证瓶颈归属。`[HEUR]`
+
+### Minimal Fix（针对根因的最小修复）
+
 - 对固定资源使用 persistent descriptor set，避免每帧 `vkAllocateDescriptorSets`。`[SPEC]`
 - 把频繁更新的 uniform / dynamic uniform 集中到少量 descriptor set，使用 `VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC`。`[SPEC]`
 - 对相同材质 / mesh 的物体启用 instancing 或合并 draw call。`[HEUR]`
 - 把单帧内多次 `vkDeviceWaitIdle` 替换为 per-frame fence 等待。`[ENGINE]`
-
-### 稳定修复
-
-- 建立 descriptor set allocator，按 frame-in-flight 复用 set，只在必要时扩容 pool。`[ENGINE]`
 - 引入 multi-draw indirect，把大量相似 draw call 合并为一次 `vkCmdDrawIndirect` / `vkCmdDrawIndexedIndirect`。`[SPEC]`
 - 使用 secondary command buffer 多线程录制，每个线程使用独立的 command pool。`[SPEC]`
 - 启用并持久化 `VkPipelineCache`，运行期避免重新编译 shader。`[SPEC]`
 - 建立渲染 pass 级别的 culling 和 sorting，减少提交到 Vulkan 的物体数量。`[ENGINE]`
 
-### 工程化修复
+### Structural Fix（结构性 / 防复发修复）
 
+- 建立 descriptor set allocator，按 frame-in-flight 复用 set，只在必要时扩容 pool。`[ENGINE]`
 - CI 集成 CPU frame time 性能测试，自动回归主线程耗时。`[TOOL]`
 - 建立 draw call / descriptor update / pipeline bind 的 per-frame budget 与告警。`[ENGINE]`
 - 实现 task-based command buffer 录制系统，自动负载均衡到多个 worker thread。`[ENGINE]`
@@ -300,22 +301,24 @@ DescriptorPool
 
 ### 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
+
+- 临时锁定低画质档或减少材质变体，降低 update 调用次数：每 draw 重新分配 / 更新 descriptor 的模式仍在，仅应急。`[HEUR]`
+- Descriptor update 开销没有安全的临时绕过：跳过 update 会导致绑定过期资源，必须按根因修复。`[SPEC]`
+
+### Minimal Fix（针对根因的最小修复）
 
 - 对同类型 descriptor 使用 `VkDescriptorUpdateTemplate` 批量更新。`[SPEC]`
 - 将 per-object UBO 合并到一个大 buffer，使用 dynamic offset 绑定。`[SPEC]`
 - 按更新频率拆分 descriptor set：per-frame、per-material、per-draw。`[ENGINE]`
 - 对高频小数据使用 push constants 替代 descriptor update。`[SPEC]`
-
-### 稳定修复
-
-- 建立 per-frame descriptor set ring buffer，每帧 reset pool 后复用。`[ENGINE]`
-- 使用 bindless descriptor（`VK_EXT_descriptor_indexing`），把大量 texture / buffer 索引存入 SSBO / push constant。`[SPEC]`
 - 按 material / shader / pipeline 排序 draw call，减少 descriptor set 切换。`[ENGINE]`
 - 对静态资源建立 descriptor set cache，避免重复 update。`[ENGINE]`
 
-### 工程化修复
+### Structural Fix（结构性 / 防复发修复）
 
+- 建立 per-frame descriptor set ring buffer，每帧 reset pool 后复用。`[ENGINE]`
+- 使用 bindless descriptor（`VK_EXT_descriptor_indexing`），把大量 texture / buffer 索引存入 SSBO / push constant。`[SPEC]`
 - 封装 descriptor allocator / cache / template，限制每帧 update 次数。`[ENGINE]`
 - CI 中监控 `vkUpdateDescriptorSets` / `vkCmdBindDescriptorSets` 调用次数，设定阈值。`[TOOL]`
 - 提供 material system 自动生成 descriptor layout 和 update template。`[ENGINE]`

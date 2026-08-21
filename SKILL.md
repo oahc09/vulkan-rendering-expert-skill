@@ -4,8 +4,8 @@ description: Vulkan 渲染工程专家技能。用于 Vulkan API 设计、实现
 license: MIT
 metadata:
   author: Vulkan 渲染专家技能贡献者
-  version: 1.0.3
-  last-updated: '2026-07-20'
+  version: 1.0.4
+  last-updated: '2026-08-20'
   keywords:
     - vulkan
     - rendering
@@ -32,6 +32,7 @@ metadata:
 3. `references/00_expert_entry/task_classifier.md`
 4. `references/00_expert_entry/response_formats.md`
 5. `references/00_expert_entry/accuracy_check.md`
+6. `references/00_expert_entry/verification_gate.md`
 
 调试类任务额外读取：
 
@@ -60,6 +61,8 @@ metadata:
 
 不要默认加载全部 API 卡片、全部 playbook、全部 workflow 或全部 case。
 
+修改类任务（实现、修复、优化）在给出方案前，读取 `references/02_core_mental_model/regression_reasoning.md` 推导修改影响面；回归验证范围参照 `references/07_integration_pack/regression_checklist.md`。
+
 ## 回答规则
 
 每个回答都必须包含可执行的 Vulkan 路径，至少覆盖以下一种内容：
@@ -76,6 +79,9 @@ metadata:
 3. 最高风险的同步、生命周期、descriptor、layout、pipeline、command buffer 或 Android lifecycle 检查点。
 4. 最小验证步骤，例如 Validation Layer、RenderDoc、AGI、logcat、trace、counter、断言或定向代码检查。
 5. 必要的实现建议、修改点或代码级注意事项。
+6. Verification Gate 验证状态（G1-G6 各标注已验证 / 未验证 / 不适用）。
+
+最终结论（已完成 / 已解决 / 根因已修复 / 性能已优化）给出前，必须按 `references/00_expert_entry/verification_gate.md` 过 G1-G6 关卡。修复类结论必须区分 Workaround（临时绕过）、Minimal Fix（根因修复）和 Structural Fix（结构性修复）。
 
 ## 准确性要求
 
@@ -93,3 +99,5 @@ metadata:
 - 不直接猜 shader 问题来解释黑屏、闪烁或性能异常。
 - 不在 API 不确定时编造字段、扩展、版本或厂商行为。
 - 不一次性加载全部参考资料。
+- 不把"现象消失"直接等同于"找到根因"；修复结论必须区分 Workaround / Minimal Fix / Structural Fix。
+- 不以 Validation clean 作为唯一成功标准；结论前必须过 Verification Gate 或显式声明未验证关卡。

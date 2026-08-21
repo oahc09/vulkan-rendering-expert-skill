@@ -57,7 +57,7 @@
 4. 找创建点。
 5. 找使用点。
 6. 沿对象链路反查。
-7. 给出最小修复。
+7. 给出 Workaround / Minimal Fix / Structural Fix。
 8. 回归验证 validation clean。
 
 相关 Playbook：

@@ -69,19 +69,60 @@
 - 7 个子目录各合并为 1 个文件，33 → 11 文件。
 - 合并文件 H1 使用 `# Cases: <Category>`，原 case 降级为 `## Case: <原 case 名>` 锚点，原 `##` 段落降级为 `###`。
 - 涉及文件：`01_black_screen`、`02_descriptor_pipeline`、`03_sync_layout`、`04_swapchain_android`、`05_compute`、`06_performance`、`07_engine_architecture`。
-- 同步更新 `case_index.md`、`06_cases/README.md`、`MODULE_SUMMARY.md`（33→11）和 3 个交叉引用文件。
+- 同步更新 `06_cases/case_index.md`、`06_cases/README.md`、`MODULE_SUMMARY.md`（33→11）和 3 个交叉引用文件。
 
 #### Phase 2b：合并 `04_debug_playbooks/`（214 → 196，-6）
 
 - 6 组合并，28 → 22 文件。
 - 合并文件以 `## Debug Playbook: <原 playbook 名>` 作为锚点，原 `##` 段落降级为 `###`。
 - 涉及合并组：
-  - `03_validation_errors/`：`descriptor_binding_error` + `pipeline_layout_error` → `descriptor_pipeline_layout_errors.md`；`image_layout_error` + `synchronization_hazard` → `layout_sync_hazard_errors.md`。
-  - `06_performance_symptoms/`：`bandwidth_high` + `fullscreen_pass_cost` → `bandwidth_fullscreen_cost.md`；`barrier_overuse` + `draw_call_bottleneck` → `barrier_draw_call_stall.md`；`cpu_frame_time_high` + `descriptor_update_overhead` → `cpu_overhead_symptoms.md`；`pipeline_creation_stutter` + `startup_time_high` → `pipeline_startup_stutter.md`。
+  - `03_validation_errors/`：`descriptor_binding_error` + `pipeline_layout_error` → `04_debug_playbooks/03_validation_errors/descriptor_pipeline_layout_errors.md`；`image_layout_error` + `synchronization_hazard` → `04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md`。
+  - `06_performance_symptoms/`：`bandwidth_high` + `fullscreen_pass_cost` → `04_debug_playbooks/06_performance_symptoms/bandwidth_fullscreen_cost.md`；`barrier_overuse` + `draw_call_bottleneck` → `04_debug_playbooks/06_performance_symptoms/barrier_draw_call_stall.md`；`cpu_frame_time_high` + `descriptor_update_overhead` → `04_debug_playbooks/06_performance_symptoms/cpu_overhead_symptoms.md`；`pipeline_creation_stutter` + `startup_time_high` → `04_debug_playbooks/06_performance_symptoms/pipeline_startup_stutter.md`。
 - `tests/test_templates.py` 增加 `## Debug Playbook:` 前缀检测，合并文件使用 `###` 段落校验。
-- 同步更新 `04_debug_playbooks/README.md`、`debug_priority_index.md`、`MODULE_SUMMARY.md`（28→22）和 52 个交叉引用文件。
+- 同步更新 `04_debug_playbooks/README.md`、`04_debug_playbooks/debug_priority_index.md`、`MODULE_SUMMARY.md`（28→22）和 52 个交叉引用文件。
 
 ### 行尾规范化（Phase 2b 副产物）
 
 - `_fix_pb_refs.py` 批量替换留下的 CRLF 行尾统一为 LF，涉及 43 个文件。
 - `git diff --check` 全部干净。
+
+## v1.0.4
+
+### Production Expert：可靠性、根因判断、回归验证
+
+不扩展新的 Vulkan API 大类，不新增顶层知识模块（仅新增 3 个文件、无删除，git 跟踪文件 192 → 195，仍满足 ClawHub ≤200 限制）。本版本聚焦真实工程任务的可靠性：结论出口统一过验证关卡，修改前先推影响面，修复结论区分分级，修复后按清单回归。
+
+#### 新增统一验证关卡（Verification Gate，G1-G6）
+
+- 新增 `00_expert_entry/verification_gate.md`：任何"完成 / 解决 / 根因已修 / 性能已优化"类结论，出口前依次过 G1 API 合法性 → G2 生命周期 → G3 同步 → G4 Validation Layer → G5 RenderDoc / AGI → G6 平台回归；每关标注已验证 / 未验证 / 不适用，不可验证的关卡默认不通过。
+- G4 明确 Validation clean 只是必要条件而非成功标准；G6 覆盖 Android rotation / pause / resume / Surface-Swapchain recreate。
+
+#### 新增修改影响面推理（`02_core_mental_model/regression_reasoning.md`）
+
+- 依赖传播规则：DescriptorSetLayout → PipelineLayout → Pipeline → DescriptorSet 重分配与重绑定；Image → ImageView → RenderTarget / Framebuffer；Swapchain 尺寸 → depth / offscreen / RenderArea / viewport / 特殊分辨率特效；Frames-in-flight → per-frame 资源隔离与生命周期；Barrier → producer / consumer / stage / access / layout / queue ownership。
+- 修改前先推影响面，影响类别决定回归验证范围。
+
+#### 新增回归验证清单（`07_integration_pack/regression_checklist.md`）
+
+- 六类回归：correctness / rendering / resource lifecycle / synchronization / Android lifecycle / performance。
+- 供 Verification Gate G6 与 Debug Playbook §7 选用。
+
+#### Debug Playbook 统一推理链与修复分级（22 文件全量审查）
+
+- 统一推理链写入模板与 README：Symptom → Hypothesis → Evidence → Root Cause → Workaround → Minimal Fix → Structural Fix → Regression Verification；禁止把"现象消失"等同于"找到根因"。
+- 修复分级全量更名并统一语义：最小修复 → Workaround（临时绕过）、稳定修复 → Minimal Fix（根因最小修复）、工程化修复 → Structural Fix（结构性 / 防复发）；涉及 `04_debug_playbooks/debug_playbook_template.md`、README 及全部带修复分级的 playbook。
+- `06_cases/case_template.md` 与全部 7 个 case 文件（29 个案例）同步修复分级：case 侧旧"最小修复"内容为根因修复，语义映射为 Minimal Fix；旧"稳定修复 / 工程化修复"合并为 Structural Fix；`06_cases/01_black_screen/case_black_screen.md` 的临时 cullMode 条目单独提取为 Workaround 小节。
+- `00_expert_entry/debug_priority.md`、`04_debug_playbooks/debug_priority_index.md`、`01_source_map_and_api_manual_strategy/api_card_template.md` 的"给出最小修复"步骤统一改为"给出 Workaround / Minimal Fix / Structural Fix"。
+- 06_cases 模块行尾规范化：7 个 case 文件与 `06_cases/case_tags.md` CRLF → LF，并清除历史行尾空白；至此 references 下全部 Markdown 文件为 LF 行尾，`git diff --check` 干净。
+
+#### 入口规则与路由更新
+
+- `../../SKILL.md`：版本 1.0.4；启动加载顺序增加第 6 项 `verification_gate.md`；回答规则第 6 条"Verification Gate 状态（G1-G6 逐关标注）"；禁止行为新增"现象消失 ≠ 根因修复"与"Validation clean 不是唯一成功标准"。
+- `hard_rules.md` 新增 #16（修复必须区分三级，Workaround 后须继续定位根因或显式标注残留风险）与 #17（Validation clean 非唯一成功标准，结论前过 G1-G6）。
+- `response_formats.md` 新增 §0"统一出口段：Verification Gate"，故障调试类输出结构增加修复分级与 Verification Gate 状态。
+- `../07_integration_pack/task_routing_rules.md` 新增第 11 类任务"统一出口：Verification Gate"，适用于设计 / 实现 / Debug / 优化等一切输出结论性判断的任务。
+
+#### 索引同步
+
+- `MODULE_SUMMARY.md`：00_expert_entry 9 → 10、02_core_mental_model 14 → 15、07_integration_pack 8 → 9。
+- `00_expert_entry/README.md`、`02_core_mental_model/README.md` 文件列表同步。

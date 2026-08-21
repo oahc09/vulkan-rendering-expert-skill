@@ -6,6 +6,20 @@
 
 ---
 
+## 0. 统一出口段：Verification Gate（所有类型共用）
+
+任何结论性输出（已完成 / 已解决 / 根因已修复 / 性能已优化）前，必须按 `verification_gate.md` 过 G1-G6 关卡，回答末尾附加验证状态：
+
+```text
+Verification Gate:
+- G1 API 合法性: 已验证（方式）/ 未验证（原因）/ 不适用（原因）
+- G2 生命周期 / G3 同步 / G4 Validation / G5 RenderDoc-AGI / G6 平台回归: 同上格式
+```
+
+修复类输出必须标注修复级别：Workaround（临时绕过）/ Minimal Fix（根因修复）/ Structural Fix（结构性修复）。禁止把"现象消失"直接等同于"找到根因"，不以 Validation clean 作为唯一成功标准。
+
+---
+
 ## 1. 概念+链路类
 
 适用于：Vulkan / Descriptor / Pipeline / Barrier / Swapchain 等概念解释。
@@ -49,9 +63,10 @@
 2. 快速验证路径
 3. Vulkan 对象链路排查
 4. 工具证据（Validation / RenderDoc / AGI / logcat）
-5. 修复方案
+5. 修复方案（区分 Workaround / Minimal Fix / Structural Fix）
 6. 回归验证
 7. 相关 API / Case
+8. Verification Gate 验证状态（§0）
 
 ---
 

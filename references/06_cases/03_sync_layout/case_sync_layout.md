@@ -112,19 +112,17 @@ void renderFrame() {
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 在 `vkResetCommandBuffer` / `vkResetCommandPool` 之前，显式 `vkWaitForFences` 等待该 command buffer 关联的 fence 进入 signaled 状态。
 - 若使用多 frame-in-flight，确保每个 frame index 有独立的 command buffer 和 fence，reset 前只 wait 当前帧对应的 fence。
 - 将 `vkResetFences` 放在确认 fence 已 signaled 之后，并确保 fence 与当前帧 command buffer 匹配。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 为每个 frame-in-flight 槽位维护独立的 command buffer、command pool 和 fence。
 - 封装 FrameResource 结构，reset 前自动检查 `vkGetFenceStatus` 或 `vkWaitForFences`。
 - 禁止跨帧共享同一个 command buffer；每帧从对应 pool 重新分配或 reset。
-
-### 工程化修复
 
 - 引入 command buffer lifetime tracker，记录每个 command buffer 的 submit fence 和 signaled 状态。
 - 使用 RAII wrapper：command buffer 对象析构或 reset 时自动断言 fence signaled。
@@ -210,7 +208,7 @@ command buffer 已结束录制
 
 ### 1. 现象
 
-Compute shader 写入 storage image 后，后续 fullscreen fragment shader 采样该 image，画面显示为黑色或旧内容。  
+Compute shader 写入 storage image 后，后续 fullscreen fragment shader 采样该 image，画面显示为黑色或旧内容。
 Compute dispatch 在 RenderDoc 中存在，storage image 似乎有写入，但 fragment pass 读取结果不稳定。
 
 ---
@@ -236,7 +234,7 @@ descriptor 没绑定；
 fragment shader 采样坐标错误。
 ```
 
-但 RenderDoc 显示 compute dispatch 已执行，storage image 有内容。  
+但 RenderDoc 显示 compute dispatch 已执行，storage image 有内容。
 问题出在 compute 写之后没有建立 graphics 读的内存可见性与 layout transition。
 
 ---
@@ -291,7 +289,7 @@ Compute 写后直接进入 fullscreen pass，没有 barrier。
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 在 compute dispatch 后插入 barrier：
 
@@ -305,13 +303,11 @@ dstAccess = SHADER_SAMPLED_READ
 newLayout = SHADER_READ_ONLY_OPTIMAL
 ```
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 每个 compute output 明确 consumer。
 - 对 storage image 建立状态跟踪。
 - descriptor imageLayout 与实际 consumer layout 对齐。
-
-### 工程化修复
 
 - 在 RenderGraph 中声明：
   ```text
@@ -335,7 +331,7 @@ newLayout = SHADER_READ_ONLY_OPTIMAL
 
 ### 9. 经验抽象
 
-Compute 和 Graphics 之间不会自动同步。  
+Compute 和 Graphics 之间不会自动同步。
 只要资源跨阶段读写，必须明确：
 
 ```text
@@ -403,8 +399,8 @@ queue ownership，如跨 queue
 
 ### 1. 现象
 
-多 frame-in-flight 后画面出现闪烁。  
-Uniform 参数偶发跳变，某些帧使用上一帧或下一帧的数据。  
+多 frame-in-flight 后画面出现闪烁。
+Uniform 参数偶发跳变，某些帧使用上一帧或下一帧的数据。
 降到 1 frame-in-flight 后问题消失。
 
 ---
@@ -450,7 +446,7 @@ swapchain image index 错误。
 
 ### Validation Layer
 
-不一定会报错。  
+不一定会报错。
 如果开启同步验证，可能出现 read/write hazard。
 
 ### RenderDoc / AGI
@@ -479,13 +475,13 @@ CPU 每帧写同一个 uniform buffer memory range，但没有等待对应 GPU f
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 - 降为 1 frame-in-flight 验证。
 - 每个 frame-in-flight 使用独立 uniform buffer 或独立 offset。
 - 只有当前 frame fence signal 后，才复用对应资源。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 建立 per-frame resource：
   - uniform buffer
@@ -494,8 +490,6 @@ CPU 每帧写同一个 uniform buffer memory range，但没有等待对应 GPU f
   - fence / semaphore
 - 明确区分 frame index 和 swapchain image index。
 - 对 dynamic uniform offset 做 alignment 检查。
-
-### 工程化修复
 
 - 使用 ring buffer。
 - 建立 frame allocator。
@@ -516,7 +510,7 @@ CPU 每帧写同一个 uniform buffer memory range，但没有等待对应 GPU f
 
 ### 9. 经验抽象
 
-Vulkan 中“CPU 写完”不等于“GPU 已经读完”。  
+Vulkan 中“CPU 写完”不等于“GPU 已经读完”。
 任何 per-frame 可变资源都必须受 fence 或 frame resource 生命周期保护。
 
 ---
@@ -668,7 +662,7 @@ vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
 
 ### 7. 修复方案
 
-### 最小修复
+### Minimal Fix（针对根因的最小修复）
 
 在 `vkCmdCopyBufferToImage` 之后、shader 使用之前插入 image memory barrier：
 
@@ -684,14 +678,12 @@ newLayout = SHADER_READ_ONLY_OPTIMAL
 
 若后续 consumer 是 compute shader，则 `dstStage = COMPUTE_SHADER`，`dstAccess = SHADER_SAMPLED_READ`。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 为每个 image 维护当前 layout 状态机。
 - 在 copy / blit / render / compute 使用前自动检查并插入必要 transition。
 - descriptor imageLayout 从 image 当前 layout 推导，避免手填错误。
 - 对 mipmap generation 链路上的多次 layout 变化统一处理。
-
-### 工程化修复
 
 - 建立 RenderGraph，自动根据 producer 和 consumer 推导 layout 与 barrier。
 - 在 command buffer recorder 中加入 layout assertion，发现不一致立即触发 debug break。

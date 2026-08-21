@@ -97,19 +97,23 @@ VkImage
 
 ### 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
+
+- 临时把该 image 的所有 layout transition 统一改为 `VK_IMAGE_LAYOUT_GENERAL`（合法但宽而慢，部分场景明显损失性能；仅应急）。`[SPEC]`
+
+### Minimal Fix（针对根因的最小修复）
 
 - 明确 producer / consumer。
 - 补充 image memory barrier。
 - 修正 descriptor imageLayout。
 - 修正 subresource range。
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
-- 建立资源状态跟踪。
-- 建立 render graph 自动插入 barrier。
-- 为每个 pass 声明 input/output layout。
-- 对 image usage 和 layout 建立 debug assertion。
+- 建立资源状态跟踪。`[ENGINE]`
+- 建立 render graph 自动插入 barrier。`[ENGINE]`
+- 为每个 pass 声明 input/output layout。`[ENGINE]`
+- 对 image usage 和 layout 建立 debug assertion。`[ENGINE]`
 
 ---
 
@@ -274,22 +278,23 @@ Producer Command (Draw / Dispatch / Transfer)
 
 ### 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
+
+- 临时在帧边界插入全局 barrier（或 `vkDeviceWaitIdle`）串行化（保守正确但慢，仅应急）。`[ENGINE]`
+
+### Minimal Fix（针对根因的最小修复）
 
 - 在 producer 后、consumer 前插入 `vkCmdPipelineBarrier`，使用准确的 stage 和 access mask。`[SPEC]`
 - 对 image 使用 `VkImageMemoryBarrier`，正确填写 `oldLayout` / `newLayout` 和 `subresourceRange`。`[SPEC]`
 - 对 buffer 使用 `VkBufferMemoryBarrier`，正确填写 `offset` / `size`。`[SPEC]`
 - 跨 queue 时在 submit 之间插入 `VkSemaphore` 信号 / 等待。`[SPEC]`
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 建立资源状态机，自动推导每个资源当前的 read/write stage 和 access，按需生成 barrier。`[ENGINE]`
 - 使用 Vulkan 1.3 的 `vkCmdPipelineBarrier2` / synchronization2 语义，提升可读性和灵活性。`[SPEC]`
 - 对跨 queue 资源统一封装 queue family ownership transfer。`[ENGINE]`
 - 在 render pass 创建时根据 attachment 使用模式自动生成 subpass dependency。`[ENGINE]`
-
-### 工程化修复
-
 - 引入 render graph 或 frame graph，由 pass 依赖自动推导 barrier、semaphore、layout transition。`[ENGINE]`
 - CI 中强制启用 sync validation，任何 hazard 都视为错误。`[TOOL]`
 - 对常用资源模式（transfer → shader、compute → graphics、color → sample）建立宏 / 模板，避免手写 barrier 出错。`[ENGINE]`

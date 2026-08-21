@@ -98,25 +98,26 @@ Surface / ANativeWindow
 
 ## 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
 
-- acquire / present 返回 OUT_OF_DATE 时触发 recreate。
-- recreate 前等待相关 frame fence。
-- 重建 swapchain image view、depth、framebuffer、command buffer。
+- 临时锁定屏幕方向，规避 rotation 触发 recreate（resize 仍会触发，仅应急）。`[ANDROID]`
 
-### 稳定修复
+### Minimal Fix（针对根因的最小修复）
 
-- 把所有尺寸相关资源归为 swapchain-dependent resources。
-- 建立统一 recreate 函数。
-- Surface destroyed 时暂停 render loop。
-- Surface recreated 后重新创建 surface/swapchain。
-- 为每个 frame resource 建立明确生命周期。
+- acquire / present 返回 OUT_OF_DATE 时触发 recreate。`[SPEC]`
+- recreate 前等待相关 frame fence。`[SPEC]`
+- 重建 swapchain image view、depth、framebuffer、command buffer。`[ENGINE]`
 
-### 工程化修复
+### Structural Fix（结构性 / 防复发修复）
 
-- 使用 render graph 统一管理尺寸相关资源。
-- 建立 resource generation id，防止 command buffer 引用旧资源。
-- 建立 Android lifecycle 状态机。
+- 把所有尺寸相关资源归为 swapchain-dependent resources。`[ENGINE]`
+- 建立统一 recreate 函数。`[ENGINE]`
+- Surface destroyed 时暂停 render loop。`[ANDROID]`
+- Surface recreated 后重新创建 surface/swapchain。`[ANDROID]`
+- 为每个 frame resource 建立明确生命周期。`[ENGINE]`
+- 使用 render graph 统一管理尺寸相关资源。`[ENGINE]`
+- 建立 resource generation id，防止 command buffer 引用旧资源。`[ENGINE]`
+- 建立 Android lifecycle 状态机。`[ANDROID]`
 
 ---
 

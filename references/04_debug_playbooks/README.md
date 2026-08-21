@@ -73,6 +73,18 @@
 6. Android 问题必须考虑 Surface / ANativeWindow / pause / resume / rotation / resize。
 7. 不确定时不下确定结论，必须要求或建议补充 Validation message、VUID、RenderDoc/AGI capture、logcat、关键代码片段。
 8. 每个 Playbook 必须链接相关 API 卡片。
+9. 统一推理链：Symptom → Hypothesis → Evidence → Root Cause → Workaround → Minimal Fix → Structural Fix → Regression Verification；每个 Playbook 的章节（§1-§7）即按此链路组织。
+10. 禁止把“现象消失”直接等同于“找到根因”；Validation clean 不能作为唯一成功标准。
+
+修复分级说明（对应模板 §6 与各 Playbook 的小节）：
+
+| 级别 | 含义 | 命名映射（v1.0.3 及以前） |
+|---|---|---|
+| Workaround | 临时绕过，现象消失但根因未除 | 最小修复 |
+| Minimal Fix | 针对根因的最小修复 | 稳定修复 |
+| Structural Fix | 结构性 / 防复发修复 | 工程化修复 |
+
+> 结论性输出前需通过 `../00_expert_entry/verification_gate.md` 的 G1-G6 关卡；修改影响面推理见 `../02_core_mental_model/regression_reasoning.md`；回归清单见 `../07_integration_pack/regression_checklist.md`。
 
 ---
 

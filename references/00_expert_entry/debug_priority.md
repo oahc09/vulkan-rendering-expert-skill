@@ -57,5 +57,5 @@
 3. 定位 Vulkan 对象。
 4. 找创建点。
 5. 找使用点。
-6. 给出最小修复。
+6. 给出 Workaround / Minimal Fix / Structural Fix。
 7. 给出验证方式。

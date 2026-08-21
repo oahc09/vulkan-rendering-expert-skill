@@ -2,6 +2,9 @@
 
 > 文件建议路径：`04_debug_playbooks/debug_playbook_template.md`
 
+统一推理链：Symptom（§1）→ Hypothesis（§2）→ Evidence（§3 / §9）→ Root Cause（§5）→ Workaround（§6）→ Minimal Fix（§6）→ Structural Fix（§6）→ Regression Verification（§7）。
+禁止把"现象消失"直接等同于"找到根因"。
+
 ---
 
 # Debug Playbook: `<问题名称>`
@@ -89,17 +92,17 @@
 
 ## 6. 修复方案
 
-给出可执行的修复方向，而不是只解释概念。
+给出可执行的修复方向，而不是只解释概念。修复必须分级，禁止把现象消失当作根因修复。
 
-### 最小修复
-
-- xxx
-
-### 稳定修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
 
 - xxx
 
-### 工程化修复
+### Minimal Fix（针对根因的最小修复）
+
+- xxx
+
+### Structural Fix（结构性 / 防复发修复）
 
 - xxx
 
@@ -107,7 +110,7 @@
 
 ## 7. 回归验证
 
-说明如何证明问题已经解决：
+说明如何证明问题已经解决。现象消失不等于根因修复，回归验证必须证明根因路径被消除，而不只是症状不再出现：
 
 - [ ] Validation clean。
 - [ ] RenderDoc frame 正常。

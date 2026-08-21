@@ -93,22 +93,23 @@ Shader Module
 
 ## 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
+
+- 临时改为单 queue 提交，隔离多 queue 同步是否为直接原因（确认后必须恢复并修复同步）。`[TOOL]`
+- 临时用 feature flag 关闭可疑 pass，保其余画面可用（定位期间的临时手段，hang 根因仍在）。`[ENGINE]`
+
+### Minimal Fix（针对根因的最小修复）
 
 - 在可疑 producer / consumer 之间插入明确的 `vkCmdPipelineBarrier`，确保 `srcAccessMask` 覆盖写，`dstAccessMask` 覆盖读，`srcStageMask` 不晚于 producer 的最后一个 stage，`dstStageMask` 不早于 consumer 的第一个 stage。`[SPEC]`
 - 把 compute shader 的 workgroup size 降到硬件 limit 以下，并减少局部数组 / 寄存器占用。`[HEUR]`
 - 对可能无限循环的 shader 增加强制迭代上限或 break 条件。`[ENGINE]`
-- 临时改为单 queue 提交，确认多 queue 同步是否是直接原因。`[TOOL]`
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 建立资源状态跟踪，自动在 read-after-write / write-after-write / write-after-read 场景插入 barrier。`[ENGINE]`
 - 使用 render graph 描述 pass 依赖，由框架生成 barrier 和 subpass dependency。`[ENGINE]`
 - 对跨 queue 资源建立 semaphore + ownership transfer 规范。`[SPEC]`
 - 对长时间 compute 任务拆分到多个 submit，中间插入 fence 让 GPU 有机会响应 watchdog。`[ENGINE]`
-
-### 工程化修复
-
 - 在 CI 中启用 Validation Layer sync 检测和线程 sanitizer。`[TOOL]`
 - 对 shader 加入静态循环边界检查工具和编译期 workgroup 占用估算。`[ENGINE]`
 - 建立 GPU hang 自动二分系统：通过 feature flag 关闭部分 pass 快速定位。`[ENGINE]`

@@ -16,6 +16,7 @@
 ├── task_classifier.md       # 任务分类器
 ├── response_formats.md      # 统一输出结构
 ├── accuracy_check.md        # 准确性检查规则
+├── verification_gate.md     # 统一验证关卡（结论前 G1-G6）
 ├── debug_priority.md        # 调试问题优先级
 ├── performance_priority.md  # 性能问题优先级
 └── change_log.md            # 版本变更记录
@@ -33,6 +34,10 @@
 5. response_formats.md
 6. accuracy_check.md
 ```
+
+给出最终结论前加载：
+
+- `verification_gate.md`（G1-G6 验证关卡）
 
 调试任务额外加载：
 

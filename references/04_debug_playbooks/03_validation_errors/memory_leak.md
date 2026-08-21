@@ -89,22 +89,23 @@ Instance / Device
 
 ## 6. 修复方案
 
-### 最小修复
+### Workaround（临时绕过，现象消失 ≠ 根因修复）
+
+- 定期 `vkDeviceWaitIdle` 并手动触发场景级清理，延缓内存增长速度（泄漏本身仍在）。`[ENGINE]`
+
+### Minimal Fix（针对根因的最小修复）
 
 - 对每帧使用的 descriptor set，在 frame fence retire 后调用 `vkFreeDescriptorSets` 或随 descriptor pool reset 复用。`[SPEC]`
 - 对每帧 command buffer，使用 `vkResetCommandPool` 或 `vkFreeCommandBuffers` 回收。`[SPEC]`
 - 确保每个 `vkCreate*` 都有对应的 `vkDestroy*`，使用 RAII 或对象追踪工具强制配对。`[SPEC]`
 - 在场景切换或应用退出时执行显式清理，先 `vkDeviceWaitIdle` 再按依赖顺序销毁对象。`[SPEC]`
 
-### 稳定修复
+### Structural Fix（结构性 / 防复发修复）
 
 - 建立 descriptor set allocator，按 frame-in-flight 复用 set，只在必要时扩容 pool。`[ENGINE]`
 - 建立 command buffer pool ring，每帧 reset 一个 pool 而非创建新 buffer。`[ENGINE]`
 - 对临时 image / buffer 使用资源池或作用域包装器，超出作用域自动回收到池中。`[ENGINE]`
 - 实现对象生命周期追踪，记录每个 Vulkan handle 的创建堆栈和销毁状态。`[ENGINE]`
-
-### 工程化修复
-
 - CI 启用 Validation Layer 的 object lifetime 检测，在测试退出时检查泄漏。`[TOOL]`
 - 集成内存分析工具，自动监控 `vkAllocateMemory` / `vkFreeMemory` 差异。`[TOOL]`
 - 建立 per-scene resource budget，超限自动告警并触发资源清理。`[ENGINE]`
