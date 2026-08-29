@@ -41,16 +41,16 @@
 
 ---
 
-## 3. 快速验证路径
+## 3. 快速验证路径（证据驱动决策表）
 
-1. 检查 `vkCmdDispatch` 是否被录制。
-2. 检查 dispatch group 数量是否非 0。
-3. 检查 compute pipeline 是否绑定。
-4. 检查 descriptor set 是否绑定到 compute bind point。
-5. 检查 storage buffer / image 是否正确更新到 descriptor。
-6. 在 compute shader 写入固定 debug 值。
-7. 用 RenderDoc / AGI 检查输出资源。
-8. 检查 compute → graphics barrier。
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | Validation Layer | SYNC-HAZARD → §5-5（§2 的 P0 compute 写后 graphics 读缺少 barrier 假设）；storage image layout 报错 → §2 的 P1 storage image layout 假设；usage flag 报错 → §5-3 / §5-4 | clean → 检查 2 | — |
+| 2 | RenderDoc / AGI：dispatch call 是否存在、compute pipeline 与 descriptor 是否绑定到 `VK_PIPELINE_BIND_POINT_COMPUTE` | dispatch 缺失或未录制 → §11 补充 dispatch 代码；descriptor 为空或绑到 graphics bind point → §5-6（§2 的 P0 descriptor 未绑定假设） | dispatch 存在且绑定正确 → 检查 3 | 存在且正确时排除 §2 的 P0 descriptor 未绑定假设 |
+| 3 | groupCount 各维 > 0 断言 | 某维为 0（计算向下取整导致）→ §5-1（§2 的 P0 dispatch group 数量错误假设）；local size 与 dispatch group 不匹配 → §5-2 | 均非 0 → 检查 4 | 非 0 时排除 §2 的 P0 dispatch group 数量错误假设 |
+| 4 | dispatch 参数 domain 与资源尺寸匹配：groupCount × localSize 是否覆盖 buffer / image 全部元素、shader 坐标是否越界 | 覆盖不全或 global invocation id 越界 → §5-7（§2 的 P1 shader 写入坐标越界假设） | 匹配 → 检查 5 | 匹配时排除 §2 的 P1 shader 写入坐标越界假设 |
+| 5 | storage image / buffer 是否被后续 pass 读取、读取时机是否早于写入完成 | 后续 pass 在写入完成前读取（无 barrier）→ §5-5（§2 的 P0 compute 写后 graphics 读缺少 barrier 假设） | 读取时机正确 → 检查 6 | 正确时排除 §2 的 P0 compute 写后 graphics 读缺少 barrier 假设 |
+| 6 | output 资源是否被后续 pass clear / 覆盖 | 被清空或覆盖 → §5-8（§2 的 P2 初始化或清理覆盖假设） | 未被覆盖 → §11 不确定处理 | 未覆盖时排除 §2 的 P2 初始化或清理覆盖假设 |
 
 ---
 

@@ -41,14 +41,16 @@
 
 ---
 
-## 3. 快速验证路径
+## 3. 快速验证路径（证据驱动决策表）
 
-1. **强制 compute 和 graphics 在同一 queue、同一 command buffer 中顺序录制**，观察错误是否消失。`[TOOL]`
-2. **在 compute dispatch 后插入保守 barrier**（`srcStage = COMPUTE_SHADER_BIT`、`srcAccess = SHADER_WRITE`、`dstStage = ALL_GRAPHICS`、`dstAccess = SHADER_READ | SHADER_WRITE | INDIRECT_COMMAND_READ`），观察是否恢复。`[HEUR]`
-3. **检查 storage image 的 layout**：compute 写用 `GENERAL`，graphics 采样前是否 transition 到 `SHADER_READ_ONLY_OPTIMAL`。`[SPEC]`
-4. **检查是否跨 queue family**：若 compute queue 与 graphics queue 属于不同 family，需 ownership transfer。`[SPEC]`
-5. **RenderDoc 查看 compute pass 输出**：确认 storage image / buffer 在 compute 后已有内容。`[TOOL]`
-6. **AGI 查看 GPU 时间轴**：确认 compute 和 graphics 是否重叠执行。`[TOOL]`
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | Validation Layer sync 分支 | 报 `SYNC-HAZARD-READ_AFTER_WRITE`（src stage 为 `COMPUTE_SHADER`、dst stage 为 graphics 消费 stage）→ 检查 3 | clean → 检查 2 | — |
+| 2 | RenderDoc / AGI：compute dispatch 是否执行、dispatch 后 storage image / buffer 是否已有内容 | dispatch 缺失或输出为空 → 转 `compute_no_output.md`（compute 侧无输出，非同步问题） | dispatch 已执行且输出有内容 → 检查 3 | 有内容时排除 compute 侧输出缺失，聚焦 §2 的同步类假设 |
+| 3 | barrier 是否覆盖 compute → graphics：srcStage 含 `COMPUTE_SHADER_BIT`、dstStage / dstAccess 覆盖实际消费 stage（indirect 需含 `INDIRECT_COMMAND_READ`） | 无 barrier → §5-1（§2 的 P0 缺少 compute → graphics barrier 假设）；srcStage 填 `TOP_OF_PIPE` → §5-2（§2 的 P0 stage / access 不匹配假设）；dstAccess 缺 `INDIRECT_COMMAND_READ` → §5-3（§2 的 P1 indirect buffer 访问不同步假设） | 覆盖完整 → 检查 4 | 完整时排除 §2 的 P0 缺少 barrier、P0 stage / access 不匹配与 P1 indirect buffer 访问不同步假设 |
+| 4 | storage image layout 是否 transition 到读取侧所需（compute 写 `GENERAL`，graphics 采样前转 `SHADER_READ_ONLY_OPTIMAL`） | 未 transition、graphics 以错误 layout 采样 → §5-4（§2 的 P1 storage image layout 假设） | 已正确 transition → 检查 5 | 正确时排除 §2 的 P1 storage image layout 假设 |
+| 5 | 是否跨 queue / 跨 queue family（AGI 时间轴 + submit 的 semaphore 配置） | 跨 queue 未用 semaphore → §2 的 P0 跨 queue 假设；跨 queue family 未做 ownership transfer → §5-5（§2 的 P1 ownership 假设） | 同 queue 同 family → 检查 6 | 同 queue 时排除 §2 的 P0 跨 queue 未用 semaphore 与 P1 ownership 未转移假设 |
+| 6 | timeline semaphore 值与 per-frame 资源 ring | 信号 / 等待值不单调或等待尚未发出的值 → §5-6（§2 的 P2 timeline semaphore 假设）；compute 写帧 N、graphics 读帧 N-1 → §5-7 | 均正常 → §11 不确定处理 | 正常时排除 §2 的 P2 timeline semaphore 假设 |
 
 ---
 
