@@ -75,6 +75,7 @@
 8. 每个 Playbook 必须链接相关 API 卡片。
 9. 统一推理链：Symptom → Hypothesis → Evidence → Root Cause → Workaround → Minimal Fix → Structural Fix → Regression Verification；每个 Playbook 的章节（§1-§7）即按此链路组织。
 10. 禁止把“现象消失”直接等同于“找到根因”；Validation clean 不能作为唯一成功标准。
+11. §3 快速验证路径必须为证据驱动决策表：按成本升序检查、依据结果分支、剪枝列引用 §2 假设编号；不写线性步骤清单。
 
 修复分级说明（对应模板 §6 与各 Playbook 的小节）：
 

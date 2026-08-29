@@ -51,15 +51,23 @@
 
 ---
 
-## 3. 快速验证路径
+## 3. 快速验证路径（证据驱动决策表）
 
-优先使用低成本验证方式：
+按成本升序逐行检查；每行依据结果分支，并剪枝（排除）§2 中对应优先级的假设。不按固定顺序执行全部步骤，而是随证据走分支。
 
-1. log / return code
-2. Validation Layer
-3. clear color / debug shader
-4. RenderDoc / AGI
-5. 最小复现
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | log / return code | 有错误码 → 按 §5 根因表定位 | 无输出 → 检查 2 | — |
+| 2 | Validation Layer | 有 VUID → §5 根因表定位 | clean → 检查 3 | — |
+| 3 | RenderDoc：draw/dispatch 是否提交 | 无 → 提交链路（§4 CommandBuffer/Queue Submit） | 有 → 检查 4 | 排除 §2 的 shader/资源假设 |
+| 4 | clear color / debug shader | 不可见 → swapchain/present 分支 | 可见 → 检查 5 | 排除 §2 的提交链路假设 |
+| 5 | 最小复现 | 复现 → 收敛根因（§5） | 不复现 → §11 不确定处理 | — |
+
+规则：
+
+- 剪枝列必须引用 §2 假设表的优先级编号（P0/P1/P2）。
+- 每个具体 playbook 依据自身 §2 / §5 定制行；上表为骨架示例。
+- 检查成本排序：log < Validation < RenderDoc/AGI capture < 最小复现。
 
 ---
 
