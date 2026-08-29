@@ -17,6 +17,7 @@
 ├── response_formats.md      # 统一输出结构
 ├── accuracy_check.md        # 准确性检查规则
 ├── verification_gate.md     # 统一验证关卡（结论前 G1-G6）
+├── progressive_retrieval.md # 检索循环协议：查询分解、意图澄清、证据评估与二轮定向检索
 ├── debug_priority.md        # 调试问题优先级
 ├── performance_priority.md  # 性能问题优先级
 └── change_log.md            # 版本变更记录
