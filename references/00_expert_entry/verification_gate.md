@@ -127,3 +127,9 @@ Verification Gate:
 3. 涉及同步的修改，G3 六要素不完整时不得给出最终结论。
 4. Android 相关修改，G6 未覆盖 rotation / pause / resume / Surface recreate 时不得给出最终结论。
 5. 无法验证的关卡必须显式标注"未验证"并给出建议验证方式，不得默认通过。
+
+---
+
+## 10. 输入来源
+
+进入 G1-G6 前，证据清单与各子问题置信度来自 `00_expert_entry/progressive_retrieval.md` 的检索循环输出；检索循环未达成高置信的子问题，在对应关卡标注"未验证"及原因。

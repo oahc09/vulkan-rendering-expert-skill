@@ -20,6 +20,21 @@ Verification Gate:
 
 ---
 
+## 0.5 意图澄清（信息不足时，先于任何类型化输出）
+
+触发判据与提问规则见 `00_expert_entry/progressive_retrieval.md` R2。输出格式：
+
+```text
+意图澄清（当前信息不足以可靠路由，需要以下证据）：
+1. <平台 / Vulkan 版本 / 设备>（用于平台分支路由）
+2. <现象细节：黑屏 / 闪烁 / 花屏 / 拉伸 / 其他>（用于症状分支路由）
+3. <Validation 报错 / VUID / logcat / 返回值，任一>（用于根因表定位）
+```
+
+规则：每项必须"补齐即可路由"；一次 ≤3 项；用户无法提供时按启发式降级路由并在回答中标注假设。
+
+---
+
 ## 1. 概念+链路类
 
 适用于：Vulkan / Descriptor / Pipeline / Barrier / Swapchain 等概念解释。

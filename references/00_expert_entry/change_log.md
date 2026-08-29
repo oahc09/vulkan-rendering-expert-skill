@@ -86,6 +86,18 @@
 - `_fix_pb_refs.py` 批量替换留下的 CRLF 行尾统一为 LF，涉及 43 个文件。
 - `git diff --check` 全部干净。
 
+## v1.0.5
+
+### Intelligent Retrieval：检索循环 + 证据驱动决策树 + 领域补白
+
+新增 `00_expert_entry/progressive_retrieval.md`：五阶段检索循环（R1 查询分解 / R2 意图澄清 / R3 首轮路由 / R4 证据评估 / R5 二轮定向检索）；复杂跨类任务先分解再路由，模糊提问先给 ≤3 项最小提问清单，低置信子问题强制二轮补载；循环输出作为 Verification Gate 输入。
+
+Debug Playbook §3 全量决策表化（18 个 playbook 文件 / 24 个小节）：快速验证路径从线性步骤改为"检查（成本升序）→ 结果分支 → 剪枝（引用 §2 假设编号）"的证据驱动决策表；模板与 README 同步新规范。
+
+新增 API 卡片：`03_api_manual/06_pipeline/mesh_shader.md`（VK_EXT_mesh_shader、meshlet、GPU-driven，Android 支持边界显式标注）与 `03_api_manual/02_surface_swapchain/desktop_windowing.md`（SDL/GLFW/Win32、最小化/resize/DPI 与 swapchain 生命周期）。
+
+入口与路由接入：`../../SKILL.md` 启动加载第 7 项与回答规则；`00_expert_entry/task_classifier.md` 跨类型先分解；`07_integration_pack/retrieval_policy.md` §2 降级为首轮路由；`00_expert_entry/response_formats.md` 新增 §0.5 意图澄清格式；`00_expert_entry/verification_gate.md` 交叉引用。索引同步：api_index、MODULE_SUMMARY（00_expert_entry 10→11、03_api_manual 66→68）。
+
 ## v1.0.4
 
 ### Production Expert：可靠性、根因判断、回归验证

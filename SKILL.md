@@ -4,8 +4,8 @@ description: Vulkan 渲染工程专家技能。用于 Vulkan API 设计、实现
 license: MIT
 metadata:
   author: Vulkan 渲染专家技能贡献者
-  version: 1.0.4
-  last-updated: '2026-08-20'
+  version: 1.0.5
+  last-updated: '2026-08-29'
   keywords:
     - vulkan
     - rendering
@@ -33,6 +33,7 @@ metadata:
 4. `references/00_expert_entry/response_formats.md`
 5. `references/00_expert_entry/accuracy_check.md`
 6. `references/00_expert_entry/verification_gate.md`
+7. `references/00_expert_entry/progressive_retrieval.md`
 
 调试类任务额外读取：
 
@@ -62,6 +63,8 @@ metadata:
 不要默认加载全部 API 卡片、全部 playbook、全部 workflow 或全部 case。
 
 修改类任务（实现、修复、优化）在给出方案前，读取 `references/02_core_mental_model/regression_reasoning.md` 推导修改影响面；回归验证范围参照 `references/07_integration_pack/regression_checklist.md`。
+
+复杂、跨类型或信息不足的任务，按 `references/00_expert_entry/progressive_retrieval.md` 先执行检索循环：跨类型任务先查询分解再逐子问题路由；信息不足时先给最小提问清单（不超过 3 项）再路由；回答前对每个子问题标注置信度，低置信子问题必须二轮定向补载。
 
 ## 回答规则
 
