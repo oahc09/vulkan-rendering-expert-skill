@@ -42,14 +42,15 @@
 
 ---
 
-## 3. 快速验证路径
+## 3. 快速验证路径（证据驱动决策表）
 
-1. **强制关闭 depth test 和 depth write**：若画面可见但前后关系错乱，说明 depth 配置是根因。`[TOOL]`
-2. **把 fragment shader 输出固定颜色**：若模型轮廓可见但黑屏，说明 depth 把模型都剔除了。`[TOOL]`
-3. **检查 depth attachment 清除值**：确认 load op 为 `CLEAR` 且 clear depth 为 1.0（对 `LESS` 比较）。`[TOOL]`
-4. **RenderDoc 查看 depth buffer 内容**：确认 depth 值范围、清除结果和写入状态。`[TOOL]`
-5. **切换 compare op**：临时改为 `VK_COMPARE_OP_ALWAYS` 或 `VK_COMPARE_OP_LESS`，观察变化。`[TOOL]`
-6. **检查 projection matrix**：确认 handedness 和 depth range 与 Vulkan 的 [0,1] Z 范围一致。`[ENGINE]`
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | Validation Layer | 有 depth / attachment 相关 VUID → §5 对应根因（§9 关注项） | clean → 检查 2 | — |
+| 2 | RenderDoc：depthCompareOp vs clip-space Z 范围 | GREATER 配 [0,1] 标准投影、或投影仍为 OpenGL [-1,1] → §5-1 / §5-4 | 一致 → 检查 3 | 一致时排除 §2 的 P0 比较函数假设与 P1 depth range 假设 |
+| 3 | RenderDoc：clear value / load op vs compare op | clear 1.0 配 GREATER、或 load op 非 CLEAR 残留旧值 → §5-1 / §5-3 | 匹配 → 检查 4 | 匹配时排除 §2 的 P0 清除 / 加载假设 |
+| 4 | RenderDoc：depth write 与 buffer 内容 | 全为 clear 值、无新写入 → §5-2 depthWriteEnable = VK_FALSE | 有写入 → 检查 5 | 有写入时排除 §2 的 P0 depth write 假设 |
+| 5 | reverse-Z 判定 | 是 reverse-Z 但 clear / compare / 投影约定不统一 → §6 Structural Fix 的 reverse-Z 统一约定；shadow 场景 → §5-5 bias | 非 reverse-Z 且以上均正常 → §11 不确定处理 | — |
 
 ---
 

@@ -44,14 +44,15 @@
 
 ---
 
-## 3. 快速验证路径
+## 3. 快速验证路径（证据驱动决策表）
 
-1. **最小范围二分**：把可疑 draw / dispatch 逐个注释，定位触发 hang 的最小命令。`[TOOL]`
-2. **替换为 dummy shader**：把 fragment / compute shader 换成简单输出，确认是否 shader 本身导致。`[TOOL]`
-3. **开启 Validation Layer 的 sync 分支**：重点查找 hazard 报告。`[TOOL]`
-4. **强制单 queue / 单线程提交**：排除跨 queue 同步和多线程录制问题。`[HEUR]`
-5. **缩短 dispatch 维度**：把全局 workgroup 数减少 10 倍，观察是否 watchdog 触发。`[TOOL]`
-6. **RenderDoc / AGI 抓帧**：看 hang 点前后 pipeline state 和 resource 使用。`[TOOL]`
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | logcat / Event Viewer / dmesg：TDR、gpu timeout、watchdog 记录 | 有记录 → 确认 GPU hang → 检查 2 | 无记录 → §11（先排查 CPU 死锁，见 §0 不适用） | 无 GPU 记录时排除 §2 的全部 GPU 侧假设 |
+| 2 | Validation sync 分支 | 有 SYNC-HAZARD → §5-3（storage 读写无 barrier）/ §5-5（跨 queue 缺 ownership） | clean → 检查 3 | clean 时排除 §2 的 P0 内存 hazard / 跨 queue 假设 |
+| 3 | 是否可复现：固定场景必现，还是仅多线程 / 多 queue 偶发 | 必现 → 检查 4 | 仅多线程 / 多 queue 偶发 → 强制单 queue / 单线程提交验证（§2 的 P2 多线程录制假设） | 偶发时排除 §2 的 P0 死循环 shader 假设 |
+| 4 | 复现场景的 pass 类型（compute / graphics） | compute → 检查 5（死循环 / workgroup 方向） | graphics → 检查 5（subpass / barrier 方向） | compute 时排除 §2 的 P1 depth / stencil attachment 冲突假设 |
+| 5 | AGI：GPU 时间轴最后完成的 pass | 停在 compute dispatch → §5-1 / §5-2 死循环、§2 的 P1 大 workgroup；停在 draw / barrier 边界 → §5-6 subpass 自依赖、§5-3 storage 读写 | 时间轴无明确中断点 → §11 不确定处理 | 停在 compute dispatch 时排除 §2 的 P1 attachment 冲突假设 |
 
 ---
 

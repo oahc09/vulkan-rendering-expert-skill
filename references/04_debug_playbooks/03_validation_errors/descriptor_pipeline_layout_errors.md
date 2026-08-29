@@ -48,15 +48,14 @@
 
 ---
 
-### 3. 快速验证路径
+### 3. 快速验证路径（证据驱动决策表）
 
-1. 查 shader 中 `set` / `binding`。
-2. 查 `VkDescriptorSetLayoutBinding`。
-3. 查 `VkPipelineLayoutCreateInfo`。
-4. 查 descriptor set allocation 使用的 layout。
-5. 查 `vkUpdateDescriptorSets`。
-6. 查 `vkCmdBindDescriptorSets` 的 set index 和 bind point。
-7. 用 RenderDoc 查看 bound resources。
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | Validation VUID：属于类型 / 绑定不匹配，还是 layout 兼容性 | type mismatch / binding / set number → §5-1 / §5-2 / §5-3（§2 的 P0 set/binding 与类型假设） | pipeline layout compatibility → 检查 2 | — |
+| 2 | shader reflection（spirv-reflect）结果 vs `VkDescriptorSetLayoutBinding` 声明 | set / binding / stageFlags / descriptorType 不一致 → §5-1 / §5-2 / §5-3 | 一致 → 检查 3 | 一致时排除 §2 的 P0 shader set/binding 与 layout 不一致假设 |
+| 3 | pipeline 是否用旧 layout 创建（descriptor set layout 变更后 pipeline 未重建） | 用旧 layout → §5-4（§2 的 P0 PipelineLayout 假设） | layout 一致 → 检查 4 | 一致时排除 §2 的 P0 PipelineLayout 不匹配假设 |
+| 4 | RenderDoc bound resources + `vkUpdateDescriptorSets` | bound resource 为空 / 旧资源 → §5-5 / §5-6（§2 的 P1 / P2 假设）；imageLayout 填错 → §2 的 P1；dynamic offset 不满足 alignment → §5-7 | 绑定正确 → §11 不确定处理 | 绑定正确时排除 §2 的 P1 vkUpdateDescriptorSets 资源错误假设 |
 
 ---
 
@@ -232,14 +231,14 @@ Android 上 swapchain recreate 后需要额外检查：
 
 ---
 
-### 3. 快速验证路径
+### 3. 快速验证路径（证据驱动决策表）
 
-1. **读取 Validation Layer 报错的完整 VUID 和 object handle**，定位具体 pipeline 或 descriptor set layout。`[TOOL]`
-2. **对比 shader reflection 结果与 pipeline layout 的 set / binding 声明**。`[TOOL]`
-3. **检查 `vkCmdBindDescriptorSets` 的 `layout` 参数**：确认是 graphics pipeline 的 layout 还是 compute pipeline 的 layout。`[TOOL]`
-4. **检查 push constant range**：确认 stageFlags、offset、size 与 shader 一致。`[TOOL]`
-5. **用 `spirv-reflect` 或类似工具导出 shader 接口清单**。`[TOOL]`
-6. **临时把 descriptor set 和 push constant 全部去掉**，观察错误是否消失。`[TOOL]`
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | Validation VUID 属于 shader 接口不匹配，还是 bind 时 layout 不兼容 | 接口不匹配（`VUID-VkGraphicsPipelineCreateInfo-layout-00756`）→ 检查 2 | bind 不兼容（`VUID-vkCmdBindDescriptorSets-layout-01996`）→ 检查 3 | — |
+| 2 | spirv-reflect 导出的 set / binding 清单 vs `VkPipelineLayoutCreateInfo::pSetLayouts` | shader 使用的 set / binding 缺失或未声明 → §5-1 / §5-2（§2 的 P0 接口假设） | 完全匹配 → 检查 3 | 匹配时排除 §2 的 P0 pipeline layout 与 shader 接口不匹配假设 |
+| 3 | pipeline 是否用旧 layout 创建（bind 传入的 layout 参数、graphics / compute 归属） | 用旧 layout / 热更新后未重建 → §5-1 / §5-7；变体共享或 library 链接 → §5-2 / §5-5；layout 已销毁 → §5-6（§2 的 P2） | 一致且有效 → 检查 4 | 一致且有效时排除 §2 的 P0 set 不一致、P1 混用与 P2 生命周期假设 |
+| 4 | push constant range 与 dynamic offset 数量 | stageFlags / offset / size 与 shader 不一致 → §5-4（§2 的 P1 push constant 假设）；dynamicOffsetCount 不一致 → §5-3（§2 的 P2） | 一致 → §11 不确定处理 | 一致时排除 §2 的 P1 push constant 与 P1 compute / graphics 混用假设 |
 
 ---
 

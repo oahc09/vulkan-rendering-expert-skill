@@ -41,14 +41,15 @@
 
 ---
 
-## 3. 快速验证路径
+## 3. 快速验证路径（证据驱动决策表）
 
-1. 降为 1 frame-in-flight，看闪烁是否消失。
-2. 打印 frame index / image index。
-3. 检查每帧 uniform / descriptor 是否独立。
-4. 检查 fence wait/reset 顺序。
-5. 用 RenderDoc 抓异常帧。
-6. 开启 sync validation。
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | 打印 frame index / image index 日志 | 混用或错位 → §5-2（frame index 与 image index 混用） | 一致 → 检查 2 | 一致时排除 §2 的 P1 image index 混用假设 |
+| 2 | Validation / sync validation | 有 hazard VUID → §5-5（barrier stage / access 不匹配） | clean → 检查 3 | clean 时排除 §2 的 P2 barrier 缺失假设 |
+| 3 | 帧间差异是否周期性（周期 ≈ frames-in-flight 数） | 周期性 → frame 资源复用方向：检查 4 | 非周期 → 检查 5 | 非周期时排除 §2 的 P0 fence / uniform 提前覆盖 / descriptor 串帧假设 |
+| 4 | 降为 1 frame-in-flight + 检查 fence wait / reset 顺序 | 闪烁消失 → §5-1 / §5-3 / §5-4（fence signal 前覆盖、descriptor 无 per-frame 隔离、CB reset 时机） | 仍闪烁 → 检查 5 | 仍闪烁时排除 §2 的 P0 帧资源复用与 P1 command buffer 复用假设 |
+| 5 | RenderDoc 抓异常帧：acquire / present semaphore 复用与 barrier 覆盖 | semaphore 等待 / 信号配对错误 → §4 链路排查；barrier 未覆盖读写 → §5-5 | 均正常 → §11 不确定处理 | — |
 
 ---
 

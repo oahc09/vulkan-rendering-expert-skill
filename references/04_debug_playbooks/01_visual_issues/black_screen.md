@@ -43,15 +43,15 @@
 
 ---
 
-## 3. 快速验证路径
+## 3. 快速验证路径（证据驱动决策表）
 
-1. 打印 render loop 是否每帧执行。
-2. 检查 `vkAcquireNextImageKHR` 返回值。
-3. 检查 `vkQueueSubmit` 返回值。
-4. 检查 `vkQueuePresentKHR` 返回值。
-5. 把 clear color 改成明显颜色。
-6. 用 RenderDoc / AGI 抓帧。
-7. 用最简单 fullscreen triangle / triangle 替代复杂 pass。
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | Validation Layer | 有 VUID → §5 对应根因（如 layout → §5-6、descriptor → §5-5） | clean → 检查 2 | — |
+| 2 | RenderDoc：draw call 是否提交 | 无 draw → §4 提交链路排查（CommandBuffer 录制 / 提交，§5-2） | 有 draw → 检查 3 | 无 draw 时排除 §2 的 P1 Pipeline / Descriptor 绑定假设（未走到绑定） |
+| 3 | RenderDoc：Primitives culled 计数 | = 输入数 → mesh 被整体裁掉：§5-8 MVP 出裁剪空间、§5-3 viewport / scissor 尺寸 | 正常 → 检查 4 | 正常时排除 §2 的 P0 Viewport / Scissor 与 P1 Depth/MVP「被裁掉」假设 |
+| 4 | RenderDoc：Fragments passing depth test | = 0 → §5-7 depth test 全失败（compare op / clear value） | > 0 → 检查 5 | > 0 时排除 §2 的 P1 Depth 假设 |
+| 5 | clear color 是否可见 | 不可见 → present / swapchain 分支：§5-1 OUT_OF_DATE 未处理、§5-9 旧 swapchain（§2 的 P2） | 可见 → §11 不确定处理 | 可见时排除 §2 的 P0 提交链路与 P0 CommandBuffer 录制假设 |
 
 ---
 

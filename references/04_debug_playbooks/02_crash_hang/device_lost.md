@@ -44,14 +44,16 @@
 
 ---
 
-## 3. 快速验证路径
+## 3. 快速验证路径（证据驱动决策表）
 
-1. **抓取 device lost 前的最后一条 Validation 信息**：sync hazard 往往先于 device lost 出现。`[TOOL]`
-2. **二分定位触发命令**：把最后几个 draw / dispatch / present 注释，确认最小触发集。`[TOOL]`
-3. **检查 pipeline 与 render pass 兼容性**：对比 `VkGraphicsPipelineCreateInfo::renderPass` 和实际 bind 的 render pass。`[SPEC]`
-4. **检查 descriptor 范围**：确认 storage buffer / uniform buffer dynamic offset + range 不超过 buffer size。`[SPEC]`
-5. **强制 `vkDeviceWaitIdle` 后单帧单 submit**：排除 in-flight 资源竞争。`[HEUR]`
-6. **在另一设备 / 驱动版本复测**：区分代码问题与驱动问题。`[TOOL]`
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | 驱动返回码：VK_ERROR_DEVICE_LOST 出现在 acquire / submit / present / waitIdle 哪一处 | submit 处 → 检查 2（定位该 command buffer）；present / acquire 处 → 检查 2（回溯最后一个 submit） | 无明确位置 → 检查 2 | — |
+| 2 | Validation / 日志：device lost 前的首个 VUID | SYNC-HAZARD → §5-4 / §5-5（跨 queue / layout）；pipeline、render pass VUID → §5-3；range / OOB VUID → §5-1 / §5-2 | clean → 检查 3 | clean 时排除 §2 的 P0 hazard / render pass 不匹配 / 越界假设 |
+| 3 | RenderDoc / AGI：触发命令的 pipeline render pass 匹配与 descriptor 范围 | 不匹配或越界 → §5-1 / §5-2 / §5-3 | 均正常 → 检查 4 | 正常时排除 §2 的 P0 render pass / pipeline 不匹配与 P0 越界假设 |
+| 4 | 强制 vkDeviceWaitIdle 后单帧单 submit | 不复现 → §5-6 / §5-7（descriptor 引用已销毁对象 / in-flight 资源回收过早，§2 的 P1 生命周期假设） | 仍复现 → 检查 5 | 不复现时排除 §2 的 P0 三类假设 |
+| 5 | 二分注释可疑 draw / dispatch / present | 收敛到最小触发集 → §5 对应根因 + §6 修复 | 无法收敛 → 检查 6 | — |
+| 6 | 另一设备 / 驱动版本复测 | 仅特定设备复现 → §2 的 P2 驱动 / watchdog 假设（§6：VK_EXT_device_fault 收集） | 多设备均复现 → §4 对象链路排查 | 多设备复现时排除 §2 的 P2 驱动 bug / watchdog 假设 |
 
 ---
 

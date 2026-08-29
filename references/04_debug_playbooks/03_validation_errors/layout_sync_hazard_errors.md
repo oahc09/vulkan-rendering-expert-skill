@@ -48,14 +48,14 @@
 
 ---
 
-### 3. 快速验证路径
+### 3. 快速验证路径（证据驱动决策表）
 
-1. 找 image 的所有使用点。
-2. 标记每个 pass 是 producer 还是 consumer。
-3. 检查每次使用时期望 layout。
-4. 检查 barrier 的 oldLayout / newLayout。
-5. 检查 descriptor imageLayout。
-6. 用 RenderDoc 看 pass 前后 image 状态和内容。
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | Validation VUID：属于 layout mismatch，还是 sync hazard | layout mismatch（imageLayout / oldLayout / newLayout / attachment）→ 检查 2 | SYNC-HAZARD → §5-1 / §5-2 / §5-3（producer 后缺 transition / barrier，§2 的 P0） | — |
+| 2 | barrier 的 producer / consumer 使用点：oldLayout 是否等于上一使用的真实 layout | oldLayout 与真实状态不符 → §5-7；producer 后无 transition → §5-1 / §5-2 / §5-3 | oldLayout / newLayout 正确 → 检查 3 | 正确时排除 §2 的 P0 oldLayout / newLayout 错误假设 |
+| 3 | descriptor imageLayout vs 实际 layout（RenderDoc 查看状态与内容） | 填错 / 写死不随实际变化 → §5-4（§2 的 P0 descriptor imageLayout 假设） | 匹配 → 检查 4 | 匹配时排除 §2 的 P0 descriptor imageLayout 假设 |
+| 4 | usage flag 与 subresource range | usage 不含当前用途 → §2 的 P1 usage 假设；mip / layer / aspect 覆盖不全 → §5-5 / §5-6（§2 的 P2） | 均正确 → §11 不确定处理 | 均正确时排除 §2 的 P1 usage 与 P2 subresource 假设 |
 
 ---
 
@@ -230,14 +230,15 @@ Android 上额外检查：
 
 ---
 
-### 3. 快速验证路径
+### 3. 快速验证路径（证据驱动决策表）
 
-1. **开启 `VK_LAYER_KHRONOS_validation` 的 sync 分支**，复现并保存完整日志。`[TOOL]`
-2. **定位 hazard 报告的资源 handle**，确认该资源在代码中的所有 producer / consumer。`[TOOL]`
-3. **在 producer 后、consumer 前插入保守的 `vkCmdPipelineBarrier`**（`srcStage = ALL_COMMANDS`、`dstStage = ALL_COMMANDS`、`srcAccess = MEMORY_WRITE`、`dstAccess = MEMORY_READ | MEMORY_WRITE`），观察 hazard 是否消失。`[HEUR]`
-4. **如果跨 queue，先改为单 queue 提交**，确认问题是否与 queue 间同步有关。`[TOOL]`
-5. **检查 render pass 的 subpass dependency**，确认 attachment 读写被正确依赖。`[SPEC]`
-6. **用 RenderDoc 查看 producer / consumer 命令顺序和资源状态**。`[TOOL]`
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | Validation sync 分支：hazard 类型与资源 handle | SYNC-HAZARD-WRITE_AFTER_READ / READ_AFTER_WRITE / WRITE_AFTER_WRITE → 记录资源 handle → 检查 2 | VUID 属于 layout mismatch → 转本文件「Image Layout Error」小节的 §3 决策表 | — |
+| 2 | barrier 的 producer / consumer stage 与 access 覆盖 | 完全无 barrier → §5-1 / §5-2（§2 的 P0 缺少 barrier 假设）；srcStage / dstAccess 覆盖不全 → §5-3 / §5-4（§2 的 P0）；依赖方向写反 → §2 的 P1 | 覆盖完整 → 检查 3 | 完整时排除 §2 的 P0 stage / access 与 P1 方向假设 |
+| 3 | 是否跨 queue / 跨 queue family | 跨 queue 且只插 semaphore 未做 ownership transfer → §5-5（§2 的 P0 多 queue 假设） | 单 queue → 检查 4 | 单 queue 时排除 §2 的 P0 多 queue 假设 |
+| 4 | render pass 的 subpass dependency | attachment 读写未声明 dependency / 自依赖缺失 → §5-6 / §5-7（§2 的 P1） | dependency 完整 → 检查 5 | 完整时排除 §2 的 P1 subpass dependency 假设 |
+| 5 | 保守 barrier 验证（srcStage = ALL_COMMANDS、srcAccess = MEMORY_WRITE、dstAccess = MEMORY_READ） | hazard 消失 → 根因在 barrier 参数：回到检查 2 收敛精确 stage / access | 仍报 hazard → §11 不确定处理（检查 semaphore / event 信号时机，§2 的 P1 信号过早假设） | — |
 
 ---
 

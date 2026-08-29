@@ -41,14 +41,15 @@
 
 ---
 
-## 3. 快速验证路径
+## 3. 快速验证路径（证据驱动决策表）
 
-1. **启用 Validation Layer 的 object lifetime 跟踪**：查看退出或运行时泄漏报告。`[TOOL]`
-2. **统计每帧 `vkCreate*` / `vkAllocate*` / `vkDestroy*` / `vkFree*` 数量**：确认是否失衡。`[TOOL]`
-3. **运行应用数分钟并观察内存曲线**：确认增长趋势与对象创建趋势一致。`[TOOL]`
-4. **强制执行 `vkDeviceWaitIdle` 后调用自定义销毁逻辑**：确认是否仍有未释放对象。`[TOOL]`
-5. **检查 frame-in-flight 资源管理**：确认 fence retire 后是否及时 free command buffer / descriptor set。`[ENGINE]`
-6. **使用 RenderDoc / AGI resource inspector 查看对象数量变化**。`[TOOL]`
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | Validation Layer object lifetime 跟踪（退出 / 运行时泄漏报告） | 有 leaked object handle 与创建调用栈 → 检查 2（按对象类型对号） | 无报告但内存仍增长 → 检查 2 | — |
+| 2 | 对象计数趋势：每帧持续增长，还是一次性 / 场景切换时增长 | 每帧增长 → §5-1 / §5-2 / §5-3（每帧分配不回收，§2 的 P0 三类） | 一次性增长 → §5-4 / §5-7（变体切换、Android 重建未清理） | 一次性增长时排除 §2 的 P0 每帧泄漏假设 |
+| 3 | create / destroy 统计（vkCreate* / vkAllocate* vs vkDestroy* / vkFree*） | descriptor set 失衡 → §5-1；command buffer 失衡 → §5-2；image / buffer 失衡 → §5-3；memory 失衡 → §2 的 P1 | 全部平衡但内存仍涨 → 检查 4（并核对 §0 不适用的非 Vulkan 来源） | 平衡时排除 §2 的 P0 / P1 对象与内存泄漏假设 |
+| 4 | 释放路径断点 / 日志：销毁是否真的执行、顺序是否正确 | 未执行或顺序错误（先销毁 device）→ §5-5（§2 的 P2 销毁顺序假设） | 执行正常 → 检查 5 | 正常时排除 §2 的 P2 销毁顺序假设 |
+| 5 | GPU 仍在使用即销毁：fence retire 前是否回收 / 重用资源 | fence signal 前回收 → §5-6（frame-in-flight 回收错误） | 回收时机正确 → §11 不确定处理 | 正确时排除 §2 的 P2 in-flight 引用假设 |
 
 ---
 
