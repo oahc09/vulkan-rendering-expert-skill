@@ -9,7 +9,7 @@
 | Vulkan 对象 | `VkPhysicalDeviceMeshShaderFeaturesEXT`（feature）、`VkGraphicsPipelineCreateInfo`（task/mesh stage） |
 | 常用 API | `vkCmdDrawMeshTasksEXT` / `vkCmdDrawMeshTasksIndirectEXT` / `vkCmdDrawMeshTasksIndirectCountEXT` |
 | 适用平台 | Desktop（NVIDIA/AMD/Intel 桌面 GPU）为主；Android 移动端支持有限，需按设备查询 |
-| 来源等级 | `[SPEC] [REGISTRY] [GUIDE] [ENGINE] [HEUR]` |
+| 来源等级 | `[SPEC] [REGISTRY] [ENGINE] [HEUR]` |
 | 适用 Vulkan 版本 | `VK_EXT_mesh_shader`（Vulkan 1.1+，依赖 `VK_KHR_spirv_1_4`）；`VK_NV_mesh_shader` 为早期私有扩展 |
 
 ---
@@ -49,7 +49,7 @@ VkPhysicalDeviceFeatures2（meshShader / taskShader feature 查询）
 ### 核心 Vulkan 对象
 
 - `VkPhysicalDeviceMeshShaderFeaturesEXT`
-- `VkPhysicalDeviceMeshShaderPropertiesEXT`（`maxMeshWorkGroupCount` / `maxMeshWorkGroupTotalCount` / `maxMeshOutputVertices` / `maxMeshOutputPrimitives` 等 limit）
+- `VkPhysicalDeviceMeshShaderPropertiesEXT`（`maxTaskWorkGroupCount` / `maxTaskWorkGroupTotalCount` / `maxMeshWorkGroupCount` / `maxMeshWorkGroupTotalCount` / `maxMeshOutputVertices` / `maxMeshOutputPrimitives` 等 limit）
 - `VkGraphicsPipelineCreateInfo`（pStages 含 task/mesh stage）
 
 ### 常用 API
@@ -76,7 +76,7 @@ VkPhysicalDeviceFeatures2（meshShader / taskShader feature 查询）
 → 编译 task/mesh SPIR-V（SPV_VERSION 1.4+）
 → 创建 pipeline：task(可选) + mesh + fragment，不填 vertex stage
 → meshlet 化网格资产（顶点/索引重排为 meshlet，常 64 顶点/124 三角形量级 [HEUR]）
-→ vkCmdDrawMeshTasksEXT（taskCount = meshlet 分组数）
+→ vkCmdDrawMeshTasksEXT（taskCount = meshlet 分组数，即 EXT 的 groupCountX/Y/Z draw 参数）
 → mesh shader 内输出最终三角形
 ```
 
@@ -88,11 +88,11 @@ GPU-driven 变体：culling pass（task shader 或 compute）写出可见 meshle
 
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
-| taskCount（draw 参数） | 与 mesh shader 的 local size 及 meshlet 数量匹配 | 按"三角形数"而非"task 分组数"传入 |
+| taskCount（draw 参数，对应 EXT 的 groupCountX/Y/Z） | 与 mesh shader 的 local size 及 meshlet 数量匹配 | 按"三角形数"而非"task 分组数"传入 |
 | `setMeshOutputsEXT` | 每次调用声明本组输出顶点/图元数 | 未调用即写输出数组 |
-| mesh stage 无 vertex input | 顶点数据经 storage buffer / descriptor 读取 | 仍配置 vertex input state 导致创建失败 |
-| primitive topology | mesh 输出拓扑在 shader 内声明，pipeline 填 `VK_PRIMITIVE_TOPOLOGY_...` 需与扩展要求一致（通常 mesh pipeline 忽略该字段，但部分校验器仍检查 [HEUR]） | 沿用 vertex pipeline 的 topology 语义理解 |
-| `groupCountX/Y/Z` | 每个 dimension 上限受 `maxMeshWorkGroupCount` 限制，总量受 `maxMeshWorkGroupTotalCount` 限制。[SPEC] | 间接变体由 GPU 写入超限值导致 draw 失败。[TOOL] |
+| mesh stage 无 vertex input | 顶点数据经 storage buffer / descriptor 读取；`pVertexInputState` 在含 mesh stage 的 pipeline 中被规范忽略，官方示例置 NULL [SPEC][ENGINE] | 顶点数据仍按 vertex input 路径（bindings/attributes）提供而非 storage buffer 读取 |
+| primitive topology | input assembly state（含 topology）在 mesh pipeline 中被规范忽略，拓扑由 mesh shader 内 `OpExecutionMode` 声明。[SPEC] | 沿用 vertex pipeline 的 topology 语义理解 |
+| `groupCountX/Y/Z` | 带 task stage 时 draw 参数受 task 侧 limit 约束（每维 ≤ `maxTaskWorkGroupCount`，总量 ≤ `maxTaskWorkGroupTotalCount`）；task shader 内 `OpEmitMeshTasksEXT` 参数受 mesh 侧 limit 约束（每维 ≤ `maxMeshWorkGroupCount`，总量 ≤ `maxMeshWorkGroupTotalCount`）；无 task stage 时 draw 参数直接受 mesh 侧 limit 约束。[SPEC] | 间接变体由 GPU 写入超限值导致 draw 失败。[TOOL] |
 | mesh local size | mesh work group invocations 上限受 `maxMeshWorkGroupInvocations` 限制；输出上限受 `maxMeshOutputVertices` / `maxMeshOutputPrimitives` 限制。[SPEC] | 声明输出数组尺寸超过 limit，pipeline 创建失败。[TOOL] |
 
 ---
@@ -105,13 +105,13 @@ GPU-driven 变体：culling pass（task shader 或 compute）写出可见 meshle
 - [ ] 设备是否启用了 `VK_EXT_mesh_shader` 扩展并勾选对应 feature？[SPEC]
 - [ ] task/mesh SPIR-V 是否以 1.4+ 编译（扩展依赖 `VK_KHR_spirv_1_4`）？[SPEC]
 - [ ] `VkGraphicsPipelineCreateInfo.pStages` 是否包含 mesh stage（task 可选）且不含 vertex stage？[SPEC]
-- [ ] vertex input state 是否清空（无 bindings / attributes）？[SPEC]
+- [ ] 顶点数据是否改经 storage buffer 提供（`pVertexInputState` 在含 mesh stage 的 pipeline 中被规范忽略，官方示例置 NULL [ENGINE]）？[SPEC]
 - [ ] mesh shader 声明的输出顶点/图元上限是否 ≤ `maxMeshOutputVertices` / `maxMeshOutputPrimitives`？[SPEC]
 - [ ] pipeline layout 是否覆盖 task/mesh shader 的 descriptor 布局（meshlet buffer 等以 storage buffer 绑定，参见 `03_api_manual/05_descriptor/storage_buffer_image_descriptor.md`）？[SPEC]
 
 ### 使用阶段
 
-- [ ] `groupCountX/Y/Z` 是否 ≤ `maxMeshWorkGroupCount`，总量 ≤ `maxMeshWorkGroupTotalCount`？[SPEC]
+- [ ] `groupCountX/Y/Z` 上限按 stage 归属核对：带 task stage 时 draw 参数是否 ≤ `maxTaskWorkGroupCount`（每维）且总量 ≤ `maxTaskWorkGroupTotalCount`；task 内 `OpEmitMeshTasksEXT` 参数与无 task stage 时的 draw 参数是否 ≤ mesh 侧 `maxMeshWorkGroupCount` / `maxMeshWorkGroupTotalCount`？[SPEC]
 - [ ] taskCount 是否等于 meshlet 分组数（每组对应一个 mesh work group），而非三角形数？[ENGINE]
 - [ ] mesh shader 是否在写 `gl_MeshVerticesEXT` / `gl_PrimitivesEXT` 前调用 `setMeshOutputsEXT`？[SPEC]
 - [ ] meshlet buffer 的顶点/索引布局与 shader 读取 stride 是否一致（注意 `std430` padding）？[ENGINE]
@@ -132,12 +132,12 @@ GPU-driven 变体：culling pass（task shader 或 compute）写出可见 meshle
 
 1. feature 未启用即创建 mesh pipeline（扩展与 `VkPhysicalDeviceMeshShaderFeaturesEXT` 缺一不可）。[TOOL]
 2. pipeline 仍填 vertex stage：task/mesh pipeline 不允许 vertex stage 共存。[SPEC]
-3. 仍配置 vertex input bindings/attributes，pipeline 创建失败或 validation 报错。[TOOL]
+3. 顶点数据仍按 vertex input 路径提供：`pVertexInputState` 在含 mesh stage 的 pipeline 中被规范忽略（bindings/attributes 不生效，官方示例置 NULL [ENGINE]），应改经 storage buffer 读取。[SPEC][ENGINE]
 4. meshlet 数据布局与 shader 读取 stride 不符（`std430` 数组 padding、顶点与索引交错偏移错位），输出几何错乱。[ENGINE]
 5. taskCount=0：同 compute `groupCount=0` 问题，draw 无图元输出，排查路径见 `04_debug_playbooks/04_resource_sync/compute_no_output.md`。[ENGINE]
 6. 间接 draw 的 count buffer 未同步（culling pass 写入尚未可见即被读取），draw 数量随机错误。[SPEC]
 7. 未调用 `setMeshOutputsEXT` 就写输出数组，输出未定义。[SPEC]
-8. 间接变体由 GPU 写入超出 `maxMeshWorkGroupCount` / `maxMeshWorkGroupTotalCount` 的 groupCount，draw 失败。[TOOL]
+8. 间接变体由 GPU 写入超限 groupCount，draw 失败：带 task stage 时 draw 参数超 task 侧 `maxTaskWorkGroupCount` / `maxTaskWorkGroupTotalCount`；task 内 `OpEmitMeshTasksEXT` 参数与无 task stage 时的 draw 参数超 mesh 侧 `maxMeshWorkGroupCount` / `maxMeshWorkGroupTotalCount`。[TOOL]
 9. 按 vertex pipeline 语义理解 primitive topology / vertexCount，把 taskCount 当三角形数传入。[HEUR]
 10. SPIR-V 版本低于 1.4，shader module 创建或 pipeline 链接失败。[TOOL]
 
