@@ -47,14 +47,15 @@
 
 ---
 
-### 3. 快速验证路径
+### 3. 快速验证路径（证据驱动决策表）
 
-1. **用 Profiler 抓取卡顿帧**，确认尖峰是否在 `vkCreate*Pipelines`。`[TOOL]`
-2. **删除并重建 pipeline cache 文件**：对比首次运行与后续运行的卡顿情况。`[TOOL]`
-3. **统计运行期 pipeline 创建调用次数**：确认是否有预期之外的创建。`[TOOL]`
-4. **强制所有变体在加载时创建**：观察卡顿是否从运行期转移到加载期。`[TOOL]`
-5. **检查 pipeline cache 序列化数据**：确认是否写入磁盘并在启动时读取。`[TOOL]`
-6. **验证 Graphics Pipeline Library 支持情况**：查看 `VK_EXT_graphics_pipeline_library` 是否启用。`[TOOL]`
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | 卡顿帧是否伴随 pipeline 创建证据：logcat `pipeline create` / `shader compile` 驱动日志、Profiler 尖峰是否落在 `vkCreateGraphicsPipelines` / `vkCreateComputePipelines` | 尖峰与创建调用时间吻合 → 检查 2 | 不吻合 → 非创建卡顿：持续掉帧转 `gpu_frame_time_high.md`，加载期长耗时转本文件 Startup Time High 小节 | 不吻合时排除 §2 的全部 pipeline 创建类假设（P0 cache 未命中、P0 运行期首次变体、P0 未异步创建） |
+| 2 | pipeline cache 命中率：cache 文件是否存在 / 大小正常、启动时是否读取、第二次进入同一场景卡顿是否消失 | cache 为空 / 未持久化、第二次进入仍卡 → §5-1（§2 的 P0 Pipeline cache 未命中或未持久化假设）；第二次明显减轻但运行期新变体仍卡 → 检查 3 | cache 正确持久化且命中 → 检查 4 | 命中正常时排除 §2 的 P0 Pipeline cache 未命中与 P2 跨版本失效假设 |
+| 3 | 首次变体 vs 预热覆盖：运行期 pipeline 创建调用次数、创建是否集中在特定材质 / 变体首次出现、关键变体是否 warmup | 运行期仍有大量按需创建、与变体首次出现强相关 → §5-2（§2 的 P0 运行期首次创建 shader 变体假设）；全量预编译仍无法覆盖运行时变体 → §5-6 | 加载期已创建全部变体、运行期无新增 → 检查 4 | 全覆盖时排除 §2 的 P0 运行期首次创建 shader 变体假设 |
+| 4 | 创建是否阻塞渲染线程：`vkCreate*Pipelines` 调用线程、是否启用异步创建（后台线程 / `VK_PIPELINE_CREATE_...` 相关 flag） | 主线程同步创建阻塞渲染循环 → §5-3（§2 的 P0 未使用异步 pipeline 创建假设）；多线程创建但热点集中单线程 → §2 的 P2 多线程创建 pipeline 时竞争假设 | 已异步 / 后台创建 → 检查 5 | 异步正常时排除 §2 的 P0 未使用异步 pipeline 创建假设 |
+| 5 | Graphics Pipeline Library 与编译耗时：`VK_EXT_graphics_pipeline_library` 是否启用及拆分完整性、shader 规模 / 优化器耗时、cache 版本校验（shader hash + 应用版本） | 未拆分或拆分不完整、状态变化触发完整重建 → §5-4（§2 的 P1 Graphics Pipeline Library 假设）；应用更新后命中率骤降 → §5-5（§2 的 P2 Pipeline cache 跨版本失效假设）；shader 编译本身过慢 → §2 的 P1 Shader 编译时间过长假设 | 均正常 → §11 不确定处理 | 正常时排除 §2 的 P1 Graphics Pipeline Library 与 P1 Shader 编译时间过长假设 |
 
 ---
 
@@ -245,14 +246,15 @@ Android 上 pipeline 创建受驱动实现和功耗影响大，额外检查：
 
 ---
 
-### 3. 快速验证路径
+### 3. 快速验证路径（证据驱动决策表）
 
-1. **用 Profiler 抓取启动过程**，定位耗时最高的阶段。`[TOOL]`
-2. **清空 pipeline cache 后对比启动时间**：确认 cache 预热效果。`[TOOL]`
-3. **跳过资源加载**：用占位资源启动，观察启动时间变化。`[TOOL]`
-4. **统计启动阶段 shader 编译和 pipeline 创建数量**。`[TOOL]`
-5. **检查资源加载是否串行**：确认 IO 线程、解压线程、GPU upload 线程是否并行。`[ENGINE]`
-6. **分析首屏实际需要的最小资源集合**。`[HEUR]`
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | 启动分段计时：资源 IO / 解压 / shader 编译 / pipeline 创建 / GPU upload 各阶段耗时（AGI 时间轴、logcat `ActivityManager: Displayed`） | 编译 / pipeline 创建占比高 → 检查 2；资源 IO / 解压占比高 → 检查 4；upload / 等待占比高 → 检查 5 | 各阶段均衡、耗时在非渲染初始化 → §11 不确定处理（评估 §2 的 P2 启动阶段初始化顺序低效假设） | — |
+| 2 | pipeline cache 预热：cache 文件是否存在并在启动时读取（`VkPipelineCacheCreateInfo::initialDataSize` / `pInitialData`）、首次安装 vs 后续冷启动时间对比 | cache 未生成 / 未持久化、后续启动无改善 → §5-2（§2 的 P0 Pipeline cache 未预热或持久化假设） | 后续启动因 cache 命中明显变快 → 检查 3 | 命中生效时排除 §2 的 P0 Pipeline cache 未预热或持久化假设 |
+| 3 | 首屏必需集 vs 全量加载：启动阶段 pipeline 创建数量 / shader 变体数、是否同步全量创建、是否加载首屏不需要的资源 | 启动时同步编译全部变体并创建所有 pipeline → §5-1（§2 的 P0 Shader 编译与 pipeline 创建 + P2 不必要的全量预创建假设）；加载了当前屏幕不需要的资源 → §5-5 | 只创建首屏必需、其余延迟 → 检查 4 | 必需集已最小化时排除 §2 的 P2 不必要的全量预创建假设 |
+| 4 | 资源加载并行度：IO / 解压 / GPU upload 是否串行（线程时间轴）、texture 尺寸 / 格式 / mipmap 是否超出启动预算 | 大尺寸 texture / mesh 主线程同步读取、解压、上传 → §5-3（§2 的 P0 资源加载与解压串行假设）；IO / 解压 / upload 未并行、未用异步 transfer queue → §5-4；资源尺寸 / 格式过大 → §2 的 P1 资源尺寸 / 格式过大假设 | 已后台线程 + dedicated transfer queue 并行 → 检查 5 | 并行正常时排除 §2 的 P0 资源加载与解压串行假设 |
+| 5 | 启动阶段同步等待：`vkDeviceWaitIdle` / fence 等待次数（是否等待每个资源 upload 完成） | 每个 upload 后都 wait idle → §5-6（§2 的 P1 同步等待过多假设） | 无频繁等待 → §11 不确定处理 | 无频繁等待时排除 §2 的 P1 同步等待过多假设 |
 
 ---
 

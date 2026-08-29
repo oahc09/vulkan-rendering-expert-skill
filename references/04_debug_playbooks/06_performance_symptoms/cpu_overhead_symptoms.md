@@ -47,14 +47,16 @@
 
 ---
 
-### 3. 快速验证路径
+### 3. 快速验证路径（证据驱动决策表）
 
-1. **用 CPU Profiler 抓取一帧**，定位 CPU 耗时最高的函数。`[TOOL]`
-2. **关闭 Validation Layer 对比**：若 CPU 时间大幅下降，瓶颈在 validation 或错误报告。`[TOOL]`
-3. **减少 draw call 数量**：注释部分物体或合并渲染，观察 CPU 时间变化。`[TOOL]`
-4. **统计每帧 descriptor update 次数**：若数量巨大，优先优化 descriptor 更新。`[TOOL]`
-5. **检查多线程录制是否真正并行**：确认不同 command buffer 是否在独立 pool 中由不同线程录制。`[ENGINE]`
-6. **检查每帧资源创建**：搜索 `vkCreate*`、`vkAllocate*` 是否出现在 render loop 中。`[TOOL]`
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | 分类计时：command buffer 录制 / queue 提交 / fence & sync 等待各段 CPU 耗时占比 | 录制占比高 → 检查 2；提交占比高 → 检查 3；等待占比高 → §5-6（主线程 submit 后立即 `vkWaitForFences` 未与下一帧重叠，§2 的 P2 过度使用 wait 假设） | 三段均衡、热点在应用逻辑层 → 检查 5 | — |
+| 2 | 每帧 `vkUpdateDescriptorSets` / `vkAllocateDescriptorSets` 计数 vs draw call 数 | 计数 ≈ draw call 数或 CPU 采样显示 descriptor 函数为热点 → §5-1（§2 的 P0 Descriptor 每帧频繁更新 / 分配假设），细化排查转本文件 Descriptor Update Overhead 小节 | 计数正常 → 检查 3 | 正常时排除 §2 的 P0 Descriptor 每帧频繁更新 / 分配假设 |
+| 3 | 每帧 draw call 计数（AGI / RenderDoc counter，vs 可见物体数） | 数千以上且随物体数线性增长 → §5-2（§2 的 P0 Draw call 数量过大假设） | 数量正常 → 检查 4 | 正常时排除 §2 的 P0 Draw call 数量过大假设 |
+| 4 | 每帧资源创建计数：render loop 中是否出现 `vkCreate*` / `vkAllocate*`、pipeline 编译次数（首帧 vs 稳态） | 每帧重复创建 pipeline / shader / buffer / image → §5-4（§2 的 P1 每帧重复创建 pipeline / shader / 资源假设）；编译尖峰集中在首帧或变体首次出现 → 转 `pipeline_startup_stutter.md` | 无每帧创建、稳态无编译 → 检查 5 | 稳态干净时排除 §2 的 P1 每帧重复创建 pipeline / shader / 资源假设 |
+| 5 | 多线程录制结构（trace：线程时间轴）：command buffer pool 是否按线程隔离、渲染线程是否真并行 | 多线程共用同一 command buffer pool → §5-5（§2 的 P1 线程同步开销假设）；单线程录制或线程空等 → §6 Minimal Fix 的 secondary command buffer 多线程条目（§2 的 P1 单线程录制假设） | 并行结构正常 → 检查 6 | 正常时排除 §2 的 P1 线程同步开销或单线程录制假设 |
+| 6 | 对照实验：关闭 Validation Layer 对比 CPU 帧时间 | CPU 时间大幅下降 → §5-3（§2 的 P0 Validation Layer 开销假设；release 构建不应开启） | 变化小 → §11 不确定处理（热点多在引擎数据结构，评估 §5-7 场景遍历方向，§2 的 P1 缓存未命中 / 数据结构低效假设） | 变化小时排除 §2 的 P0 Validation Layer 开销假设 |
 
 ---
 
@@ -254,14 +256,15 @@ Android 上 CPU frame time 受主线程负载、Surface 生命周期和系统调
 
 ---
 
-### 3. 快速验证路径
+### 3. 快速验证路径（证据驱动决策表）
 
-1. **统计每帧 `vkUpdateDescriptorSets` 和 `vkCmdBindDescriptorSets` 调用次数**。`[TOOL]`
-2. **用 CPU Profiler 采样**：确认 hotspot 在 descriptor update 填充、pool 分配还是绑定。`[TOOL]`
-3. **把 per-object descriptor 改为 dynamic offset + 大 UBO**：观察 update 调用次数是否下降。`[TOOL]`
-4. **把手写 `VkWriteDescriptorSet` 替换为 `VkDescriptorUpdateTemplate`**：对比 CPU 时间。`[TOOL]`
-5. **按 material / shader 排序 draw call**：减少 descriptor set 切换次数。`[TOOL]`
-6. **评估是否可启用 `VK_EXT_descriptor_indexing` 走 bindless**：减少 descriptor set 数量。`[SPEC]`
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | update / allocate / bind 调用计数：每帧 `vkUpdateDescriptorSets` / `vkAllocateDescriptorSets` / `vkCmdBindDescriptorSets` 次数 vs draw call 数与材质种类数 | update / allocate ≈ draw call 数（每 draw 重新分配并更新）→ §5-1（§2 的 P0 每帧为每个 draw call 重新分配并更新 descriptor set 假设）；bind 次数远超材质种类数 → §5-6（§2 的 P1 Descriptor set 切换过于频繁假设） | 比例正常、热点在单次调用耗时 → 检查 2 | — |
+| 2 | CPU Profiler 采样细分：耗时在 `VkWriteDescriptorSet` 手写填充、pool 分配 / reset、还是 bind 调用 | 手写 `VkWriteDescriptorSet` 数组填充占比高 → §5-2（§2 的 P0 未使用 descriptor template 假设）；pool allocate / reset 占比高 → §5-5（§2 的 P1 Descriptor pool 策略不当假设）；锁等待占比高（多线程）→ §2 的 P2 多线程更新同一 descriptor pool 产生锁竞争假设 | 热点不在 descriptor 路径 → 转本文件 CPU Frame Time High 小节 | — |
+| 3 | 按频率分层现状审查：descriptor set layout 是否按 per-frame / per-material / per-draw 拆分、per-object UBO 是否各自单独 buffer 并单独更新 descriptor | 所有 descriptor 放在同一个 set → §5-4（微小变化也重新绑定整个 set）；per-object 单独 UBO + 单独 descriptor → §5-3（§2 的 P0 未使用 dynamic offset 假设） | 已按更新频率分层 → 检查 4 | 已分层时排除 §2 的 P0 未使用 dynamic offset 假设的布局成因 |
+| 4 | push constant 可替代项审查：高频小数据（transform / 材质参数）是否仍走 descriptor update | 高频小数据仍在每帧 update descriptor → §6 Minimal Fix 的 push constants 条目（§5-3 路径，§2 的 P0 未使用 dynamic offset 假设相关） | 已用 push constant / 无高频小数据 → 检查 5 | — |
+| 5 | 对照实验：把 per-object descriptor 改为 dynamic offset + 大 UBO、手写 write 替换为 `VkDescriptorUpdateTemplate` | update 调用次数与 CPU 时间显著下降 → 印证 §5-3 / §5-2 根因，进 §6 对应修复 | 无改善 → §11 不确定处理（评估 §5-7 的 bindless / push descriptor 方向，§2 的 P1 Bindless / descriptor indexing 未启用假设） | 无改善时排除 §2 的 P0 未使用 descriptor template 与 P0 未使用 dynamic offset 假设 |
 
 ---
 

@@ -47,14 +47,15 @@
 
 ---
 
-### 3. 快速验证路径
+### 3. 快速验证路径（证据驱动决策表）
 
-1. **用 GPU Profiler 查看 bandwidth counter**，确认是 texture、attachment 还是 buffer 带宽高。`[TOOL]`
-2. **降低所有 texture 分辨率 50%**：若帧时间明显下降，瓶颈在 texture 采样。`[TOOL]`
-3. **降低 render target 分辨率或关闭 MSAA**：若帧时间明显下降，瓶颈在 attachment 带宽。`[TOOL]`
-4. **用压缩格式替换未压缩 texture**：观察带宽和帧时间变化。`[TOOL]`
-5. **统计每帧 blit / copy / resolve 次数**：减少不必要的中间 buffer / image 拷贝。`[TOOL]`
-6. **检查 fragment shader 中 texture 采样次数和 filter 模式**。`[TOOL]`
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | AGI 带宽 counter 分解（读写大户分类）：`Texture Bandwidth` vs `Color/Depth Bandwidth` vs `Buffer Bandwidth` | Texture 高 → 检查 2；Color/Depth（attachment）高 → 检查 3；Buffer 高 → §5-6（§2 的 P0 Buffer 读写带宽高假设） | 三者均衡偏高 → 检查 4 | — |
+| 2 | Texture 路径计数：`Texture Cache Miss Rate`、texture 分辨率 / mipmap / filter（`Bytes/Pixel`） | 4K/2K 无 mipmap、各向异性过度或 cache miss 高 → §5-1（§2 的 P0 Texture 采样带宽过高与 P2 sampler filter / LOD 假设）；texture array 随机访问 → §5-7 | mipmap / filter / 访问模式正常 → 检查 4 | 正常时排除 §2 的 P0 Texture 采样带宽过高与 P2 不合理 sampler filter / LOD 假设 |
+| 3 | Attachment 路径计数：MRT 数、MSAA 级别、每帧 `vkCmdCopyImage` / `vkCmdBlitImage` / `vkCmdResolveImage` 次数、中间 render target 数 | MSAA 4x/8x 或 MRT 超出场景需求 → §5-3（§2 的 P1 MRT / MSAA 过度使用假设）；copy / blit / resolve 频繁、中间 RT 多 → §5-4（§2 的 P1 频繁 Resolve / Copy 假设）；mobile 上 AFBC / UBWC 未启用 → §5-5 | 次数与 MSAA / MRT 均正常 → 检查 4 | 正常时排除 §2 的 P1 频繁 Resolve / Copy 与 P1 MRT / MSAA 过度使用假设 |
+| 4 | 格式审查（静态）：texture 与 render target 的 format 是否未压缩 / 32 位浮点 / 可降精度 | texture 未压缩（RGBA8 直存）→ §6 Minimal Fix 的压缩格式条目（§2 的 P1 未使用压缩格式假设）；render target 用 `RGBA32F` 等高精度 → §5-2 | 格式已合理压缩 / 降精度 → 检查 5 | 合理时排除 §2 的 P1 未使用压缩格式假设 |
+| 5 | 对照实验：降低 texture 分辨率 50% vs 降低 render target 分辨率 / 关闭 MSAA | 仅降 texture 有效 → 印证 §5-1 / §5-7 的 texture 路径（§2 的 P0 Texture 采样带宽假设）；仅降 RT / 关 MSAA 有效 → 印证 §5-2 / §5-3 的 attachment 路径（§2 的 P0 Render target / attachment 写带宽假设） | 两者均无明显改善 → §11 不确定处理 | 均无改善时排除 §2 的 P0 Texture 采样带宽与 P0 Render target / attachment 写带宽假设 |
 
 ---
 
@@ -254,14 +255,15 @@ Android 上带宽与 tile-based GPU、功耗、Surface 生命周期强相关，�
 
 ---
 
-### 3. 快速验证路径
+### 3. 快速验证路径（证据驱动决策表）
 
-1. **用 Profiler 定位耗时 fullscreen pass**，查看其 GPU duration。`[TOOL]`
-2. **把该 pass 的 fragment shader 替换为简单输出**：若时间大幅下降，瓶颈在 shader。`[TOOL]`
-3. **降低 fullscreen pass 输出分辨率 50%**：若时间近似减半，瓶颈在 fragment / ROP / 带宽。`[TOOL]`
-4. **合并相邻 fullscreen pass**：减少中间 attachment 读写。`[TOOL]`
-5. **检查 fragment shader 中 texture 采样次数和 filter 模式**。`[TOOL]`
-6. **在 mobile 上检查是否可用 subpass input attachment 替代 texture 采样**。`[ANDROID]`
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | 该 fullscreen pass 单独计时（AGI / RenderDoc GPU Duration，跳过定位对照） | 单 pass 占整帧比例异常 → 检查 2 | 占比正常但总体仍高 → 多 pass 叠加效应 → 检查 3 | — |
+| 2 | Fragment shader 复杂度：texture 采样次数、ALU / branch（RenderDoc pipeline state） | 采样次数多 / ALU 重 → §5-1（§2 的 P0 Fragment shader ALU / 采样过重假设）；full-resolution 采样做模糊 / bloom → §5-3 | shader 简单 → 检查 3 | 简单时排除 §2 的 P0 Fragment shader ALU / 采样过重与 P0 Texture 采样过多假设 |
+| 3 | 中间 attachment 链：fullscreen pass 数量、每 pass input / output RT、重复覆盖（overdraw 视图）、mobile 是否用 subpass / input attachment | 多 pass 链式读写 fullscreen RT → §5-2（§2 的 P0 多个 fullscreen pass 顺序读写 attachment 假设）；UI 全屏层叠重复覆盖 → §5-6（§2 的 P1 Overdraw / 重复 fullscreen draw 假设）；mobile 未用 subpass / input attachment → §5-4（§2 的 P1 未利用 tile-based 本地读取假设） | 链路短、无重复覆盖 → 检查 4 | 短链时排除 §2 的 P0 多个 fullscreen pass 顺序读写与 P1 Overdraw / 重复 fullscreen draw 假设 |
+| 4 | Attachment 格式与采样路径：`RGBA16F` / `RGBA32F` 高精度、MRT、`Texture Cache Miss` | 高精度 format 且画质收益有限 → §5-5（§2 的 P2 MSAA / HDR / 高精度 format 假设）；cache miss 高的采样 → §5-1 / §5-7 路径 | 格式合理 → 检查 5 | 合理时排除 §2 的 P2 MSAA / HDR / 高精度 format 假设 |
+| 5 | 对照实验：该 pass 半分辨率渲染（bloom / blur 类）或 shader 替换为简单输出 | 半分辨率后时间近似减半 → 印证 fragment / ROP / 带宽路径（§5-1 / §5-3，§2 的 P1 Fullscreen pass 分辨率过高假设）；换简单 shader 大幅下降 → §5-1 | 均无明显改善 → §11 不确定处理 | 无改善时排除 §2 的 P1 Fullscreen pass 分辨率过高假设 |
 
 ---
 

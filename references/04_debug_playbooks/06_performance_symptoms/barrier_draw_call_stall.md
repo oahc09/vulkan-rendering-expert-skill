@@ -47,14 +47,16 @@
 
 ---
 
-### 3. 快速验证路径
+### 3. 快速验证路径（证据驱动决策表）
 
-1. **统计每帧 `vkCmdPipelineBarrier` 调用次数和涉及资源数**。`[TOOL]`
-2. **用 GPU Profiler 查看时间轴空泡**：空泡位于 barrier 前后即说明同步开销或等待。`[TOOL]`
-3. **把可疑全局 barrier 替换为局部 buffer / image barrier**，观察 hazard 是否出现。`[TOOL]`
-4. **把 `ALL_COMMANDS` 改为精确 stage**，看性能和正确性。`[TOOL]`
-5. **检查同一 image 是否被多次 transition**，合并冗余 transition。`[TOOL]`
-6. **评估是否可用 subpass dependency 替代 pipeline barrier**。`[SPEC]`
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | AGI GPU timeline：idle bubble 定位（空泡前后对应的 barrier / submit；多 queue 下 graphics 是否等待 compute / transfer 信号） | 空泡密集且与 barrier 位置吻合 → 检查 2；graphics queue 长时间等待其他 queue 信号 → §5-6（§2 的 P1 多 queue 过度串行化假设） | 无空泡、GPU 满载 → 非 barrier 问题，转 `gpu_frame_time_high.md` | 满载时排除 §2 的 P0 全局 barrier 滥用与 P0 stage / access 过于保守假设（无空泡即无过度同步证据） |
+| 2 | barrier 参数统计：`srcStageMask` / `dstStageMask` 是否 `ALL_COMMANDS` / `BOTTOM_OF_PIPE` / `TOP_OF_PIPE`、access 是否 `MEMORY_READ/WRITE`、全局 barrier 占比 | 全局 barrier / `ALL_COMMANDS` 占比高 → §5-1 / §5-4（§2 的 P0 全局 barrier 滥用与 P0 stage / access 过于保守假设） | stage / access 已按 producer / consumer 精确填写 → 检查 3 | 精确时排除 §2 的 P0 全局 barrier 滥用与 P0 Barrier stage / access 过于保守假设 |
+| 3 | 同一 image 的 layout transition 次数与同一资源的重复 barrier | 同帧对同一 image 反复 transition、同一段 producer/consumer 重复加 barrier → §5-5 / §5-3（§2 的 P0 不必要的 image layout transition 假设） | transition 必要且无重复 → 检查 4 | 必要且无重复时排除 §2 的 P0 不必要的 image layout transition 假设 |
+| 4 | 同一 render pass 内是否仍用 pipeline barrier（可由 subpass dependency 表达）；render graph 是否在每个 pass 边界插入全同步 barrier | render pass 内用 pipeline barrier → §6 Minimal Fix 的 subpass dependency 条目（§2 的 P1 Subpass dependency 未充分利用假设）；render graph 逐边界全同步 → §5-2（§2 的 P1 缺少 render graph 批量优化假设） | 已用 subpass / 相邻依赖已合并 → 检查 5 | — |
+| 5 | `vkDeviceWaitIdle` / `vkQueueWaitIdle` 调用频率（是否每帧 / 每 submit） | 每帧或每次 submit 后调用 → §5-7（§2 的 P2 不必要的 `vkDeviceWaitIdle` / `vkQueueWaitIdle` 假设） | 无频繁 wait idle → 检查 6 | 无频繁调用时排除 §2 的 P2 不必要的 `vkDeviceWaitIdle` / `vkQueueWaitIdle` 假设 |
+| 6 | 移除实验（对照）：安全收窄单个可疑 barrier 的 stage / access / 资源范围后对比帧时间与 Validation sync 分支 | 收窄后空泡减少且无 SYNC-HAZARD → 印证该 barrier 过度同步，按 §5-1 / §5-4 根因进 §6 收窄参数 | 收窄后出现 hazard → 该 barrier 必要，回退参数 → §11 不确定处理 | — |
 
 ---
 
@@ -249,14 +251,14 @@ Android 上 barrier overuse 对 tile-based GPU 影响尤为明显，额外检查
 
 ---
 
-### 3. 快速验证路径
+### 3. 快速验证路径（证据驱动决策表）
 
-1. **用 Profiler 统计每帧 draw call 数量和平均顶点数**。`[TOOL]`
-2. **强制关闭一半物体**：若 CPU 时间近似减半，说明 draw call 本身是瓶颈。`[TOOL]`
-3. **注释 material / state 切换**：若合批后 draw call 数下降且 CPU 时间下降，说明 state change 是瓶颈。`[TOOL]`
-4. **对相同 mesh 临时启用 instancing**：观察 draw call 数和 CPU 时间变化。`[TOOL]`
-5. **RenderDoc 查看 event browser**：确认是否存在大量连续小 draw。`[TOOL]`
-6. **统计每帧 pipeline bind 和 descriptor set bind 次数**。`[TOOL]`
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | 瓶颈分类：CPU submit / 录制耗时 vs GPU 执行时间（AGI CPU 时间轴 `Queue Submit Duration`、GPU 是否空等） | CPU 耗时 > GPU 执行且 GPU 不饱和 → 检查 2 | GPU 满载 → GPU 侧瓶颈，转 `gpu_frame_time_high.md` | GPU 满载时排除 §2 的全部 draw call 数量类假设（瓶颈在 GPU 执行而非提交开销） |
+| 2 | draw call 计数与材质分布：每帧总数、平均顶点数、连续相同 pipeline / texture 的 draw 段、pipeline / descriptor set bind 次数 | 总数数千以上且大量连续小 draw 共享同一 pipeline / texture → 检查 3；pipeline / descriptor bind 频繁切换打散 batch → §5-1（§2 的 P1 频繁的 pipeline / descriptor / state 切换假设） | 总数与分布均正常 → CPU 高另有来源，转 `cpu_overhead_symptoms.md`（含 §2 的 P2 每 draw 数据准备开销假设） | 正常时排除 §2 的 P0 未合并相同材质 / mesh 的小物体与 P0 未使用 instancing 假设 |
+| 3 | 重复度分析：同 mesh 多副本（仅 world matrix 不同）、同材质小物体、透明深度排序、UI / particle / decal 提交方式、draw 参数是否逐物体由 CPU 计算 | 同 mesh 重复绘制 → §5-2（§2 的 P0 未使用 instancing 假设）；同材质小物体分散 → §5-1（§2 的 P0 未合并小物体假设）；透明按深度排序 draw 爆炸 → §5-3（§2 的 P1 过度细分的渲染状态排序假设）；UI / particle / decal 各自提交 → §5-4；draw 参数逐物体 CPU 计算 → §6 Minimal Fix 的 multi-draw indirect 条目（§2 的 P0 未使用 indirect draw 假设） | 重复度低、材质种类本身极多 → 检查 4 | 低重复度时排除 §2 的 P0 未使用 instancing 假设（无可合并副本） |
+| 4 | 对照实验：对一组同 mesh 临时启用 instancing 或按材质重排后对比 draw call 数与 CPU 时间 | draw call 数与 CPU 时间显著下降 → 印证 §5-1 / §5-2 根因路径，进 §6 对应修复 | 无明显改善 → §11 不确定处理（评估 §5-5 descriptor 更新过细 / §5-6 多线程 batch 拆分方向） | 无改善时排除 §2 的 P0 未合并相同材质 / mesh 的小物体假设（该组物体非瓶颈来源） |
 
 ---
 

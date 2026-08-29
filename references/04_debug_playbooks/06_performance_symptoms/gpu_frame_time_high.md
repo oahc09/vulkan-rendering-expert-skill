@@ -41,14 +41,18 @@
 
 ---
 
-## 3. 快速验证路径
+## 3. 快速验证路径（证据驱动决策表）
 
-1. **用 GPU Profiler 抓取一帧**，确认瓶颈所在 pipeline stage。`[TOOL]`
-2. **降低渲染分辨率 50%**：若帧时间近似减半，瓶颈在 fragment / ROP。`[TOOL]`
-3. **减少 draw call 数或顶点数**：若帧时间显著下降，瓶颈在 vertex / geometry。`[TOOL]`
-4. **注释掉 suspicious pass**：二分定位耗时大户。`[TOOL]`
-5. **检查 barrier 数量与位置**：看 GPU 时间轴是否有大量空泡。`[TOOL]`
-6. **检查 texture / buffer 尺寸与格式**：降低采样质量或分辨率测试。`[TOOL]`
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+|---|---|---|---|---|
+| 1 | AGI：GPU vs CPU 帧时间（瓶颈分类） | GPU 帧时间 ≥ CPU 且 `GPU % Busy` 接近 100% → 检查 2 | CPU 帧时间 > GPU → 转 `cpu_overhead_symptoms.md`（CPU 侧瓶颈） | GPU 满载时排除 §2 的 P0 过度同步 / barrier / wait 假设（满载与空等互斥） |
+| 2 | 分 pass GPU timer query（AGI 按 pass 分解 `GPU Duration` / timestamp query） | 少数 pass 耗时占比异常 → 检查 3 | 各 pass 分布均匀、无单点热点 → 检查 5 | 均匀时排除 §2 的 P0 Fragment/ROP 与 P0 Vertex/Geometry 单点热点假设 |
+| 3 | 热点 pass 的 stage 计数器：`Fragment Duration` / `Vertex Duration` / `Texture Fetch` | Fragment 高 → 检查 4；Vertex / Geometry 高 → §6 Minimal Fix 的 Vertex 分支（LOD / occlusion culling / instancing，§2 的 P0 Vertex/Geometry 假设）；`Texture Fetch` / `Texture Cache Miss` 高 → §5-1 / §5-3（§2 的 P1 Texture/bandwidth 假设） | 各 stage 均不突出 → 检查 5 | — |
+| 4 | overdraw / early-z 计数：`Fragment Shader Invocations` vs 屏幕像素数 | 远超像素数 → §5-2（透明未按深度排序 / 未启用 early-z）；接近像素数但 `Fragment Duration` 仍高 → §5-1 / §5-3（shader 复杂度 / RT+MSAA+MRT 压力） | 计数正常 → 检查 5 | 正常时排除 §2 的 P0 Fragment/ROP 假设 |
+| 5 | 每帧 draw call 计数与 CP / Command Buffer 负载 | draw call > 数千且 CP 负载高 → §5-4（§2 的 P1 大量小 draw call 假设） | 数量与负载正常 → 检查 6 | 正常时排除 §2 的 P1 大量小 draw call 假设 |
+| 6 | GPU 时间轴空泡（trace：`IDLE` / `WAIT` 占比、compute 是否长时间独占） | 空泡占比高 → §5-5（§2 的 P0 过度同步 / barrier / wait 假设）；compute 独占导致 graphics 空等 → §5-6（§2 的 P1 Compute 任务过重或调度不当假设） | 满载无空泡 → 检查 7 | 满载时排除 §2 的 P0 过度同步 / barrier / wait 假设 |
+| 7 | 帧时间尖峰时序 vs 首帧 / shader 变体切换 | 尖峰集中在首帧或变体首次出现 → §5-7（§2 的 P2 驱动编译 / pipeline cache 未命中假设） | 稳态持续偏高、与变体无关 → 检查 8 | 稳态时排除 §2 的 P2 驱动编译 / pipeline cache 未命中假设 |
+| 8 | 对照实验：降低渲染分辨率 50% 或注释可疑 pass 二分 | 降分辨率后帧时间近似减半 → 印证 §5-2 / §5-3 的 fragment / ROP 路径（§2 的 P0 Fragment/ROP 假设）；注释某 pass 后明显下降 → 该 pass 为热点，回到检查 3 | 均无明显变化 → §11 不确定处理 | 无变化时排除 §2 的 P0 Fragment/ROP 假设（分辨率无关） |
 
 ---
 
