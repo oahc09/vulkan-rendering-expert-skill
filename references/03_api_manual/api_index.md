@@ -38,6 +38,7 @@
 | `VkSurfaceKHR` | `02_surface_swapchain/surface.md` |
 | `VkSwapchainKHR` | `02_surface_swapchain/swapchain.md` |
 | Swapchain Recreate | `02_surface_swapchain/swapchain_recreate.md` |
+| Desktop Windowing（SDL/GLFW/Win32） | `02_surface_swapchain/desktop_windowing.md` |
 
 ---
 
