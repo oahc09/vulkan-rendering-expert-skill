@@ -101,7 +101,7 @@ Application
 
 ## 6. Pipeline / Descriptor 设计
 
-最小 renderer 可先不引入 descriptor。  
+最小 renderer 可先不引入 descriptor。
 如果需要 triangle：
 
 | Shader set/binding | Vulkan Descriptor | 资源 | Stage |

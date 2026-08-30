@@ -84,7 +84,7 @@ FrameResource
 
 ## 6. Pipeline / Descriptor 设计
 
-Frame loop 本身不直接设计 pipeline / descriptor。  
+Frame loop 本身不直接设计 pipeline / descriptor。
 但必须为后续 pass 预留：
 
 - current frame index

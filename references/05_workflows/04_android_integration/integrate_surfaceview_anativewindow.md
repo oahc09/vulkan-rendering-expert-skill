@@ -86,7 +86,7 @@ SurfaceView
 
 ## 6. Pipeline / Descriptor 设计
 
-本 workflow 不直接涉及 pipeline / descriptor。  
+本 workflow 不直接涉及 pipeline / descriptor。
 但必须保证：
 
 - pipeline viewport / scissor 跟随 surface size。

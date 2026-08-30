@@ -7,4 +7,6 @@ test_report.html
 # 测试目录非技能本体，本地保留但不跟踪
 tests/
 
+# 会话执行脚手架与本地里程碑笔记，不跟踪
 .superpowers/
+milestones/
