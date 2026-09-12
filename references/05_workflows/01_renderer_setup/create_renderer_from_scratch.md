@@ -135,6 +135,32 @@ Application
 
 ---
 
+## 7.5 架构决策（Architecture Decision）
+
+> 进入 §8 实现步骤前先完成本节决策链。决策方法与六要素见 `../../02_core_mental_model/engine_architecture.md` §10。
+
+决策链：
+
+```text
+需求 → 约束 → Candidate Architecture → Trade-off → Decision
+```
+
+| 阶段 | 本 workflow 的关键决策问题 | 参考 |
+|---|---|---|
+| 需求 | 从零建立结构正确的最小 renderer（§1 最小验收目标），并一次定下骨架级决策：RHI 抽象深度、RenderPass / Dynamic Rendering 路径、RenderGraph 是否引入、queue 模型、frames-in-flight 数 [ENGINE] | — |
+| 约束 | 平台分布（桌面 IMR vs Android tile-based 占比）、Vulkan 版本（低于 1.3 无 Dynamic Rendering）、帧预算、团队规模（1-2 人 demo vs ≥3 人产品）、§2 输入条件中"是否扩展 texture / compute / postprocess"的答案 | — |
+| Candidate | A：最小直连——单 graphics queue、手动 barrier、手动资源生命周期、Dynamic Rendering；B：移动端优先——传统 RenderPass + subpass 保留 tile memory 复用、frames-in-flight=2；C：可扩展骨架——RenderGraph 托管 transient 资源、timeline semaphore 提交模型、预留 async compute 路径 | D1/D4/D5 |
+| Trade-off | 起步速度 vs 演进成本：A 起步最快，但 pass 增长后手写同步成本接近 O(pass²)（D5 拐点）；B 在 tile-based GPU 上省 bandwidth，桌面 IMR 收益趋零（D1）[ANDROID][VENDOR]；C 的 RG 编译开销与学习曲线在 demo 阶段大于收益（D5 不适用条件）；多 queue 引入 ownership transfer / timeline 管理成本（D4）；viewport / scissor 静态化增加变体、动态化在部分移动驱动有 per-draw 验证开销（D7）[ANDROID]；frames-in-flight 越大 CPU / GPU 并行越好，但 per-frame 资源份数与显存同步放大（D6） | D1/D4/D5/D6/D7 |
+| Decision | 逐点写明选择与"为什么不选另一边"，并给每点重新评估条件（示例：选 A 的单 queue，因 compute 占比为零且同步简单优先；手写 barrier >50 处 → 重开 D5；AGI 显示 graphics 与 compute 互不重叠且合计 >30% frame time → 重开 D4；目标转向 tile-based 为主 → 重开 D1） | — |
+
+决策规则：
+
+- 不默认选择新技术方案；每个 Decision 必须写明"为什么不选另一边"。
+- Decision 必须包含重新评估条件（什么信号出现时重开决策）。
+- 决策完成后进入 §8；验证仍走 §10 验证方式与 Verification Gate（`../../00_expert_entry/verification_gate.md`）。
+
+---
+
 ## 8. 实现步骤
 
 1. 创建 `VkInstance`。

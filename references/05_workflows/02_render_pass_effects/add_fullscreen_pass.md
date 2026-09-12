@@ -116,6 +116,32 @@ Pipeline 状态：
 
 ---
 
+## 7.5 架构决策（Architecture Decision）
+
+> 进入 §8 实现步骤前先完成本节决策链。决策方法与六要素见 `../../02_core_mental_model/engine_architecture.md` §10。
+
+决策链：
+
+```text
+需求 → 约束 → Candidate Architecture → Trade-off → Decision
+```
+
+| 阶段 | 本 workflow 的关键决策问题 | 参考 |
+|---|---|---|
+| 需求 | 新增一个 fullscreen pass（§1），架构上先定两件事：本 pass 走 RenderPass 还是 Dynamic Rendering；输入 / 输出中间 RT 归入哪类资源生命周期 [ENGINE] | — |
+| 约束 | renderer 既有渲染路径（沿用 vs 切换的成本）、Vulkan 版本、输出是否直接 present、是否随 swapchain 尺寸变化（§2）、平台（tile-based 上后处理链的 bandwidth 预算） | — |
+| Candidate | A：Dynamic Rendering——pass 间无 subpass 依赖，附件组合动态，省掉 framebuffer 预创建；B：传统 RenderPass + subpass——后处理链串在 tile memory 内，避免往返主存；C：设备分档双路径——桌面走 A、tile-based 移动端走 B | D1 |
+| Trade-off | A 简洁且与动态附件组合契合，但放弃 on-tile 复用，中低端 Android 的 bandwidth 与 frame time 差异需实测（D1 性能风险）[ANDROID][VENDOR]；B 省 bandwidth 但 subpass dependency 管理成本高，附件组合高度动态时 framebuffer 数量爆炸（D1 不适用条件）；C 维护双路径成本；中间 RT 归类：跨帧使用（如 TAA history）必须 persistent，错归 transient 会被 alias 回收悬空；尺寸随 extent 派生归 Swapchain-dependent，rotation 后整组重建；单帧内消费归 transient 可参与 aliasing（D6） | D1/D6 |
+| Decision | 写明路径选择（含切换既有路径时 pipeline 兼容性重建的成本）与每个中间 RT 的归类结论及"为什么不选另一边"。重新评估条件：选 A 后移动端 profile 显示 bandwidth 受限 → 评估 subpass（D1）；归类后出现跨帧残留 / alias 悬空 / resize 后尺寸不一致 → 按 D6 错分类信号重归类 | — |
+
+决策规则：
+
+- 不默认选择新技术方案；每个 Decision 必须写明"为什么不选另一边"。
+- Decision 必须包含重新评估条件（什么信号出现时重开决策）。
+- 决策完成后进入 §8；验证仍走 §10 验证方式与 Verification Gate（`../../00_expert_entry/verification_gate.md`）。
+
+---
+
 ## 8. 实现步骤
 
 1. 新增 fullscreen shader。

@@ -119,6 +119,32 @@ Application Object
 
 ---
 
+## 7.5 架构决策（Architecture Decision）
+
+> 进入 §8 实现步骤前先完成本节决策链。决策方法与六要素见 `../../02_core_mental_model/engine_architecture.md` §10。
+
+决策链：
+
+```text
+需求 → 约束 → Candidate Architecture → Trade-off → Decision
+```
+
+| 阶段 | 本 workflow 的关键决策问题 | 参考 |
+|---|---|---|
+| 需求 | 建立安全的资源生命周期管理（§1）；架构上先完成两件事：每个被管理资源归入四类生命周期中的哪类；transient 资源是否值得升级为 RenderGraph 托管 [ENGINE] | — |
+| 约束 | frames-in-flight 数（§2 的 2~3）、资源类型与总量、平台（移动端显存 budget 小、deferred queue 不宜积压——§9）、团队规模、pass 数量与增长预期 | — |
+| Candidate | A：单一全局池 + 本 workflow 的 handle / ref count / deferred deletion 直管全部资源；B：四类分组（Persistent / Per-frame / Transient / Swapchain-dependent）+ 手动 deferred deletion，每类获得针对性策略；C：四类分组 + transient 交给 RenderGraph 托管（first-use → last-use 推导 + aliasing），其余三类仍手动 | D5/D6 |
+| Trade-off | A 起步最快，但 frames-in-flight >1 时串帧 hazard 必然出现（D6 不适用条件）；B 需要归类纪律，错分类按类别付出代价（per-frame 错归 → SYNC-HAZARD-WRITE-AFTER-READ；transient 错归 → alias 回收悬空；D6）；C 把 barrier / aliasing 下沉到编译器、显存峰值可推导，但 RG 编译 CPU 开销进入帧预算、声明错误成为新 bug 类别（D5）；移动端 transient 未从 persistent 拆分时显存峰值直接放大（D6）[ANDROID] | D5/D6 |
+| Decision | 用 D6 归类判据表逐资源写明归类结论与"为什么不选另一边"。重新评估条件：首次出现 SYNC-HAZARD-WRITE-AFTER-READ → 立即重开 D6 分组决策；手写 barrier >50 处 / 新增 pass 平均改动 >3 个同步点 / transient 显存峰值接近设备 budget → 重开 D5 | — |
+
+决策规则：
+
+- 不默认选择新技术方案；每个 Decision 必须写明"为什么不选另一边"。
+- Decision 必须包含重新评估条件（什么信号出现时重开决策）。
+- 决策完成后进入 §8；验证仍走 §10 验证方式与 Verification Gate（`../../00_expert_entry/verification_gate.md`）。
+
+---
+
 ## 8. 实现步骤
 
 1. **定义 resource handle 与 record**：

@@ -117,6 +117,32 @@ Compute Shader
 
 ---
 
+## 7.5 架构决策（Architecture Decision）
+
+> 进入 §8 实现步骤前先完成本节决策链。决策方法与六要素见 `../../02_core_mental_model/engine_architecture.md` §10。
+
+决策链：
+
+```text
+需求 → 约束 → Candidate Architecture → Trade-off → Decision
+```
+
+| 阶段 | 本 workflow 的关键决策问题 | 参考 |
+|---|---|---|
+| 需求 | 新增 compute pass 且输出被后续 pass 消费（§0 / §1）；架构上先定归置与队列：该工作负载归 compute 还是 graphics pipeline、跑在哪个 queue [ENGINE] | — |
+| 约束 | 负载形态（数据并行规约 / 像素并行 / 需要 blend 与 depth 语义）、输出 consumer 类型（§2）、帧预算、目标平台多 queue 驱动成熟度 | — |
+| Candidate | A：compute pipeline + 与 graphics 同 queue——提交顺序天然保序，queue 内 barrier 即可；B：compute pipeline + 独立 compute queue + timeline semaphore——与 graphics overlap；C：不建 compute pipeline，归置 fragment 全屏 pass——利用 raster 固定功能与 early-z | D3/D4 |
+| Trade-off | 归置：规约 / 卷积 / culling 类任务塞 fragment → 2x2 quad 利用率低、无法用 shared memory（D3）；需要 blend / depth / 插值的任务归 compute → 同步成本大于收益（D3）。队列：A 时序可推理但 graphics 与 compute 串行叠加；B 的 overlap 收益上限为串行路径中 compute 段时长，代价是 ownership transfer + timeline value 管理，同步开销可能反噬，移动端部分驱动多 queue 实现退化（D4）[ANDROID][VENDOR] | D3/D4 |
+| Decision | 写明：为什么归 compute 而非 fragment（或反之）、为什么单 / 独立 queue，以及"为什么不选另一边"（示例：选 A，因 compute 段 <20% frame time 且与 graphics 强依赖交织，同步简单优先）。重新评估条件：选 A 后 AGI 显示 compute 与 graphics 互不重叠且合计 >30% frame time → 重开 D4；选 C 后 fragment quad 利用率低 → 迁 compute（D3） | — |
+
+决策规则：
+
+- 不默认选择新技术方案；每个 Decision 必须写明"为什么不选另一边"。
+- Decision 必须包含重新评估条件（什么信号出现时重开决策）。
+- 决策完成后进入 §8；验证仍走 §10 验证方式与 Verification Gate（`../../00_expert_entry/verification_gate.md`）。
+
+---
+
 ## 8. 实现步骤
 
 1. 编写 compute shader。

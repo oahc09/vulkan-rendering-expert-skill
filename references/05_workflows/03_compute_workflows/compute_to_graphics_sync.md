@@ -105,6 +105,32 @@ Compute Pipeline
 
 ---
 
+## 7.5 架构决策（Architecture Decision）
+
+> 进入 §8 实现步骤前先完成本节决策链。决策方法与六要素见 `../../02_core_mental_model/engine_architecture.md` §10。
+
+决策链：
+
+```text
+需求 → 约束 → Candidate Architecture → Trade-off → Decision
+```
+
+| 阶段 | 本 workflow 的关键决策问题 | 参考 |
+|---|---|---|
+| 需求 | 建立 compute → graphics 的可见性与访问顺序（§1）；架构上先定同步路径：同 queue barrier 还是跨 queue semaphore / timeline [ENGINE] | — |
+| 约束 | compute 与 graphics 是否同 queue（§2）、输出资源类型（buffer / image）、consumer 阶段、TBDR 上 barrier / layout 切换会 flush tile memory（§9）、目标设备多 queue 驱动成熟度 | — |
+| Candidate | A：同 queue pipeline barrier（含 image layout transition）——本 workflow 的基础路径；B：跨 queue + binary semaphore + release / acquire barrier 对（ownership transfer）；C：跨 queue + timeline semaphore——value 单调递增，追踪跨 queue 与跨帧进度 | D4 |
+| Trade-off | A 无跨 queue 开销、Validation 推理直观，但 compute 与 graphics 串行叠加（D4）；B / C 换取 overlap，代价是 ownership transfer barrier 对、semaphore 等待链变长、timeline 空泡风险，同步开销可能大于 overlap 收益（D4）；timeline value 必须单调递增不得复用回退（engine_architecture.md §8）[SPEC]；移动端部分驱动多 queue 实现退化（D4）[ANDROID][VENDOR] | D4 |
+| Decision | 写明：为什么选该路径及"为什么不选另一边"（示例：选 A，因 compute 段 <20% frame time、负载与 graphics 强依赖交织，同步简单优先——D4 适用条件）。重新评估条件：AGI 显示 compute 与 graphics 互不重叠且合计 >30% frame time → 迁独立 compute queue（重开 D4）；选 B / C 后 frame time 反升或 timeline 出现同步空泡 → 回退单 queue（保留代码路径，先关开关）。若决策为 B / C，超出本 workflow 基础路径，需补 ownership transfer 细节（见 `../../02_core_mental_model/compute_graphics_relationship.md`） | — |
+
+决策规则：
+
+- 不默认选择新技术方案；每个 Decision 必须写明"为什么不选另一边"。
+- Decision 必须包含重新评估条件（什么信号出现时重开决策）。
+- 决策完成后进入 §8；验证仍走 §10 验证方式与 Verification Gate（`../../00_expert_entry/verification_gate.md`）。
+
+---
+
 ## 8. 实现步骤
 
 1. 确认 compute 输出资源 usage。

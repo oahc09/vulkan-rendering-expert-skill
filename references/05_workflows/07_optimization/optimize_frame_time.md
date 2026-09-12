@@ -119,6 +119,32 @@ Pipeline 状态：
 
 ---
 
+## 7.5 架构决策（Architecture Decision）
+
+> 进入 §8 实现步骤前先完成本节决策链。决策方法与六要素见 `../../02_core_mental_model/engine_architecture.md` §10。
+
+决策链：
+
+```text
+需求 → 约束 → Candidate Architecture → Trade-off → Decision
+```
+
+| 阶段 | 本 workflow 的关键决策问题 | 参考 |
+|---|---|---|
+| 需求 | 降低并稳定 frame time（§1）；架构上先定优化投入的层级：局部优化还是架构级重排，async compute 在本场景是否有收益 [ENGINE] | — |
+| 约束 | §8 步骤 1-2 的瓶颈定位结论（CPU record / GPU active / fence 等待）、帧预算与 99th percentile 要求（§10）、GPU 架构（IMR / TBDR，§2）、平台、可接受的改动风险窗口（架构级改动需重跑 §10 全套验证） | — |
+| Candidate | A：局部优化——draw call 合并、barrier 精确化、pass 合并、format / bandwidth 调整（§8 步骤 3-9 主路径）；B：架构级重排——pass 结构 / 渲染顺序 / 资源生命周期重组，不换技术栈；C：引入 async compute queue——把与 graphics 互补的 compute 负载 overlap | D4 |
+| Trade-off | A 风险低、可增量验证，但不改结构收益有上限；B 一次投入大、需重跑全套 §10 验证，pass 重排引发手写 barrier 重写时与 D5 的托管边界耦合；C 的 overlap 收益上限为串行路径中 compute 段时长，同步开销（ownership transfer + timeline）可能反噬，移动端部分驱动多 queue 退化（D4）[ANDROID][VENDOR]；async compute 不是默认优化手段——AGI 显示 graphics 与 compute 互不重叠且合计 >30% frame time 才值得评估（D4 重新评估条件） | D4/D5 |
+| Decision | 写明：当前瓶颈归属层级的测量证据、为什么先做该级以及"为什么不选另一边"；若不引入 async compute，写明理由（overlap 余量不足 / 驱动退化 / 同步开销大于收益）。重新评估条件：局部优化后 frame time 仍超预算且手写 barrier 蔓延 → 重开 D5；AGI 出现 overlap 信号 → 重开 D4；选 C 后 frame time 反升或 timeline 空泡 → 回退（保留代码路径，先关开关） | — |
+
+决策规则：
+
+- 不默认选择新技术方案；每个 Decision 必须写明"为什么不选另一边"。
+- Decision 必须包含重新评估条件（什么信号出现时重开决策）。
+- 决策完成后进入 §8；验证仍走 §10 验证方式与 Verification Gate（`../../00_expert_entry/verification_gate.md`）。
+
+---
+
 ## 8. 实现步骤
 
 1. **测量基线**：
