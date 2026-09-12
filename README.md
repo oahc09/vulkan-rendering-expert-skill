@@ -31,7 +31,7 @@
 |---|---|
 | `00_expert_entry` | 角色、硬规则、任务分类、输出格式、调试/性能优先级 |
 | `01_source_map_and_api_manual_strategy` | 来源等级、引用规则、API 卡片写作策略 |
-| `02_core_mental_model` | Vulkan 对象链路、帧生命周期、资源生命周期、同步模型 |
+| `02_core_mental_model` | Vulkan 对象链路、帧生命周期、资源生命周期、同步模型、引擎子系统架构与架构决策 |
 | `03_api_manual` | API 卡片、生命周期索引、错误索引和 Vulkan API 细节 |
 | `04_debug_playbooks` | 黑屏、闪烁、崩溃、Validation Error、同步和性能排查手册 |
 | `05_workflows` | Renderer、Pass、Compute、Android 集成、资源管理和优化工作流 |

@@ -1,11 +1,11 @@
 ---
 name: vulkan-rendering-expert-skill
-description: Vulkan 渲染工程专家技能。用于 Vulkan API 设计、实现、调试、优化、Validation Error 处理、Android Vulkan 集成、Swapchain/同步/Image Layout/资源生命周期问题、图形引擎架构、Render Pass、Pipeline、Descriptor、Command Buffer、Compute 工作流和性能分析。
+description: Vulkan 渲染工程专家技能。用于 Vulkan API 设计、实现、调试、优化、Validation Error 处理、Android Vulkan 集成、Swapchain/同步/Image Layout/资源生命周期问题、图形引擎架构、Render Pass、Pipeline、Descriptor、Command Buffer、Compute 工作流、引擎子系统架构设计、架构决策和性能分析。
 license: MIT
 metadata:
   author: Vulkan 渲染专家技能贡献者
-  version: 1.0.5
-  last-updated: '2026-08-29'
+  version: 1.0.6
+  last-updated: '2026-09-12'
   keywords:
     - vulkan
     - rendering
@@ -56,6 +56,7 @@ metadata:
 - API、结构体、字段或 VUID 问题：读取 `references/01_source_map_and_api_manual_strategy/`、`references/03_api_manual/api_index.md`，再读取相关 API 卡片。
 - 故障调试问题：读取 `references/04_debug_playbooks/debug_priority_index.md`、一个匹配的 playbook、相关 API 卡片，必要时读取少量案例。
 - 正向实现任务：读取 `references/05_workflows/workflow_index.md`、一个匹配的 workflow、相关 API 卡片和调试检查项。
+- 架构设计任务：先读取 `references/02_core_mental_model/engine_architecture.md`（子系统模型与 §10 决策框架），再按需读取匹配的 workflow、case 与相关 API 卡片。
 - 性能优化任务：读取相关优化 workflow、性能症状 playbook、相关案例，必要时读取 API 卡片。
 - Android Vulkan 生命周期或 Swapchain 问题：读取 Android workflow/playbook/case，以及 Surface、Swapchain、Synchronization 相关 API 卡片。
 - 经验案例或复盘请求：读取 `references/06_cases/case_index.md`，再读取相关案例。
@@ -83,6 +84,8 @@ metadata:
 4. 最小验证步骤，例如 Validation Layer、RenderDoc、AGI、logcat、trace、counter、断言或定向代码检查。
 5. 必要的实现建议、修改点或代码级注意事项。
 6. Verification Gate 验证状态（G1-G6 各标注已验证 / 未验证 / 不适用）。
+
+架构设计任务的回答必须先给决策链（需求 → 约束 → Candidate → Trade-off → Decision），再给实现建议；每个决策必须包含适用边界与重新评估条件。
 
 最终结论（已完成 / 已解决 / 根因已修复 / 性能已优化）给出前，必须按 `references/00_expert_entry/verification_gate.md` 过 G1-G6 关卡。修复类结论必须区分 Workaround（临时绕过）、Minimal Fix（根因修复）和 Structural Fix（结构性修复）。
 

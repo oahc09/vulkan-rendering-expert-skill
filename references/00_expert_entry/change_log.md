@@ -86,6 +86,15 @@
 - `_fix_pb_refs.py` 批量替换留下的 CRLF 行尾统一为 LF，涉及 43 个文件。
 - `git diff --check` 全部干净。
 
+## v1.0.6 — Rendering Engine Architect
+
+- 新增引擎架构心智模型：RHI / Frame Context / Resource Manager / Render Graph / Descriptor Model / Pipeline Manager / Queue Model 七子系统与影响链。
+- 新增架构决策框架：D1-D7 七组 trade-off，六要素结构（适用/不适用/收益/复杂度/性能风险/重新评估条件），不默认新技术。
+- 六个关键 workflow 增加架构决策阶段（需求→约束→Candidate→Trade-off→Decision），Verification Gate 与 Progressive Retrieval 不变。
+- 新增四个架构迁移决策案例：bindless 迁移判断、RenderGraph 引入拐点、资源生命周期拆分、async compute 反噬。
+- 入口与路由接线：SKILL.md、task_classifier、task_routing_rules、README×2。
+- MODULE_SUMMARY（02_core_mental_model 15→16）。文件数 199→200（达 ClawHub 上限）。
+
 ## v1.0.5
 
 ### Intelligent Retrieval：检索循环 + 证据驱动决策树 + 领域补白

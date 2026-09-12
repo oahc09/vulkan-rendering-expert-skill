@@ -121,6 +121,7 @@
 - 多 Pass 依赖是否显式
 - 同步是否可验证
 - 扩展性与风险
+- 先走架构决策链（`../02_core_mental_model/engine_architecture.md` §10 六要素），再进具体 workflow
 
 ---
 

@@ -73,7 +73,7 @@
 使用模块：
 
 1. `00_expert_entry`
-2. `02_core_mental_model`
+2. `02_core_mental_model`（首站 `../02_core_mental_model/engine_architecture.md`）
 3. `05_workflows`（如涉及具体实现）
 4. `06_cases`（如需要参考真实案例）
 5. 必要时引用 `03_api_manual`

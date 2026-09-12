@@ -31,7 +31,7 @@ This is a Vulkan rendering engineering expert skill package. It is not a Vulkan 
 |---|---|
 | `00_expert_entry` | Role, hard rules, task classification, output formats, debugging/performance priorities |
 | `01_source_map_and_api_manual_strategy` | Source tiers, citation rules, API card writing strategy |
-| `02_core_mental_model` | Vulkan object chains, frame lifecycle, resource lifecycle, synchronization model |
+| `02_core_mental_model` | Vulkan object chains, frame lifecycle, resource lifecycle, synchronization model, engine subsystem architecture and architecture decisions |
 | `03_api_manual` | API cards, lifecycle index, error index, and Vulkan API details |
 | `04_debug_playbooks` | Playbooks for black screens, flickering, crashes, Validation Errors, synchronization, and performance |
 | `05_workflows` | Renderer, Pass, Compute, Android integration, resource management, and optimization workflows |
