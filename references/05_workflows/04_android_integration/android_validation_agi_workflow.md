@@ -153,7 +153,7 @@ Android Application
    - 也可使用 System Profiler 连续抓取多帧，分析 frame time 与 counter 趋势 [TOOL]。
 6. **分析 Validation Layer 输出**：
    - `adb logcat -s vulkan` 过滤 `VUID-` 前缀；按 VUID 在 Vulkan-Docs 或 `../../03_api_manual/09_debug_validation/vuid_decode.md` 查找含义 [TOOL]。
-   - 优先修复 `SYNC-HAZARD-*`、`VUID-vkCmdDraw-*-None-02721`（descriptor 未更新）、`VUID-vkCmdPipelineBarrier-oldLayout-01181` [TOOL]。
+   - 优先修复 `SYNC-HAZARD-*`、`VUID-vkCmdDraw-*-None-02721`（pipeline 未绑定到 graphics bind point）、`VUID-VkImageMemoryBarrier-oldLayout-01197` [TOOL]。
 7. **分析 AGI Barrier**：
    - 打开 Frame → Command Tree，定位到可疑 draw / dispatch。
    - 查看 Events / Dependencies 面板，确认 producer/consumer stage 与 access mask [TOOL]。

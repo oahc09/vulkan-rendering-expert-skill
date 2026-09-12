@@ -134,7 +134,7 @@ Input Image (VK_IMAGE_USAGE_SAMPLED_BIT | STORAGE_BIT)
 
 - producer stage / access：根据实际写入方设置，常见为 `VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT` + `VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT`，或 `VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT` + `VK_ACCESS_SHADER_WRITE_BIT` [SPEC]。
 - layout 转换：compute 写入 storage image 时布局必须为 `VK_IMAGE_LAYOUT_GENERAL` [SPEC]；写入完成后 transition 到 `VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL` 供 fragment shader 采样。
-- oldLayout 必须与实际当前布局一致，否则触发 `VUID-vkCmdPipelineBarrier-oldLayout-01181` 类 validation error [TOOL]。
+- oldLayout 必须与实际当前布局一致，否则触发 `VUID-VkImageMemoryBarrier-oldLayout-01197` 类 validation error [TOOL]。
 - subresource range 应精确到单 mip / 单 layer；separable pass 若只处理 mip0，range 只包含 `baseMipLevel=0, levelCount=1` [HEUR]。
 - 同 command buffer 内 producer/consumer 距离很近时，可用 `VkEvent` 替代 pipeline barrier，但 graphics → compute → graphics 链路通常 barrier 足够清晰 [SPEC]。
 
@@ -171,7 +171,7 @@ Input Image (VK_IMAGE_USAGE_SAMPLED_BIT | STORAGE_BIT)
   - 适用条件：blur radius 较大、需要 separable、或需要显式共享 memory / subgroup 优化时，compute 收益更明显 [HEUR]。
 - rotation / resize 触发 swapchain recreate，通常不影响 scene blur image；若 blur 目标与 surface extent 绑定，recreate 时按新 extent 重建 image 与 descriptor [ANDROID]。
 - pause / resume 时，若 compute pass 与 swapchain image 在同一 frame 内提交，需确保 surface destroy 后不再提交含旧 swapchain image 的命令 [ANDROID]。
-- logcat 验证：`adb logcat -s vulkan` 检查 `VUID-vkCmdDispatch-*-None-02721`（image 格式支持）、`VUID-vkCmdPipelineBarrier-oldLayout-01181`（layout 错误）等 [TOOL]。
+- logcat 验证：`adb logcat -s vulkan` 检查 `VUID-vkCmdDispatch-*-None-02721`（pipeline 未绑定到 compute bind point）、`VUID-VkImageMemoryBarrier-oldLayout-01197`（layout 错误）等 [TOOL]。
 
 ---
 

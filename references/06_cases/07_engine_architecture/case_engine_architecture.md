@@ -472,7 +472,7 @@ Fence / semaphore 等待不够。
 
 - `SYNC-HAZARD-READ-AFTER-WRITE`：某个 pass 读取的资源已被后续 write 覆盖。
 - `SYNC-HAZARD-WRITE-AFTER-READ`：写操作发生在读操作完成之前。
-- `VUID-vkCmdPipelineBarrier-oldLayout-01181`：layout transition 的 old layout 与实际不匹配。
+- `VUID-VkImageMemoryBarrier-oldLayout-01197`：layout transition 的 old layout 与实际不匹配。
 - 错误通常指向被 aliasing 复用的 transient image `[SPEC]`。
 
 ### RenderDoc / AGI
@@ -866,7 +866,7 @@ descriptor pool 分配策略不佳，应该换更快的分配器；
 ### Validation Layer
 
 - 传统路径下通常无 error——这本身是关键证据：不是用法错误，是规模问题 `[TOOL]`。
-- bindless 原型阶段关注：`VUID-VkDescriptorPoolCreateInfo-flags-03000`（pool 未设 `VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT`）、`VUID-VkWriteDescriptorSet-dstSet-02747`（update-after-bind 同步违规）`[SPEC]`。
+- bindless 原型阶段关注：`VUID-VkDescriptorSetAllocateInfo-pSetLayouts-03044`（layout 带 UPDATE_AFTER_BIND_POOL_BIT 但 pool 未设 `VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT`）、`VUID-vkUpdateDescriptorSets-None-03047`（更新已绑定且未执行完成的普通 descriptor set）`[SPEC]`。
 
 ### RenderDoc / AGI
 
@@ -918,7 +918,7 @@ Frame CPU budget: 16.6 ms
 ### Structural Fix（结构性 / 防复发修复）
 
 - 完成迁移：全局 bindless set（`PARTIALLY_BOUND | UPDATE_AFTER_BIND`，最后一个 binding 用 `VARIABLE_DESCRIPTOR_COUNT`）`[SPEC]`，shader 端 `nonuniformEXT` 索引 `[SPEC]`，draw 间只 push material index。
-- 迁移成本计入决策记录：pipeline layout 兼容性破坏触发全量 pipeline 重建（预热与 cache 策略见本文档 Pipeline Cache Strategy 案例）；UPDATE_AFTER_BIND 同步纪律（同一 element 在 GPU 访问期间禁止 update `[SPEC]`）；低端机分档回退路径的双维护。
+- 迁移成本计入决策记录：pipeline layout 兼容性破坏触发全量 pipeline 重建（预热与 cache 策略见本文档 Pipeline Cache Strategy 案例）；descriptor 更新同步纪律（未用 UPDATE_AFTER_BIND 的 binding 在 GPU 使用期间禁止 update，bindless 化后该纪律只适用于少量残留普通 set `[SPEC]`）；低端机分档回退路径的双维护。
 - 传统路径保留为不支持 descriptor indexing 设备的 fallback：feature 必须运行期查询，不能假设支持 `[ANDROID]`。
 - 决策写入 ADR 并含重新评估条件：低端机用户占比 >20% 且分档回退维护成本超过 CPU 收益时收窄 bindless 范围；UPDATE_AFTER_BIND hazard 频发时降级为 `UPDATE_UNUSED_WHILE_PENDING` 等弱化策略 `[ENGINE]`。
 
@@ -1057,7 +1057,7 @@ resize 断裂：按资源逐个补重建（修 A 漏 B，按下葫芦浮起瓢�
 ### Validation Layer
 
 - 偶发 `SYNC-HAZARD-WRITE-AFTER-READ` / `SYNC-HAZARD-READ-AFTER-WRITE`：保守 mask 覆盖了多数路径，漏网依赖偶发触发。
-- `VUID-vkCmdPipelineBarrier-oldLayout-01181`：layout 转换与实际状态不匹配（手写维护漂移）`[SPEC]`。
+- `VUID-VkImageMemoryBarrier-oldLayout-01197`：layout 转换的 oldLayout 与实际当前 layout 不匹配（手写维护漂移）`[SPEC]`。
 
 ### RenderDoc / AGI
 

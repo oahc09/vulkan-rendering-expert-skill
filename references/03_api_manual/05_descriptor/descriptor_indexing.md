@@ -217,8 +217,8 @@ VkPhysicalDeviceFeatures2
 - `VUID-VkDescriptorSetLayoutCreateInfo-flags-03000`：binding flag 与 feature bit 对应。
 - `VUID-VkDescriptorSetLayoutBindingFlagsCreateInfo-bindingCount-03004`：bindingCount 与 layout 一致。
 - `VUID-VkDescriptorSetLayoutCreateInfo-pNext-03071`：variable count binding 必须在最后。
-- `VUID-VkDescriptorPoolCreateInfo-flags-03000`：update-after-bind pool flag。
-- `VUID-VkWriteDescriptorSet-dstSet-02747`：update-after-bind 同步。
+- `VUID-VkDescriptorSetAllocateInfo-pSetLayouts-03044`：update-after-bind layout 与 pool flag 不匹配。
+- `VUID-vkUpdateDescriptorSets-None-03047`：已绑定未完成的普通 descriptor set 被更新。
 - `VUID-vkCmdDraw-None-02695`：non-uniform indexing feature 未启用。
 - Pipeline layout compatibility 错误（update-after-bind 与普通 layout 不兼容）。
 
