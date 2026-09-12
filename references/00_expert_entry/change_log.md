@@ -94,6 +94,7 @@
 - 新增四个架构迁移决策案例：bindless 迁移判断、RenderGraph 引入拐点、资源生命周期拆分、async compute 反噬。
 - 入口与路由接线：SKILL.md、task_classifier、task_routing_rules、README×2。
 - MODULE_SUMMARY（02_core_mental_model 15→16）。文件数 199→200（达 ClawHub 上限）。
+- 修正存量内容的 3 个编造 VUID 编号（`VUID-VkDescriptorSetAllocateInfo-pSetLayouts-03044` / `VUID-vkUpdateDescriptorSets-None-03047` / `VUID-VkImageMemoryBarrier-oldLayout-01197`，波及 4 文件 8 处，均经官方规范验证）与 acquire/present semaphore 必须为 binary 的歧义表述。
 
 ## v1.0.5
 

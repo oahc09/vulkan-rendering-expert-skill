@@ -1,6 +1,6 @@
 # Cases: Engine Architecture
 
-> 合并自 4 个原 case 文件。关键词: render-graph, per-frame, swapchain-dependent, pipeline-cache
+> 合并自 4 个原 case 文件，v1.0.6 追加 4 个架构迁移决策案例（共 8 个）。关键词: render-graph, per-frame, swapchain-dependent, pipeline-cache, bindless-migration, render-graph-adoption, lifetime-split, async-compute
 
 ---
 
@@ -1481,6 +1481,7 @@ async compute（迁移后）：
 候选 B：继续优化 async（收窄 transfer 范围、合并批次、减少依赖边）。
 决策：先回退止血（A）；保留代码路径与运行时开关。
       B 的优化项进 backlog，满足重新评估条件再启用。
+迁移成本：回退走运行时开关，近乎零；保留的 async 代码路径与双 queue 分支维护为隐性成本。
 重新评估条件：AGI 显示 graphics 与 compute 互不重叠且合计 >30% frame time，
             且负载隔离度提升（模糊跨帧消费、粒子输入输出独立）后再试。
 ```

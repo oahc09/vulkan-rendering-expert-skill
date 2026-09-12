@@ -542,7 +542,7 @@ attachment 机制见 `render_target_model.md`；本节只做选型。
 | 收益 | tile-based GPU 上多 subpass 显著降低 bandwidth [VENDOR] | 消除 RenderPass / Framebuffer 预创建与缓存管理，与 RG 动态附件契合 |
 | 复杂度 | subpass dependency 声明与兼容性管理；团队需理解 tile 模型 | 低；pass 间同步全部显式（通常交给 RG 推导） |
 | 性能风险 | 桌面 IMR 上 subpass 收益趋零；兼容性误判引发 pipeline 重建 | tile-based GPU 上放弃 subpass → GBuffer 往返主存，bandwidth 上升，中低端 Android 机型需实测 frame time 差异 [ANDROID][VENDOR] |
-| 重新评估条件 | 选 A 后：目标转为桌面为主且 RP / Framebuffer 对象数 >100、维护成本高 → 评估 B | 选 B 后：目标转向 tile-based 为主、引入 deferred on-tile 光照、profile 显示 bandwidth 受限 → 评估 subpass 或 Vulkan 1.4 local read [SPEC] |
+| 重新评估条件 | 选 A 后：目标转为桌面为主且 RP / Framebuffer 对象数 >100、维护成本高 → 评估 B | 选 B 后：目标转向 tile-based 为主、引入 deferred on-tile 光照、profile 显示 bandwidth 受限 → 评估 subpass 或 Vulkan 1.4 local read（1.4 起 core，[SPEC]） |
 
 Vulkan Mapping：A → `VkRenderPass` + `VkFramebuffer` + `VkSubpassDependency`；B → `vkCmdBeginRendering` + pipeline 创建时的 `VkPipelineRenderingCreateInfo`。[SPEC] Verification：RenderDoc / AGI 对比两条路径的 bandwidth 与 frame time；Validation 确认 subpass dependency 正确性。[TOOL]
 
@@ -571,7 +571,7 @@ Vulkan Mapping：A → `VkDescriptorPool` + per-draw `vkCmdBindDescriptorSets`�
 | 不适用条件 | 输出尺寸与几何无关的纯像素并行（fragment 路径 wave 效率低）；需要 scatter 写 | 需要 blend / depth 语义的任务；一次性小任务（同步成本大于收益） |
 | 收益 | 硬件 raster 单元承担裁剪与插值；early-z 免费剔除被遮挡片元 | workgroup 调度 + shared memory 复用片上数据；无 raster 固定开销 |
 | 复杂度 | 低（默认路径） | 跨 pipeline 同步（barrier / layout 切换）显式化 |
-| 性能风险 | 规约 / 卷积类任务塞进 fragment → 2x2 quad 利用率低、无法用 shared memory | dispatch 与 draw 的依赖交织造成 queue 内串行空泡 |
+| 性能风险 | 规约 / 卷积类任务塞进 fragment → 2x2 quad 利用率低、无法用 shared memory | dispatch 与 draw 的依赖交织造成 queue 内串行空泡；tile-based GPU 上 compute 无法访问 tile memory，fragment→compute 迁移可能丢失片上复用、带宽反升 [ANDROID][VENDOR] |
 | 重新评估条件 | 选 A 后：fragment profile 显示 quad 利用率低、shared memory 可优化 → 迁 compute | 选 B 后：dispatch 后 graphics 长空泡 → 归置回 graphics 或评估 D4 |
 
 Vulkan Mapping：A → `vkCmdDraw*` + graphics pipeline；B → `vkCmdDispatch` + compute pipeline（跨管线共享资源的 usage flag 必须覆盖双方）。[SPEC] Verification：AGI 对比两条路径的 GPU 时间与 wave 占用。[TOOL]
@@ -677,7 +677,7 @@ Vulkan Mapping：A → 状态写入 `VkGraphicsPipelineCreateInfo` 各状态结�
 - `render_target_model.md` — Render Target / attachment 模型；D1 的机制基础。
 - `regression_reasoning.md` — 对象级修改传播规则；§9 是其子系统级上层。
 - `android_surface_swapchain_lifecycle.md` — Surface / Swapchain 生命周期机制（§11 引用）。
-- `../06_cases/07_engine_architecture/case_engine_architecture.md` — Frame Context、Pipeline Cache、Render Graph 生命周期、Swapchain-dependent 资源组四个架构案例。
+- `../06_cases/07_engine_architecture/case_engine_architecture.md` — 八个架构案例：Frame Context、Pipeline Cache、Render Graph 生命周期、Swapchain-dependent 资源组（排障型）与 Bindless 迁移、RenderGraph 拐点、生命周期拆分、Async Compute 反噬（迁移决策型）。
 - `../03_api_manual/08_synchronization/timeline_semaphore.md` — Queue Model（§8）的 timeline semaphore API 细节。
 - `../03_api_manual/06_pipeline/pipeline_cache.md` — Pipeline Manager（§7）的 cache API。
 - `../03_api_manual/02_surface_swapchain/swapchain_recreate.md` — 链 1 的 swapchain 重建 API。
