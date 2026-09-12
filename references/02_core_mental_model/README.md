@@ -15,6 +15,7 @@ Pipeline / Descriptor / Shader 绑定关系
 Render Target / Image Layout 关系
 Android Surface / Swapchain 生命周期
 Compute 与 Graphics 的资源交互关系
+引擎子系统架构与架构决策
 ```
 
 ## 核心目标
@@ -42,6 +43,10 @@ compute_graphics_relationship.md         # Compute 与 Graphics 交互关系
 regression_reasoning.md                  # 修改影响面推理（依赖传播规则）
 mental_model_checklist.md                # 回答前检查清单
 common_misconceptions.md                 # 高频误区
+engine_architecture.md                   # 引擎子系统架构与架构决策框架
+modern_patterns.md                       # 现代 Vulkan 工程模式（VMA / Bindless / Timeline / Dynamic State）
+render_graph_resource_lifetime.md        # Render Graph 资源生命周期（虚资源 / aliasing / barrier 推导）
+vulkan_1_4_overview.md                   # Vulkan 1.4 相对 1.3 的工程级差异
 ```
 
 ## 与 API Manual 的边界

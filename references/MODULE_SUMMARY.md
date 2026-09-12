@@ -2,7 +2,7 @@
 
 - `00_expert_entry`: 11 files
 - `01_source_map_and_api_manual_strategy`: 8 files
-- `02_core_mental_model`: 15 files
+- `02_core_mental_model`: 16 files
 - `03_api_manual`: 68 files
 - `04_debug_playbooks`: 22 files
 - `05_workflows`: 45 files
