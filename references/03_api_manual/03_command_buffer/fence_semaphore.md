@@ -6,7 +6,7 @@
 |---|---|
 | 模块 | `03_api_manual` |
 | 分类 | 命令链 / 同步链 |
-| Vulkan 对象 | `VkFence` / `VkSemaphore` / `VkTimelineSemaphore` |
+| Vulkan 对象 | `VkFence` / `VkSemaphore`（binary 或 timeline） |
 | 常用 API | `vkQueueSubmit` / `vkQueuePresentKHR` / `vkWaitForFences` / `vkResetFences` / `vkAcquireNextImageKHR` |
 | 适用平台 | 通用 |
 | 来源等级 | `[SPEC] [TOOL] [ENGINE]` |

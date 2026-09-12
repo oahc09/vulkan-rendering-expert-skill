@@ -407,7 +407,7 @@ pipeline 变体增长（状态维度 × 组合数）
 ```text
 VkQueue（graphics / compute / transfer 句柄与 family 选择）
 提交批次（VkSubmitInfo2 组织）
-VkTimelineSemaphore（跨 queue / 跨帧进度追踪）
+VkSemaphore（timeline 类型，跨 queue / 跨帧进度追踪）
 acquire / present semaphore（与 surface 模块的交界）
 ```
 [SPEC]
@@ -538,11 +538,13 @@ attachment 机制见 `render_target_model.md`；本节只做选型。
 | 六要素 | A：传统 RenderPass（subpass） | B：Dynamic Rendering |
 |---|---|---|
 | 适用条件 | 需要 subpass 在 tile memory 内完成 GBuffer → 光照；tile-based 移动 GPU 占比高；需兼容 Vulkan 1.2 以下 | Vulkan 1.3+；pass 间无 subpass 依赖；附件组合逐帧动态变化 |
-| 不适用条件 | 附件组合高度动态（VkRenderPass / VkFramebuffer 数量随组合爆炸，>100 组合即难管理） | 需要 on-tile 多 subpass 复用且设备低于 Vulkan 1.4（无 local read） |
+| 不适用条件 | 附件组合高度动态（VkRenderPass / VkFramebuffer 数量随组合爆炸，>100 组合即难管理） | 需要 on-tile 附件复用，但设备不支持所需 dynamic rendering local read 功能或附件类型；不能仅凭版本低于 Vulkan 1.4 排除扩展路径 |
 | 收益 | tile-based GPU 上多 subpass 显著降低 bandwidth [VENDOR] | 消除 RenderPass / Framebuffer 预创建与缓存管理，与 RG 动态附件契合 |
 | 复杂度 | subpass dependency 声明与兼容性管理；团队需理解 tile 模型 | 低；pass 间同步全部显式（通常交给 RG 推导） |
 | 性能风险 | 桌面 IMR 上 subpass 收益趋零；兼容性误判引发 pipeline 重建 | tile-based GPU 上放弃 subpass → GBuffer 往返主存，bandwidth 上升，中低端 Android 机型需实测 frame time 差异 [ANDROID][VENDOR] |
-| 重新评估条件 | 选 A 后：目标转为桌面为主且 RP / Framebuffer 对象数 >100、维护成本高 → 评估 B | 选 B 后：目标转向 tile-based 为主、引入 deferred on-tile 光照、profile 显示 bandwidth 受限 → 评估 subpass 或 Vulkan 1.4 local read（1.4 起 core，[SPEC]） |
+| 重新评估条件 | 选 A 后：目标转为桌面为主且 RP / Framebuffer 对象数 >100、维护成本高 → 评估 B | 选 B 后：目标转向 tile-based 为主、引入 deferred on-tile 光照、profile 显示 bandwidth 受限 → 评估 subpass 或 dynamic rendering local read（Vulkan 1.4 核心或 `VK_KHR_dynamic_rendering_local_read` 扩展路径，[SPEC]） |
+
+Local read 能力检查：低于 Vulkan 1.4 时，查询并启用 `VK_KHR_dynamic_rendering_local_read`，满足其依赖（`VK_KHR_dynamic_rendering` 或 Vulkan 1.3），并查询、启用 `dynamicRenderingLocalRead` feature。Vulkan 1.4 核心仅保证 storage resources 与单采样颜色附件的 local read；深度/模板和多采样附件分别核对 `dynamicRenderingLocalReadDepthStencilAttachments`、`dynamicRenderingLocalReadMultisampledAttachments` 属性。功能可用不等于保证 on-tile 性能收益，仍需目标设备实测。[SPEC][VENDOR] 依据：[扩展与核心化边界](https://docs.vulkan.org/refpages/latest/refpages/source/VK_KHR_dynamic_rendering_local_read.html)。
 
 Vulkan Mapping：A → `VkRenderPass` + `VkFramebuffer` + `VkSubpassDependency`；B → `vkCmdBeginRendering` + pipeline 创建时的 `VkPipelineRenderingCreateInfo`。[SPEC] Verification：RenderDoc / AGI 对比两条路径的 bandwidth 与 frame time；Validation 确认 subpass dependency 正确性。[TOOL]
 
@@ -587,7 +589,7 @@ Vulkan Mapping：A → `vkCmdDraw*` + graphics pipeline；B → `vkCmdDispatch` 
 | 性能风险 | graphics 与 compute 串行叠加，frame time 上限固定 | semaphore 等待链变长；queue 间争抢共享执行单元（移动端常见）[VENDOR]；timeline 空泡 |
 | 重新评估条件 | 选 A 后：AGI 显示 graphics 与 compute 互不重叠且合计 >30% frame time → 评估 B | 选 B 后：frame time 反升 / GPU timeline 出现同步空泡 → 回退单 queue（保留代码路径，先关开关） |
 
-Vulkan Mapping：A → 单 `VkQueue` + queue 内 barrier；B → 独立 compute `VkQueue` + `VkTimelineSemaphore`（value 单调递增）。[SPEC] Verification：AGI GPU timeline 对比 overlap 面积与空泡；frame time 前后对比。[TOOL]
+Vulkan Mapping：A → 单 `VkQueue` + queue 内 barrier；B → 独立 compute `VkQueue` + timeline 类型的 `VkSemaphore`（signal value 单调递增）。查询并启用 `timelineSemaphore` feature，在 `VkSemaphoreCreateInfo.pNext` 链接 `VkSemaphoreTypeCreateInfo`，指定 `semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE`。[SPEC] 依据：[VkSemaphoreTypeCreateInfo](https://docs.vulkan.org/refpages/latest/refpages/source/VkSemaphoreTypeCreateInfo.html)。Verification：AGI GPU timeline 对比 overlap 面积与空泡；frame time 前后对比。[TOOL]
 
 ### 10.7 D5：Manual Resource Lifetime vs RenderGraph-managed
 

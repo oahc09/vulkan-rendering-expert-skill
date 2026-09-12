@@ -31,7 +31,7 @@
 
 ### 新增硬规则（hard_rules.md #12-#15）
 
-- **#12 Vertex Attribute 字节宽度匹配**：`format` 字节宽度 == host struct `sizeof`，违反触发 VUID-04515。[SPEC]
+- **#12 Vertex Attribute 布局校验**：核对 format / offset / stride 与实际数据布局；原有等宽要求及错误 VUID 引用已在 v1.0.6 审查修订中纠正。[SPEC][ENGINE]
 - **#13 相机参数基于模型 bbox**：`target/distance/farP` 必须基于 AABB 计算，禁止硬编码。[ENGINE]
 - **#14 PBR 光源按尺度缩放**：`1/d²` 衰减下 `intensity = targetRadiance × distance²`。[ENGINE][HEUR]
 - **#15 Vulkan 销毁幂等**：handle 置空 + `vkDeviceWaitIdle` 可重复 + `vkDestroy*` 容忍 NULL_HANDLE。[SPEC]
@@ -87,6 +87,16 @@
 - `git diff --check` 全部干净。
 
 ## v1.0.6 — Rendering Engine Architect
+
+### 审查修订（2026-09-12）
+
+- `metadata.keywords` 改为字符串，符合 Agent Skills 的 metadata 类型约束。
+- 顶点属性规则按实际布局校验，补充 padding 反例与可追溯的格式支持、portability subset VUID。
+- 架构模型与 Fence/Semaphore API 卡统一使用 timeline 类型的 `VkSemaphore`，补充 feature 与创建链。
+- Dynamic Rendering 决策补充 local read 扩展路径、Vulkan 1.4 附件支持边界与官方来源。
+- 澄清流程先检查已有证据，仅对影响路由或结论的剩余缺口提问；入口与输出模板同步，日志条件限定故障诊断。
+
+### 架构能力与文件整理
 
 - 新增引擎架构心智模型：RHI / Frame Context / Resource Manager / Render Graph / Descriptor Model / Pipeline Manager / Queue Model 七子系统与影响链。
 - 新增架构决策框架：D1-D7 七组 trade-off，六要素结构（适用/不适用/收益/复杂度/性能风险/重新评估条件），不默认新技术。

@@ -6,17 +6,7 @@ metadata:
   author: Vulkan 渲染专家技能贡献者
   version: 1.0.6
   last-updated: '2026-09-12'
-  keywords:
-    - vulkan
-    - rendering
-    - android
-    - graphics-engine
-    - debugging
-    - performance
-    - synchronization
-    - descriptor
-    - pipeline
-    - swapchain
+  keywords: vulkan, rendering, android, graphics-engine, debugging, performance, synchronization, descriptor, pipeline, swapchain
 ---
 
 # Vulkan 渲染专家
@@ -65,7 +55,7 @@ metadata:
 
 修改类任务（实现、修复、优化）在给出方案前，读取 `references/02_core_mental_model/regression_reasoning.md` 推导修改影响面；回归验证范围参照 `references/07_integration_pack/regression_checklist.md`。
 
-复杂、跨类型或信息不足的任务，按 `references/00_expert_entry/progressive_retrieval.md` 先执行检索循环：跨类型任务先查询分解再逐子问题路由；信息不足时先给最小提问清单（不超过 3 项）再路由；回答前对每个子问题标注置信度，低置信子问题必须二轮定向补载。
+复杂、跨类型或信息不足的任务，按 `references/00_expert_entry/progressive_retrieval.md` 先执行检索循环：跨类型任务先查询分解再逐子问题路由；先检查已有上下文和相关项目证据，仅对影响路由或结论的剩余信息缺口提出最小提问清单（不超过 3 项），其余子问题继续处理；回答前对每个子问题标注置信度，低置信子问题必须二轮定向补载。
 
 ## 回答规则
 

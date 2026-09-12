@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skill Checker Report</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5efe4;
+      --panel: #fffdf8;
+      --ink: #1f1a14;
+      --muted: #6e6458;
+      --border: #d6c9b7;
+      --accent: #1f6f78;
+      --accent-soft: #d7ece8;
+      --success: #217346;
+      --success-soft: #dcf4e4;
+      --danger: #a13232;
+      --danger-soft: #f8dddd;
+      --pill-neutral-bg: #efe6d8;
+      --pill-neutral-text: #5f5347;
+      --warn: #8c5f12;
+      --warn-soft: #fdecc8;
+      --shadow: 0 18px 40px rgba(31, 26, 20, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(31, 111, 120, 0.18), transparent 28%),
+        linear-gradient(180deg, #fcf8ef 0%, var(--bg) 100%);
+      color: var(--ink);
+    }
+    .shell {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 40px 20px 72px;
+    }
+    .hero, .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+    }
+    .hero {
+      padding: 28px;
+      margin-bottom: 24px;
+      position: relative;
+    }
+    .lang-switch {
+      position: absolute;
+      top: 18px;
+      right: 18px;
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: #fff8ec;
+      overflow: hidden;
+    }
+    .lang-switch button {
+      border: 0;
+      background: transparent;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      color: var(--muted);
+    }
+    .lang-switch button.active {
+      background: var(--accent);
+      color: #ffffff;
+    }
+    .lang {
+      display: none;
+    }
+    html[data-lang="en"] .lang-en {
+      display: inline;
+    }
+    html[data-lang="zh"] .lang-zh {
+      display: inline;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+      line-height: 1.15;
+    }
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 16px;
+    }
+    .status-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-weight: 700;
+      background: var(--pill-neutral-bg);
+      color: var(--pill-neutral-text);
+    }
+    .status-pill.pass {
+      background: var(--success-soft);
+      color: var(--success);
+    }
+    .status-pill.fail {
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+    }
+    .panel {
+      padding: 24px;
+    }
+    .panel h2 {
+      margin: 0 0 16px;
+      font-size: 20px;
+    }
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+    li + li {
+      margin-top: 10px;
+    }
+    .finding {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px;
+      background: #fffaf1;
+    }
+    .finding + .finding {
+      margin-top: 16px;
+    }
+    .finding-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .badge.severe {
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+    .badge.warning {
+      background: var(--warn-soft);
+      color: var(--warn);
+    }
+    code {
+      background: #f3ebe0;
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-family: "Cascadia Code", "Consolas", monospace;
+    }
+    .empty {
+      color: var(--muted);
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <main class="shell"><section class="panel" style="margin-top:24px"><h2>人工复核 · v1.0.6 · d781075</h2><p>结论：建议修正后再发布。人工确认 5 项独立问题（P1 × 1，P2 × 4）。此计数与扫描器严重项计数分别统计。</p><p>范围：当前本地 HEAD；审查前工作区干净，198 个跟踪文件。检查入口、路由、验证门、最近三次提交差异及架构决策内容，按需核对官方规范。未查询远端发布版本，未运行目标内容或 Vulkan 工程；不是全库技术正确性证明。</p><p>自动结果：不通过，严重项 2、一般项 0；安全处置 review。扫描 150 文件 / 1,574,448 字节，跳过 125 项，覆盖不完整。扫描器没有报告具体恶意行为，但不能据此认定整个技能安全。</p><article class="finding"><h3>P1 · 顶点属性硬规则错误且 VUID 不匹配</h3><p><code>references/00_expert_entry/hard_rules.md:21</code></p><p>format 的字节宽度不要求等于 C++ 成员 sizeof。例如含 padding 的 16 字节成员可用 R32G32B32_SFLOAT 读取前三个 float，只需 offset、stride、数据布局及格式支持等约束满足要求。把 sizeof 相等写成强制规范会误判合法布局，并诱导错误修改。所引 VUID-VkVertexInputAttributeDescription-format-04515 不在该结构的有效用法中。建议按实际字节布局校验，并使用对应的真实 VUID；同步修正 changelog 中的复述。</p><p><a href="https://docs.vulkan.org/refpages/latest/refpages/source/VkVertexInputAttributeDescription.html">官方依据</a></p></article><article class="finding"><h3>P2 · 架构映射使用不存在的 Vulkan 类型</h3><p><code>references/02_core_mental_model/engine_architecture.md:410,590</code></p><p>VkTimelineSemaphore 不是 Vulkan API handle 类型。应使用 VkSemaphore，并在创建时通过 VkSemaphoreTypeCreateInfo 指定 VK_SEMAPHORE_TYPE_TIMELINE，查询和启用 timelineSemaphore feature。当前标注为 SPEC 的映射可能生成无法编译的代码。</p><p><a href="https://docs.vulkan.org/refpages/latest/refpages/source/VkSemaphoreTypeCreateInfo.html">官方依据</a></p></article><article class="finding"><h3>P2 · Local read 的版本门槛排除了合法扩展路径</h3><p><code>references/02_core_mental_model/engine_architecture.md:541</code></p><p>低于 Vulkan 1.4 不等于没有 local read。VK_KHR_dynamic_rendering_local_read 可在满足其依赖并支持相关 feature 的设备上使用。建议依据核心版本或扩展、feature 及附件需求判断，避免将支持该扩展的 Vulkan 1.3 设备错误排除。1.4 对深度/模板和多采样附件还需查询相应属性。</p><p><a href="https://docs.vulkan.org/refpages/latest/refpages/source/VK_KHR_dynamic_rendering_local_read.html">官方依据</a></p></article><article class="finding"><h3>P2 · metadata.keywords 类型违反 Agent Skills 规范</h3><p><code>SKILL.md:9-19</code></p><p>metadata 要求 string-to-string mapping，而 keywords 是 YAML 列表。建议改为逗号分隔字符串。这里是合法 YAML 的 schema 不兼容，不是 YAML 语法损坏。自动报告的两个严重项来自同一个解析阻断，不能视为两个独立缺陷；其后续字段和语义检查没有完成。</p><p><a href="https://agentskills.io/specification">官方依据</a></p></article><article class="finding"><h3>P2 · 澄清触发条件会阻塞无需日志的任务</h3><p><code>references/00_expert_entry/progressive_retrieval.md:28-32</code></p><p>R2 规定缺平台或缺日志任一满足即先问再查。复杂架构设计即使需求和约束完整，通常也没有 Validation message；这会产生与路由无关的提问，并与后文“不问与路由无关的问题”冲突。建议仅在缺失信息实际改变路由或结论时触发，日志条件限定故障诊断，并先检查用户已提供的项目证据。</p></article><p>交付：仅新增本 HTML 报告，未修改技能、暂存或提交。检查器原始结果保留在本报告下方。复核日期：2026-09-12。</p></section>
+    <section class="hero">
+      <div class="lang-switch" aria-label="Language switch">
+        <button id="btn-en" class="active" type="button">EN</button>
+        <button id="btn-zh" type="button">中文</button>
+      </div>
+      <h1><span class="lang lang-en">Skill Checker Report</span><span class="lang lang-zh">Skill Checker 报告</span></h1>
+      <p>
+        <span class="lang lang-en">Static specification and semantic checks for a target `SKILL.md` based on Agent Skills specification.</span>
+        <span class="lang lang-zh">根据 Agent Skills specification 对目标 `SKILL.md` 进行静态规范与语义质量检查。</span>
+      </p>
+      <div class="status-row">
+        <div class="status-pill fail">
+          <span class="lang lang-en">Fail</span>
+          <span class="lang lang-zh">不通过</span>
+        </div>
+        <div class="status-pill">
+          <span class="lang lang-en">Severe 2</span>
+          <span class="lang lang-zh">严重问题 2</span>
+        </div>
+        <div class="status-pill">
+          <span class="lang lang-en">Warnings 0</span>
+          <span class="lang lang-zh">一般问题 0</span>
+        </div>
+      </div>
+    </section>
+    <section class="grid">
+      <section class="panel">
+        <h2><span class="lang lang-en">Summary</span><span class="lang lang-zh">摘要</span></h2>
+        <ul><li><strong><span class='lang lang-en'>Target Path:</span><span class='lang lang-zh'>目标路径:</span></strong> <span class='lang lang-en'>E:\AIProMax\vulkan-rendering-expert-skill</span><span class='lang lang-zh'>E:\AIProMax\vulkan-rendering-expert-skill</span></li><li><strong><span class='lang lang-en'>Resolved From:</span><span class='lang lang-zh'>解析来源:</span></strong> <span class='lang lang-en'>Directory</span><span class='lang lang-zh'>目录</span></li><li><strong><span class='lang lang-en'>Checked File:</span><span class='lang lang-zh'>检查文件:</span></strong> <span class='lang lang-en'>E:\AIProMax\vulkan-rendering-expert-skill\SKILL.md</span><span class='lang lang-zh'>E:\AIProMax\vulkan-rendering-expert-skill\SKILL.md</span></li><li><strong><span class='lang lang-en'>Checked At:</span><span class='lang lang-zh'>检查时间:</span></strong> <span class='lang lang-en'>2026-09-12T11:56:27+08:00</span><span class='lang lang-zh'>2026-09-12T11:56:27+08:00</span></li><li><strong><span class='lang lang-en'>Final Result:</span><span class='lang lang-zh'>最终结论:</span></strong> <span class='lang lang-en'>Fail</span><span class='lang lang-zh'>不通过</span></li><li><strong><span class='lang lang-en'>Severe Findings:</span><span class='lang lang-zh'>严重问题:</span></strong> <span class='lang lang-en'>2</span><span class='lang lang-zh'>2</span></li><li><strong><span class='lang lang-en'>Warnings:</span><span class='lang lang-zh'>一般问题:</span></strong> <span class='lang lang-en'>0</span><span class='lang lang-zh'>0</span></li><li><strong><span class='lang lang-en'>Security Decision:</span><span class='lang lang-zh'>安全处置:</span></strong> <span class='lang lang-en'>review</span><span class='lang lang-zh'>review</span></li><li><strong><span class='lang lang-en'>Security Coverage:</span><span class='lang lang-zh'>安全扫描覆盖:</span></strong> <span class='lang lang-en'>150 files / 1574448 bytes</span><span class='lang lang-zh'>150 个文件 / 1574448 字节</span></li></ul>
+      </section>
+      <section class="panel">
+        <h2><span class="lang lang-en">Fix Priority</span><span class="lang lang-zh">修复优先级</span></h2>
+        <ul>
+          <li><span class="lang lang-en">Fix all severe findings before warnings.</span><span class="lang lang-zh">先处理所有严重问题，再处理一般问题。</span></li>
+          <li><span class="lang lang-en">The audit fails when severe findings reach 2 or more.</span><span class="lang lang-zh">若严重问题达到 2 个及以上，本次检查结论为不通过。</span></li>
+          <li><span class="lang lang-en">Prioritize `name`, `description`, frontmatter structure, and executable body guidance.</span><span class="lang lang-zh">重点关注 `name`、`description`、frontmatter 结构和正文可执行性。</span></li>
+        </ul>
+      </section>
+    </section>
+    <section class="panel" style="margin-top: 24px;">
+      <h2><span class="lang lang-en">Findings</span><span class="lang lang-zh">发现的问题</span></h2>
+      <article class='finding'><div class='finding-head'><span class='badge severe'><span class='lang lang-en'>severe</span><span class='lang lang-zh'>严重</span></span><code>spec.frontmatter-invalid</code></div><h3><span class='lang lang-en'>The frontmatter has structural YAML errors and cannot be parsed reliably.</span><span class='lang lang-zh'>frontmatter 存在 YAML 结构问题，无法可靠解析。</span></h3><p><strong><span class='lang lang-en'>Evidence:</span><span class='lang lang-zh'>证据:</span></strong> metadata 子字段 `keywords` 不能为空。</p><p><strong><span class='lang lang-en'>Suggestion:</span><span class='lang lang-zh'>建议:</span></strong> <span class='lang lang-en'>Fix indentation, duplicate keys, nested formats, and field syntax.</span><span class='lang lang-zh'>检查缩进、重复字段、嵌套格式和字段写法，确保 frontmatter 是简单合法的 YAML。</span></p></article><article class='finding'><div class='finding-head'><span class='badge severe'><span class='lang lang-en'>severe</span><span class='lang lang-zh'>严重</span></span><code>input.audit-blocked</code></div><h3><span class='lang lang-en'>The audit is blocked and marked as fail due to an input or parsing issue.</span><span class='lang lang-zh'>无法继续执行字段级检查，本次检查直接判定为不通过。</span></h3><p><strong><span class='lang lang-en'>Evidence:</span><span class='lang lang-zh'>证据:</span></strong> name: vulkan-rendering-expert-skill
+description: Vulkan 渲染工程专家技能。用于 Vulkan API 设计、实现、调试、优化、Validation Error 处理、Android Vulkan 集成、Swapchain/同步/Image Layout/资源生命周期问题、图形引擎架构、Render Pass、Pipeline、Descriptor、Command Buffer、Compute 工作流、引擎子系统架构设计、架构决策和性能分析。
+license: MIT
+metadata:
+  author: Vulkan 渲染专家技能贡献者
+  version: 1.0.6
+  last-updated: &#x27;2026-09-12&#x27;
+  keywords:
+    - vulkan
+    - rendering
+    - android
+    - graphics-engine
+    - debugging
+    - performance
+    - synchronization
+    - descriptor
+    - pipeline
+    - swapchain</p><p><strong><span class='lang lang-en'>Suggestion:</span><span class='lang lang-zh'>建议:</span></strong> <span class='lang lang-en'>Fix the blocking issue and run the check again.</span><span class='lang lang-zh'>修复 frontmatter 结构后重新运行检查。</span></p></article>
+    </section>
+    <section class="panel" style="margin-top: 24px;">
+      <h2><span class="lang lang-en">Security Findings</span><span class="lang lang-zh">安全发现</span></h2>
+      <p><strong><span class="lang lang-en">Decision:</span><span class="lang lang-zh">处置:</span></strong> review</p>
+      <p><strong><span class="lang lang-en">Coverage:</span><span class="lang lang-zh">覆盖:</span></strong> selected=150, skipped=125, bytes=1574448, incomplete=true</p>
+      <article class='finding'><div class='finding-head'><span class='badge warning'>low</span><code>scan.incomplete</code></div><p><strong><span class='lang lang-en'>Evidence:</span><span class='lang lang-zh'>证据:</span></strong> <code>.</code> selected=150, skipped=125</p><p><strong><span class='lang lang-en'>Recommendation:</span><span class='lang lang-zh'>处置建议:</span></strong> Review skipped-file reasons or rerun with an explicitly approved larger scan budget.</p></article>
+      <p class="empty" style="margin-top: 16px;"><span class="lang lang-en">Static scanning is bounded and cannot prove a Skill is safe.</span><span class="lang lang-zh">静态扫描受范围与预算限制，不能证明 Skill 绝对安全。</span></p>
+    </section>
+  </main>
+  <script>
+    function setLang(lang) {
+      document.documentElement.setAttribute("data-lang", lang);
+      const en = document.getElementById("btn-en");
+      const zh = document.getElementById("btn-zh");
+      en.classList.toggle("active", lang === "en");
+      zh.classList.toggle("active", lang === "zh");
+    }
+    document.getElementById("btn-en").addEventListener("click", function () { setLang("en"); });
+    document.getElementById("btn-zh").addEventListener("click", function () { setLang("zh"); });
+    setLang("en");
+  </script>
+</body>
+</html>
