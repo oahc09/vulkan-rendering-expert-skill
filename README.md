@@ -1,5 +1,7 @@
 # Vulkan 渲染专家技能
 
+[English](README_EN.md) | 中文
+
 ![Vulkan 渲染专家技能介绍图](assets/vulkan-rendering-expert-banner.png)
 
 这是一个 Vulkan 渲染工程专家技能包。它不是 Vulkan 入门教程，而是为真实渲染工程任务准备的运行时知识库：用于在处理 Vulkan 设计、实现、调试、优化和验证问题时，按工程链路组织判断、引用规则、API 细节、调试路径和回归验证。

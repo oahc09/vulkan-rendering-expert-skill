@@ -10,3 +10,6 @@ tests/
 # 会话执行脚手架与本地里程碑笔记，不跟踪
 .superpowers/
 milestones/
+
+# 设计/实施计划等过程文档，本地保留不跟踪
+docs/
