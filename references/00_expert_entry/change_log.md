@@ -95,6 +95,7 @@
 - 入口与路由接线：SKILL.md、task_classifier、task_routing_rules、README×2。
 - MODULE_SUMMARY（02_core_mental_model 15→16）。文件数 199→200（达 ClawHub 上限）。
 - 修正存量内容的 3 个编造 VUID 编号（`VUID-VkDescriptorSetAllocateInfo-pSetLayouts-03044` / `VUID-vkUpdateDescriptorSets-None-03047` / `VUID-VkImageMemoryBarrier-oldLayout-01197`，波及 4 文件 8 处，均经官方规范验证）与 acquire/present semaphore 必须为 binary 的歧义表述。
+- 文件数量优化：`07_integration_pack` 的 maintenance_plan / release_checklist / token_budget_policy（三者均为零引用孤儿文件）合并为 `07_integration_pack/maintenance_release_token_policy.md`，git 跟踪文件 200 → 198，恢复 ClawHub ≤200 限额余量。
 
 ## v1.0.5
 

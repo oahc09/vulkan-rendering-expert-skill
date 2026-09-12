@@ -7,4 +7,4 @@
 - `04_debug_playbooks`: 22 files
 - `05_workflows`: 45 files
 - `06_cases`: 11 files
-- `07_integration_pack`: 9 files
+- `07_integration_pack`: 7 files
