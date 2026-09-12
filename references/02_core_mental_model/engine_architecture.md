@@ -122,7 +122,7 @@ feature / 扩展协商结果变化
 按 frame-in-flight 索引成套持有：
   VkCommandBuffer（及其 VkCommandPool）
   VkFence（本索引 in-flight 完成信号）
-  acquire / present VkSemaphore（或 timeline value 段）
+  acquire / present VkSemaphore（必须是 binary；timeline 只用于 submit 间同步）
   UBO ring buffer 的本索引 offset
   per-frame descriptor set（或 bindless 写入区）
 ```
