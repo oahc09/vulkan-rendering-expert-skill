@@ -58,7 +58,7 @@
 
 | 合并文件 | 包含 case 数 | 典型现象关键词 |
 |---|---|---|
-| `07_engine_architecture/case_engine_architecture.md` | 4 | render-graph, per-frame, swapchain-dependent, pipeline-cache |
+| `07_engine_architecture/case_engine_architecture.md` | 8 | render-graph, per-frame, swapchain-dependent, pipeline-cache, bindless-migration, render-graph-adoption, lifetime-split, async-compute |
 
 ---
 

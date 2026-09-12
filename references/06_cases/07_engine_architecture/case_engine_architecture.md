@@ -799,3 +799,782 @@ Swapchain extent 变化
 
 
 ---
+
+## Case: Bindless Migration Judgment
+
+### 0. Metadata
+
+| 字段 | 内容 |
+|---|---|
+| 模块 | `06_cases` |
+| 类型 | 架构 / 迁移决策 / Descriptor / Bindless |
+| 平台 | 通用 / Android |
+| 严重程度 | P1 |
+| 来源等级 | `[CASE] [ENGINE]` |
+| 关联模块 | API Manual / Debug Playbook / Workflow |
+
+---
+
+### 1. 现象
+
+- CPU profile 中 `vkUpdateDescriptorSets` / `vkCmdBindDescriptorSets` / set 分配合计占帧预算 >15%（如 16.6 ms 预算中占 2.5 ms 以上），且随内容规模线性增长。
+- 每帧 bind 次数与 draw 数 1:1 增长（如可见物体 >1000 时每帧 bind >1000 次），局部优化无法收敛。
+- 贴图规模从项目初期的 <50 张增长到数百张并持续增长，材质系统 per-draw 更新代码同步膨胀。
+- 设备分布统计：目标设备 `shaderSampledImageArrayNonUniformIndexing` 等 descriptor indexing feature 的覆盖率需要确认——这是决策输入，不是故障信号。
+- GPU 大部分时间空转等待 CPU 提交：瓶颈在 CPU 侧绑定模型，不在 GPU。
+
+---
+
+### 2. 初始上下文
+
+- 原架构：传统 per-draw descriptor set 模型——每个可见物体每帧分配并更新一个 set，`vkCmdBindDescriptorSets` 逐 draw 绑定。
+- descriptor pool 全局共享，layout 按材质类型固定；UBO 用 ring buffer + dynamic offset，贴图按材质逐绑定。
+- 项目从 demo 演进：draw 数从 ~200 增长到 ~1500，贴图从 <50 增长到 ~600。
+- 设备目标：桌面 Vulkan 1.3 为主 + Android 中高端机型（Vulkan 1.2+ 占比待统计）。
+- 团队 5 人，其中 2 人负责渲染核心。
+
+---
+
+### 3. 初始误判
+
+最初把规模问题当 API bug 排查：
+
+```text
+vkUpdateDescriptorSets 在某驱动版本上特别慢，是驱动 bug；
+descriptor pool 分配策略不佳，应该换更快的分配器；
+改用 vkUpdateDescriptorSetWithTemplate 就能解决；
+某几个材质的 descriptor 写入过多，逐个优化即可。
+```
+
+按上述方向逐项优化后（模板更新、pool 预分配、set 复用），占比从 18% 降到 13%，但下个版本内容增加后又回到 15% 以上。最终确认：单次 API 调用没有错误（Validation 全绿），问题是绑定模型本身与规模不匹配——架构问题被当成 API 性能 bug 修了一轮 `[ENGINE]`。机制层面的 CPU 开销诊断见 `../06_performance/case_performance.md` 的 Descriptor Update CPU Overhead 案例。
+
+---
+
+### 4. 排查路径
+
+1. 用 CPU profiler（Tracy / Perfetto / Android Studio）量化 `vkUpdateDescriptorSets` + `vkCmdBindDescriptorSets` + `vkAllocateDescriptorSets` 的合计占比。
+2. 用 RenderDoc 统计一帧内 set 更新次数与 bind 次数，确认与 draw 数的比例关系。
+3. 统计贴图规模与 draw 数的历史增长曲线，判断是持续增长还是一次性峰值。
+4. 统计目标设备 `VkPhysicalDeviceDescriptorIndexingFeatures`（`shaderSampledImageArrayNonUniformIndexing` / `descriptorBindingPartiallyBound` / `descriptorBindingUpdateAfterBind`）的覆盖率 `[SPEC]`。
+5. 按 `../../02_core_mental_model/engine_architecture.md` §10 D2 的六要素完成候选对比（保持传统 + 局部优化 vs 迁移 bindless）。
+6. 决策前在 1-2 个典型场景做 bindless 原型，实测 CPU 收益与低端机风险。
+
+---
+
+### 5. 关键证据
+
+### Validation Layer
+
+- 传统路径下通常无 error——这本身是关键证据：不是用法错误，是规模问题 `[TOOL]`。
+- bindless 原型阶段关注：`VUID-VkDescriptorPoolCreateInfo-flags-03000`（pool 未设 `VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT`）、`VUID-VkWriteDescriptorSet-dstSet-02747`（update-after-bind 同步违规）`[SPEC]`。
+
+### RenderDoc / AGI
+
+- RenderDoc：单帧 1500+ 次 `vkUpdateDescriptorSets`，几乎每个 draw 绑定不同 set handle。
+- RenderDoc：bindless 原型对比——单帧 set 更新从 1500+ 次降到 <20 次（只在资源加载时更新对应 slot）。
+- AGI：GPU 长时间空转等待 CPU 提交，descriptor 更新链是主线程热点。
+- 关键 resource：per-object descriptor set、全局 `VkDescriptorPool`、材质贴图清单。
+
+### Log / Code
+
+- 迁移前 CPU profiler 输出：
+
+```text
+Frame CPU budget: 16.6 ms
+  └─ descriptor update + bind + alloc: 2.6 ms (15.6%)
+  └─ command buffer record:           3.1 ms
+  └─ culling / animation:              2.8 ms
+```
+
+- 设备覆盖率统计示例：目标机型中 Vulkan 1.2+ 且所需 feature bit 全部可用占比 96%，其余 4% 低端机需走传统回退 `[ENGINE]`。
+- 决策记录（六要素摘要）：
+
+```text
+信号：descriptor 更新链占比 >15% 且随内容线性增长；贴图 ~600 且持续增长。
+候选 A：保持传统模型 + 局部优化（复用 / template / 贴图 array 化）。
+候选 B：迁移 bindless（大数组 + push material index）。
+决策：覆盖率 96% + 贴图规模持续增长 → 迁移，但保留传统回退路径。
+迁移成本：layout 全量重建 → pipeline 全量重建（engine_architecture.md §9 链 2）
+        + 材质参数编码改造 + UPDATE_AFTER_BIND 同步纪律 + 双路径维护。
+```
+
+---
+
+### 6. 根因
+
+根因：传统 per-draw 绑定模型的 CPU 开销随 draw 数 × 材质数线性增长，当贴图规模数百、draw 数 >1000 时更新成本超过帧预算 15%——模型被用在其设计规模之外，是架构与规模不匹配，不是 API 使用错误 `[ENGINE]`。
+
+---
+
+### 7. 修复方案
+
+### Minimal Fix（针对根因的最小修复）
+
+- set 按材质预分配复用，禁止每帧重新 allocate。
+- `vkUpdateDescriptorSetWithTemplate` + `pDynamicOffsets` 降低单次更新成本。
+- 贴图按材质簇合并为 texture array，减少 per-draw 贴图切换。
+- 目标：占比压回 10% 以下，为迁移评估争取时间；若最终决策是"不迁移"，这套修复就是终态方案。
+
+### Structural Fix（结构性 / 防复发修复）
+
+- 完成迁移：全局 bindless set（`PARTIALLY_BOUND | UPDATE_AFTER_BIND`，最后一个 binding 用 `VARIABLE_DESCRIPTOR_COUNT`）`[SPEC]`，shader 端 `nonuniformEXT` 索引 `[SPEC]`，draw 间只 push material index。
+- 迁移成本计入决策记录：pipeline layout 兼容性破坏触发全量 pipeline 重建（预热与 cache 策略见本文档 Pipeline Cache Strategy 案例）；UPDATE_AFTER_BIND 同步纪律（同一 element 在 GPU 访问期间禁止 update `[SPEC]`）；低端机分档回退路径的双维护。
+- 传统路径保留为不支持 descriptor indexing 设备的 fallback：feature 必须运行期查询，不能假设支持 `[ANDROID]`。
+- 决策写入 ADR 并含重新评估条件：低端机用户占比 >20% 且分档回退维护成本超过 CPU 收益时收窄 bindless 范围；UPDATE_AFTER_BIND hazard 频发时降级为 `UPDATE_UNUSED_WHILE_PENDING` 等弱化策略 `[ENGINE]`。
+
+---
+
+### 8. 修复后验证
+
+- [ ] Validation clean（含 update-after-bind 相关校验点）。
+- [ ] descriptor 更新链 CPU 占比 <5%（加载期除外）。
+- [ ] 每帧 bind 次数坍缩到个位数（帧开始一次绑定）。
+- [ ] 低端回退机型实测帧耗时无退化。
+- [ ] pipeline 全量重建发生在加载画面内，无可感知卡顿。
+- [ ] 内容规模再增长 50% 时 CPU 占比不再线性上升。
+
+---
+
+### 9. 经验抽象
+
+Bindless 迁移的判据是"规模 × 覆盖率 × 团队纪律"三者同时满足，缺一即应留在传统模型：
+
+```text
+迁移信号（同时满足才启动评估）：
+  descriptor 更新链占帧预算 >15% 且随内容线性增长；
+  贴图规模 >100 且持续增长（或 GPU-driven 渲染已在路线图上）；
+  目标设备 feature 覆盖率 ≥95%（含 shaderSampledImageArrayNonUniformIndexing）。
+
+不应该迁移（满足任一条即留在传统模型）：
+  贴图 <100 且无增长计划——局部优化即可把占比压回安全区；
+  低端机（不支持 descriptor indexing 或 UPDATE_AFTER_BIND 不稳）占比 >20%；
+  团队 1-3 人且无人能长期 owning UPDATE_AFTER_BIND 同步纪律与双路径维护。
+```
+
+把"新项目默认上 bindless"当最佳实践是误判：迁移成本（链 2 全量重建 + 双路径维护）只有在规模证据出现后才回本 `[ENGINE]`。
+
+---
+
+### 10. 预防规则
+
+1. 绑定模型选型必须走决策链并留 ADR（信号、候选、Trade-off、决策、重新评估条件）。
+2. 每季度 profile 一次 descriptor 更新链占比：超过 10% 预警，超过 15% 启动迁移评估。
+3. 贴图与 draw 规模纳入技术雷达，超过阈值（贴图 >100、draw >1000）时复核 D2。
+4. 设备 feature 覆盖率按发版统计更新，禁止假设"新设备一定支持"。
+5. 迁移期间传统路径必须保留为可运行回退，禁止一次性切换。
+6. bindless set 的 update 纪律写入 code review checklist（GPU 访问期间禁止 update 同一 element）。
+7. 迁移后持续监控低端回退机型占比与维护成本，触发重新评估条件即复审决策。
+
+---
+
+### 11. 关联 API 卡片
+
+- `../../03_api_manual/05_descriptor/descriptor_indexing.md`
+- `../../03_api_manual/05_descriptor/descriptor_set.md`
+- `../../03_api_manual/05_descriptor/descriptor_pool.md`
+- `../../03_api_manual/05_descriptor/descriptor_set_layout.md`
+- `../../03_api_manual/05_descriptor/push_descriptor.md`
+
+---
+
+### 12. 关联 Debug Playbook
+
+- `../../04_debug_playbooks/06_performance_symptoms/cpu_overhead_symptoms.md`
+- `../../04_debug_playbooks/03_validation_errors/descriptor_pipeline_layout_errors.md`
+
+---
+
+### 13. 关联 Workflow
+
+- `../../05_workflows/07_optimization/optimize_descriptor_updates.md`
+- `../../05_workflows/06_pipeline_descriptor/shader_binding_workflow.md`
+- `../../05_workflows/06_pipeline_descriptor/add_descriptor_set.md`
+
+
+---
+
+## Case: RenderGraph Adoption Inflection
+
+### 0. Metadata
+
+| 字段 | 内容 |
+|---|---|
+| 模块 | `06_cases` |
+| 类型 | 架构 / 迁移决策 / RenderGraph / Resource Lifetime |
+| 平台 | 通用 / Android |
+| 严重程度 | P1 |
+| 来源等级 | `[CASE] [ENGINE]` |
+| 关联模块 | API Manual / Debug Playbook / Workflow |
+
+---
+
+### 1. 现象
+
+- 渲染 pass 从 5 个增长到 12 个后，手写 barrier 维护量超线性增长：同步点手写处 >50，新增一个 pass 平均要改 >3 处既有 barrier。
+- resize / rotation 后重建链断裂频发：平均每个迭代 1-2 次"某资源漏重建"缺陷（depth 旧尺寸、offscreen 未重建）。
+- transient 中间 RT 各自独立分配且从不复用，显存峰值逼近中低端 Android 设备 budget（如 3 GB 机型上渲染相关分配 >800 MB）。
+- 偶发 `SYNC-HAZARD` 出现在 barrier 看似正确的 pass 之间——事后定位为保守 mask 掩盖了真实依赖缺口。
+
+---
+
+### 2. 初始上下文
+
+- 原架构：手动资源管理——资源显式创建 / 销毁，barrier 手写 `vkCmdPipelineBarrier2`，layout 转换散布在各 pass 录制代码。
+- 团队从 2 人扩展到 5 人，多人并行加 pass，同步代码没有单一 owner。
+- 目标平台：桌面 + Android 中高端（多分辨率目标，aliasing 需求真实存在）。
+- 无 RenderGraph；早期评估后以"编译开销 + 学习成本"为由推迟引入。
+
+---
+
+### 3. 初始误判
+
+最初把系统性架构问题当一组独立 API bug 排查：
+
+```text
+resize 断裂：按资源逐个补重建（修 A 漏 B，按下葫芦浮起瓢）；
+偶发 hazard：逐个收紧 barrier mask，越收越保守，frame time 反而变差；
+显存峰值：按 memory leak 方向排查（结论"无泄漏，只是都不释放"）；
+甚至得出"驱动对 barrier 惩罚重"的错误结论，删 barrier 后引入新 hazard。
+```
+
+逐个修复三个月，同类缺陷率没有下降。最终确认：不是某条 barrier 写错，而是手写同步的正确性成本随 pass 数超线性增长，超出人工维护能力——架构问题被当 API bug 修了三个月 `[ENGINE]`。
+
+---
+
+### 4. 排查路径
+
+1. 用版本管理统计 pass 数、手写 barrier 处数、新增 pass 的平均同步点改动数。
+2. 统计 resize / rotation 类缺陷的迭代频次，确认是系统性问题而非个案。
+3. 用 AGI / 显存 counter 对比 transient 峰值与设备 budget。
+4. 按 `../../02_core_mental_model/engine_architecture.md` §10 D5 的六要素评估：保持手动管理 vs 引入 RenderGraph。
+5. 阅读本文档前述 Render Graph Resource Lifetime 案例，确认引入后的新 bug 类别（声明错误）有静态检查可控。
+6. 按 `../../05_workflows/08_migration/convert_single_pass_to_render_graph.md` 做单 pass 试点迁移，实测编译开销与调试方式变化。
+
+---
+
+### 5. 关键证据
+
+### Validation Layer
+
+- 偶发 `SYNC-HAZARD-WRITE-AFTER-READ` / `SYNC-HAZARD-READ-AFTER-WRITE`：保守 mask 覆盖了多数路径，漏网依赖偶发触发。
+- `VUID-vkCmdPipelineBarrier-oldLayout-01181`：layout 转换与实际状态不匹配（手写维护漂移）`[SPEC]`。
+
+### RenderDoc / AGI
+
+- AGI：barrier stall 明显——保守 mask 造成过度同步，timeline 上 pass 间出现本不必要的等待。
+- RenderDoc：resize 后 depth / offscreen 尺寸与 swapchain 不一致（重建链断裂的直接证据）。
+- 关键 resource：手写 barrier 调用点、transient color / depth image、resize 依赖资源清单。
+
+### Log / Code
+
+- 增长曲线（版本管理统计）：
+
+```text
+pass 数:                      5  → 8  → 12
+手写 barrier 处数:            18 → 37 → 56
+新增 pass 平均改动同步点:     1.2 → 2.4 → 3.3
+resize 类缺陷（次 / 迭代）:   0.3 → 0.9 → 1.7
+```
+
+- 显存对比：
+
+```text
+手写管理（无复用）：
+  transient RT 独立分配合计: 640 MB（12 个 pass 的中间目标全量常驻）
+RenderGraph 编译后（aliasing）：
+  峰值占用: 210 MB（生命周期不重叠区间复用）
+```
+
+- 决策记录（六要素摘要）：
+
+```text
+信号：pass 12 且持续增长；barrier 手写 >50 处；新增 pass 改动 >3 个同步点；
+      resize 断裂每迭代 >1 次；transient 显存峰值逼近移动端 budget。
+候选 A：保持手动 + 重构（集中 barrier 辅助函数 + 重建 checklist + RT 池化）。
+候选 B：引入 RenderGraph（声明式 pass + 编译期推导 barrier / layout / alias）。
+决策：团队 5 人、多平台 aliasing 需求真实 → 迁移，分 3 个里程碑逐 pass 迁移。
+迁移成本：编译器引入 + 全部 pass 改声明式 + 调试间接层 + 学习曲线（5 人 × 2-4 周）。
+```
+
+---
+
+### 6. 根因
+
+根因：手写资源生命周期与同步的正确性成本是 O(pass²)——每个 pass 与上下游的依赖全部人工维护，当 pass 数超过 ~8-10 后维护成本与断裂频次超线性增长，超出手动管理架构的设计点 `[ENGINE]`。
+
+---
+
+### 7. 修复方案
+
+### Minimal Fix（针对根因的最小修复）
+
+- barrier 收敛到单一辅助模块（集中 mask / stage 计算），禁止散写在 pass 录制代码里。
+- swapchain 重建清单固化为 checklist + debug 尺寸一致性断言。
+- transient RT 按尺寸 / 格式粗池化复用，显存峰值先降一档。
+- 若最终决策是"不引入"（demo / 工具渲染器），这套修复即终态方案。
+
+### Structural Fix（结构性 / 防复发修复）
+
+- 引入 RenderGraph：pass 声明 read/write，编译期推导 barrier、layout、transient 分配与 alias（内部机制见 `../../02_core_mental_model/render_graph_resource_lifetime.md`，此处不重复）。
+- 迁移成本计入决策记录：graph 编译器实现 / 引入成本；全部 pass 改声明式；调试间接层——bug 从"barrier 写错"变为"声明写错"（形态见本文档 Render Graph Resource Lifetime 案例）；团队学习曲线。
+- 分阶段迁移：先 shadow / 后处理等叶子 pass，再 GBuffer 主链；每阶段 Validation + 截图回归。
+- 重新评估条件写入 ADR：RG compile CPU 时间进入帧预算 top3 → 加编译缓存（帧间复用编译结果）；声明类 bug 每迭代 >2 次 → 收窄托管范围（关键 pass 保留手写）`[ENGINE]`。
+
+---
+
+### 8. 修复后验证
+
+- [ ] Validation clean（synchronization validation 开启）。
+- [ ] 新增 pass 只声明读写，同步点改动数为 0。
+- [ ] resize / rotation 经 imported 资源自动传播，断裂类缺陷归零。
+- [ ] transient 显存峰值下降 50% 以上（aliasing 生效）。
+- [ ] RG compile CPU 耗时未进入帧预算 top3。
+- [ ] 声明类错误有静态检查 / 断言兜底。
+
+---
+
+### 9. 经验抽象
+
+RenderGraph 的引入拐点是"pass 数量级 × 多平台需求 × 团队规模"的组合判据：
+
+```text
+引入信号（同时满足）：
+  pass ≥8 且持续增长；手写 barrier >50 处；新增 pass 平均改动 >3 个同步点；
+  resize 重建链断裂每迭代 ≥1 次；transient 显存峰值逼近设备 budget；
+  多平台目标（移动端 aliasing 收益真实存在）；团队 ≥3 人需要统一声明协议。
+
+不应该引入（满足任一条）：
+  demo / 工具渲染器——编译开销与间接层成本大于收益；
+  pass <8 且增长停滞——集中 barrier 辅助 + checklist 即可维护；
+  团队 1-2 人——学习曲线与间接调试成本不划算；
+  跨帧复杂依赖为主（history buffer 多）——RG 只托管帧内，跨帧仍需外部 owner。
+```
+
+RenderGraph 解决的是"规模化的同步正确性与显存峰值"，规模不到时它只是把 bug 从 barrier 挪到声明 `[ENGINE]`。
+
+---
+
+### 10. 预防规则
+
+1. pass 数纳入技术雷达：≥8 或手写 barrier >50 处即触发 D5 复评。
+2. 新增 pass 的同步点改动数纳入版本管理统计，>3 处即预警。
+3. resize / rotation 断裂类缺陷按系统性问题上报（频次 >1 次/迭代），禁止只当个案修。
+4. transient 显存峰值按设备分档监控，接近 budget 即评估 alias（手动池化或 RG）。
+5. 引入 RG 后，declared lifetime 与实际使用区间必须有静态校验兜底。
+6. RG compile CPU 耗时纳入帧预算 top 监控。
+7. 跨帧资源必须 imported 且显式声明外部 owner，禁止依赖 RG 托管跨帧生命周期。
+
+---
+
+### 11. 关联 API 卡片
+
+- `../../03_api_manual/08_synchronization/pipeline_barrier.md`
+- `../../03_api_manual/08_synchronization/image_memory_barrier.md`
+- `../../03_api_manual/04_buffer_image_memory/image.md`
+- `../../03_api_manual/02_surface_swapchain/swapchain_recreate.md`
+
+---
+
+### 12. 关联 Debug Playbook
+
+- `../../04_debug_playbooks/06_performance_symptoms/barrier_draw_call_stall.md`
+- `../../04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md`
+- `../../04_debug_playbooks/02_crash_hang/swapchain_recreate_crash.md`
+
+---
+
+### 13. 关联 Workflow
+
+- `../../05_workflows/08_migration/convert_single_pass_to_render_graph.md`
+- `../../05_workflows/07_optimization/optimize_barriers.md`
+- `../../05_workflows/01_renderer_setup/create_renderer_from_scratch.md`
+- `../../05_workflows/05_resource_management/manage_resource_lifetime.md`
+
+
+---
+
+## Case: Resource Lifetime Split
+
+### 0. Metadata
+
+| 字段 | 内容 |
+|---|---|
+| 模块 | `06_cases` |
+| 类型 | 架构 / 迁移决策 / Resource Lifetime / 资源分组 |
+| 平台 | 通用 / Android |
+| 严重程度 | P1 |
+| 来源等级 | `[CASE] [ENGINE]` |
+| 关联模块 | API Manual / Debug Playbook / Workflow |
+
+---
+
+### 1. 现象
+
+- 单一全局资源池 + 2-3 frames-in-flight 下，偶发 `SYNC-HAZARD-WRITE-AFTER-READ`：CPU 复用 / 重写某资源时 GPU 仍在读取（per-frame UBO slice、缓存的 descriptor set 被池"提前回收复用"）。
+- 显存峰值 ≈ 全部资源之和：中间 RT、加载资源、每帧资源全量常驻，中端 Android 机型逼近 budget。
+- resize 后随机漏重建：依赖 swapchain 尺寸的资源与普通资源混在池中，重建入口分散。
+- 内容卸载后偶发 use-after-free 风险：deferred destruction 靠人肉记录 fence，遗漏即悬空。
+
+---
+
+### 2. 初始上下文
+
+- 原架构：单一全局 ResourceCache（key → `VkImage` / `VkBuffer` 句柄），所有资源一视同仁，复用 / 回收 / 重建只有一套策略。
+- 2-3 frames-in-flight；UBO 无 per-frame 分段（直接从池里取"当前可用"的 buffer 写入）。
+- 中间 RT（GBuffer / shadow map / bloom 链）从不销毁也从不复用。
+- 桌面开发为主，Android 真机回归较晚；资源总数 ~300。
+
+---
+
+### 3. 初始误判
+
+最初按四条独立 API bug 线索排查：
+
+```text
+SYNC-HAZARD：当成 fence 等待逻辑写错（按本文档 Per Frame Resource Design 案例
+            式局部修复，修一个冒一个）；
+显存峰值：按 memory leak 方向排查（结论"无泄漏，只是都不释放"）；
+resize 漏重建：当个案补丁（重建函数里补一个是一个）；
+use-after-free：当悬空指针 bug 修（统一延迟 1 帧删除，仍偶发）。
+```
+
+四类症状各自修复、各自复发。最终确认：单一资源池假设"所有资源生命周期相同"，而真实渲染器的资源有四种完全不同的生命周期——池模型本身失效，个案修复无法收敛 `[ENGINE]`。
+
+---
+
+### 4. 排查路径
+
+1. 把出现 hazard 的资源列清单，按"谁写入、谁消费、何时复用"逐项标注。
+2. 统计池内资源的真实生命周期分布（创建后存活帧数直方图）。
+3. 对比显存峰值与"只有 active 资源驻留"的理论值差值。
+4. 按 `../../02_core_mental_model/engine_architecture.md` §10 D6 的四类判据（Persistent / Per-frame / Transient / Swapchain-dependent）逐资源归类。
+5. 对比归类结果与现行池行为，列出每个差异点（即潜在 bug 点）。
+6. 制定分批迁移顺序：Per-frame 先拆（hazard 最痛）→ Swapchain-dependent（重建链）→ Transient（alias 收益）→ Persistent（引用计数）。
+
+---
+
+### 5. 关键证据
+
+### Validation Layer
+
+- `SYNC-HAZARD-WRITE-AFTER-READ`：池复用的 UBO slice / descriptor set 被 CPU 重写时 GPU 仍在读。
+- `VUID-vkResetCommandBuffer-commandBuffer-00045`：池提前复用的 command buffer 仍处于 pending execution `[SPEC]`。
+
+### RenderDoc / AGI
+
+- RenderDoc：第 N 帧 uniform 内容与提交时不一致——被池"提前复用"的下一帧数据覆盖。
+- AGI：资源分配 / 复用区间与 GPU 访问区间重叠的资源清单。
+- 关键 resource：全局 ResourceCache、per-frame UBO slice、descriptor set cache、transient RT。
+
+### Log / Code
+
+- 归类审计表（节选）：
+
+```text
+资源                   池内现状     应归类                错分类信号
+scene UBO slice        全局复用    Per-frame             SYNC-HAZARD
+GBuffer / shadow map   常驻不销毁  Transient             显存峰值虚高
+bloom 中间 RT           常驻不销毁  Transient             显存峰值虚高
+depth / MSAA resolve   混在池中    Swapchain-dependent    resize 漏重建
+mesh / 贴图            常驻        Persistent            （正确，但与 transient 混算 budget）
+```
+
+- 显存对比：
+
+```text
+单池（全部常驻）：
+  peak = persistent + 全部 transient + per-frame 全量 ≈ 1.9 GB
+四类拆分后：
+  peak = persistent + alias 后 transient 峰值 + N × per-frame slice ≈ 0.8 GB
+```
+
+---
+
+### 6. 根因
+
+根因：单一全局资源池把四类生命周期（Persistent / Per-frame / Transient / Swapchain-dependent）的资源混同管理，复用、重建、回收策略只有一套，规模与并行度增长后每类资源以其特有故障形态反复出错——是模型假设失效，不是单个资源的同步 bug `[ENGINE]`。
+
+---
+
+### 7. 修复方案
+
+### Minimal Fix（针对根因的最小修复）
+
+- 出 hazard 的资源临时移入 retire 队列：按 fence 延迟 frames-in-flight 数量帧后回收，禁止立即复用。
+- resize 重建入口收敛为单一事件函数（先解决最痛的漏重建路径）。
+- 该止血方案的缺陷：逐资源打补丁，新增资源仍可能漏——只作为拆分完成前的过渡。
+
+### Structural Fix（结构性 / 防复发修复）
+
+- 按四类拆分（归类判据见 D6 判据表）：
+  - Persistent：随内容加载 / 卸载，引用计数归零后延迟销毁。
+  - Per-frame：随 FrameContext 成套拥有，同索引复用前等本索引 fence（结构见本文档 Per Frame Resource Design 案例）。
+  - Transient：last-use 后回收，参与 alias（形态见本文档 Render Graph Resource Lifetime 案例）。
+  - Swapchain-dependent：成组注册，recreate 时整组重建（结构见本文档 Swapchain Dependent Resource Group 案例）。
+- 迁移成本计入决策记录：全量资源归类审计（本例 ~300 项）、创建调用从散落收敛到注册 API、跨模块引用更新（约 3 人 × 4 周）。
+- debug 构建加生命周期断言：per-frame 写入必须在对应 fence signal 之后；transient 回收必须在 last-use 之后；swapchain 组尺寸一致性检查。
+- 重新评估条件写入 ADR：错分类信号每迭代出现 >2 次 → 补静态检查 / 收紧断言；无需"回到单池"——单池只在 demo 规模成立 `[ENGINE]`。
+
+---
+
+### 8. 修复后验证
+
+- [ ] Validation clean（synchronization validation 连续运行 30 分钟）。
+- [ ] SYNC-HAZARD 归零——分类正确后串帧竞争不存在，而不是概率降低。
+- [ ] 显存峰值降到 active 资源量级（本例 1.9 GB → 0.8 GB）。
+- [ ] resize / rotation 后四类资源各自符合预期（重建 / 保留 / 回收）。
+- [ ] 内容卸载后无 use-after-free（引用计数 + 延迟销毁双保险）。
+- [ ] 新增资源必须声明四类之一才能进入创建 API（review 强制）。
+
+---
+
+### 9. 经验抽象
+
+四类拆分是"多 frame-in-flight + 真实内容规模"的必然结构，但存在不值得拆的下限：
+
+```text
+需要拆分（满足任一即应启动）：
+  frames-in-flight >1（单池串帧 hazard 是必然，不是概率）；
+  transient 中间目标 ≥3 个且显存有压力；
+  resize / rotation 是支持场景；
+  资源总数 >20。
+
+不需要拆分（全部满足才可停在单池）：
+  demo / 原型；单 frame-in-flight（CPU 每帧等 GPU 完成）；
+  资源总数 <20 且无 resize 需求——一个数组 + 销毁顺序检查即可。
+```
+
+归类错误的代价按类别分化：Per-frame 错归是串帧 hazard、Transient 错归是显存峰值、Swapchain-dependent 错归是 resize 断裂——看到哪类信号就查哪类归类 `[ENGINE]`。
+
+---
+
+### 10. 预防规则
+
+1. 资源创建必须声明四类生命周期之一，未声明不得进入创建 API（code review 强制）。
+2. per-frame 资源禁止进入全局复用路径（fence 断言兜底）。
+3. transient 资源参与 alias 前必须校验生命周期区间不重叠。
+4. swapchain-dependent 资源成组注册，recreate 单一入口传播。
+5. persistent 卸载走引用计数 + in-flight 完成后销毁，禁止立即销毁。
+6. debug 构建输出资源生命周期分布（创建 / 最后使用 / 回收帧号），CI 校验归类一致性。
+7. 显存峰值按设备分档监控，与 active 资源理论值对比，持续偏差即查归类。
+
+---
+
+### 11. 关联 API 卡片
+
+- `../../03_api_manual/04_buffer_image_memory/memory_allocation.md`
+- `../../03_api_manual/04_buffer_image_memory/buffer.md`
+- `../../03_api_manual/04_buffer_image_memory/image.md`
+- `../../03_api_manual/08_synchronization/fence.md`
+- `../../03_api_manual/03_command_buffer/frames_in_flight.md`
+
+---
+
+### 12. 关联 Debug Playbook
+
+- `../../04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md`
+- `../../04_debug_playbooks/03_validation_errors/memory_leak.md`
+- `../../04_debug_playbooks/02_crash_hang/device_lost.md`
+
+---
+
+### 13. 关联 Workflow
+
+- `../../05_workflows/05_resource_management/manage_resource_lifetime.md`
+- `../../05_workflows/05_resource_management/manage_frame_resources.md`
+- `../../05_workflows/01_renderer_setup/setup_swapchain.md`
+
+
+---
+
+## Case: Async Compute Backlash
+
+### 0. Metadata
+
+| 字段 | 内容 |
+|---|---|
+| 模块 | `06_cases` |
+| 类型 | 架构 / 迁移决策 / Queue / Async Compute |
+| 平台 | 通用 / Android |
+| 严重程度 | P2 |
+| 来源等级 | `[CASE] [ENGINE]` |
+| 关联模块 | API Manual / Debug Playbook / Workflow |
+
+---
+
+### 1. 现象
+
+- 为追求 overlap 把粒子模拟 + 两级模糊迁到独立 compute queue 后，frame time 反升：9.6 ms → 11.2 ms（同场景、同分辨率、多次采样取均值）。
+- AGI GPU timeline：空泡没有消失，而是从 graphics 段转移到 compute 提交边界——graphics 等 semaphore、compute 等 ownership transfer，等待链整体变长。
+- 部分移动设备退化更明显：compute queue 与 graphics 争抢共享执行单元，桌面正常、移动恶化。
+
+---
+
+### 2. 初始上下文
+
+- 原架构：单 queue 顺序提交，compute 任务（粒子模拟、模糊）在 graphics queue 内用 barrier 串行衔接。
+- 迁移动机：AGI 显示粒子 + 模糊合计占 ~2.1 ms，希望与 graphics 重叠执行。
+- 跨 queue 同步最初用 binary semaphore 链 + fence，后改为 timeline semaphore（value 单调递增）`[SPEC]`。
+- compute 负载与 graphics 强依赖交织：模糊输出被同帧后续 pass 直接消费，cross-queue barrier 边多。
+
+---
+
+### 3. 初始误判
+
+最初把架构选型问题当 bug 排查：
+
+```text
+以为是 barrier mask 过宽，逐个收窄（frame time 只降 0.2 ms，问题依旧）；
+以为是驱动多 queue 调度差，向厂商报 bug（桌面正常、移动退化，方向被带偏）；
+以为是 compute shader 在新 queue 上变慢（dispatch 单测耗时不变）；
+以为是 timeline value 配置错误（Validation 全绿）。
+```
+
+最后在 AGI timeline 上量出真相：overlap 收益约 1.1 ms，同步等待 + queue 争抢新增约 2.7 ms——净负。根因是把"async compute 一定更快"当成了默认前提，没有先验证收益条件 `[ENGINE]`。
+
+---
+
+### 4. 排查路径
+
+1. AGI 抓迁移前后 GPU timeline（同场景），量化三项：overlap 面积、空泡位置、semaphore 等待链长度。
+2. frame time 前后对比（多次采样取均值，排除抖动）。
+3. 统计 cross-queue barrier 边数量与 ownership transfer 次数（负载隔离度的量化）。
+4. 桌面与移动各测一组，定位驱动差异。
+5. 按 `../../02_core_mental_model/engine_architecture.md` §10 D4 复核收益条件：重叠余量、隔离度是否真实满足。
+6. 做回退实验：关闭 async compute 开关（保留代码路径），确认 frame time 恢复。
+
+---
+
+### 5. 关键证据
+
+### Validation Layer
+
+- 无 error——barrier / semaphore 用法正确，这本身排除了"API bug"方向，把排查引向 queue 模型选型 `[TOOL]`。
+
+### RenderDoc / AGI
+
+- AGI timeline 前后对比（同场景均值）：
+
+```text
+单 queue（迁移前）：
+  graphics: 8.1 ms（含 1.2 ms 空泡，等 compute 串行衔接）
+  compute:  1.5 ms
+  frame:    9.6 ms
+
+async compute（迁移后）：
+  graphics: 7.0 ms（其中 2.3 ms 在等 compute 的 semaphore）
+  compute:  1.5 ms（其中 0.4 ms 在等 ownership transfer）
+  frame:   11.2 ms（等待链 + queue 争抢净增 1.6 ms）
+```
+
+- 空泡转移形态：迁移前空泡集中在 graphics 段末尾（等 compute 完成）；迁移后空泡散布在 compute 提交边界（等 semaphore / transfer）——空泡转移而非消失是关键证据。
+- 移动端补充：Adreno / Mali 上 compute queue 与 graphics 共享执行单元，并行段相互拖慢 `[VENDOR]`。
+- 关键 resource：compute queue 提交批次、timeline semaphore、跨 queue barrier（release / acquire 对）。
+
+### Log / Code
+
+- 回退决策记录（六要素摘要）：
+
+```text
+信号：frame time 9.6 → 11.2 ms；空泡转移而非消失；等待链变长。
+候选 A：回退单 queue（保留 async 代码路径，关开关）。
+候选 B：继续优化 async（收窄 transfer 范围、合并批次、减少依赖边）。
+决策：先回退止血（A）；保留代码路径与运行时开关。
+      B 的优化项进 backlog，满足重新评估条件再启用。
+重新评估条件：AGI 显示 graphics 与 compute 互不重叠且合计 >30% frame time，
+            且负载隔离度提升（模糊跨帧消费、粒子输入输出独立）后再试。
+```
+
+---
+
+### 6. 根因
+
+根因：该负载下同步开销（ownership transfer + 跨 queue 等待链）与 queue 间执行单元争抢之和，超过了 compute 与 graphics 可重叠的收益——async compute 的收益上限是串行路径中 compute 段时长，而强依赖交织的负载隔离度低，重叠余量不足以覆盖新增开销 `[ENGINE]`。
+
+---
+
+### 7. 修复方案
+
+### Minimal Fix（针对根因的最小修复）
+
+- 回退：async compute 开关默认关闭，回单 queue 提交；代码路径保留（CI 维持双路径编译）。
+- timeline semaphore 基础设施保留——对 frames-in-flight 进度追踪仍有简化价值。
+
+### Structural Fix（结构性 / 防复发修复）
+
+- 把 async compute 做成运行时 / 配置级开关 + 设备分档（桌面可试开、移动保守默认关），禁止编译期常量。
+- 提高负载隔离度（重新评估的前提工程）：模糊改为"本帧 compute、下帧消费"的跨帧延迟模式，减少即时依赖边；粒子模拟输入输出独立，不与 graphics 中间资源交织。
+- 建立启用判据并写入 ADR：AGI 显示 graphics 与 compute 互不重叠且合计 >30% frame time；barrier 边少（隔离度高）；桌面驱动多 queue 支持成熟；移动端按厂商实测分档 `[ENGINE]` `[ANDROID]` `[VENDOR]`。
+- 重新评估流程固化：负载结构大改后用开关做 A/B 实测再决定默认值，不沿用旧结论。
+
+---
+
+### 8. 修复后验证
+
+- [ ] 回退后 frame time 恢复 9.6 ms 量级（多次采样）。
+- [ ] AGI timeline 回到单 queue 串行形态，无跨 queue 等待链。
+- [ ] async 路径开关可运行（CI 双路径编译 + 冒烟测试通过）。
+- [ ] 移动端分档生效（低端默认单 queue）。
+- [ ] 重新评估条件与判据写入 ADR，并链接 timeline 数据存档。
+
+---
+
+### 9. 经验抽象
+
+async compute 不是默认优化，是条件优化；收益被物理封顶，成本随依赖复杂度增长：
+
+```text
+收益上限 = 串行路径中 compute 段的时长（本例 ~1.5 ms）。
+新增成本 = ownership transfer + 跨 queue 等待链 + 执行单元争抢（本例 ~2.7 ms）。
+
+启用条件（同时满足）：graphics 与 compute 互不重叠且合计 >30% frame time；
+                     barrier 边少（负载隔离度高）；桌面为主或移动端分档实测通过。
+不该启用（满足任一）：compute 占比 <20% frame time；与 graphics 强依赖交织；
+                     目标设备驱动多 queue 实现退化（部分移动端）。
+回退信号：frame time 反升；空泡转移而非消失；等待链变长 → 关开关回退，
+         不是继续微调 barrier。
+何时该保留：开关 + 双路径保留，负载结构变化后按判据重新评估。
+```
+
+"空泡从一段转移到另一段"是同步开销吃掉 overlap 收益的典型 timeline 形态，见到即应怀疑 queue 模型选型 `[ENGINE]`。
+
+---
+
+### 10. 预防规则
+
+1. async compute 引入前必须走 D4 决策链：先量重叠余量与隔离度，再写代码。
+2. async 路径必须运行时可关闭，禁止编译期写死。
+3. 引入后一周内用 AGI 做 A/B 实测，frame time 反升立即回退开关。
+4. "空泡转移而非消失"列入 timeline 检查标准项。
+5. 移动端按设备分档默认保守，厂商驱动差异实测后再放开 `[ANDROID]` `[VENDOR]`。
+6. 负载结构大改（新增 compute 任务 / 依赖重排）后重新评估开关默认值。
+7. 跨 queue 资源的 ownership 状态集中跟踪，transfer 边数量写入决策记录。
+
+---
+
+### 11. 关联 API 卡片
+
+- `../../03_api_manual/08_synchronization/timeline_semaphore.md`
+- `../../03_api_manual/08_synchronization/semaphore.md`
+- `../../03_api_manual/03_command_buffer/queue_submit.md`
+- `../../03_api_manual/08_synchronization/pipeline_barrier.md`
+- `../../03_api_manual/06_pipeline/compute_pipeline.md`
+
+---
+
+### 12. 关联 Debug Playbook
+
+- `../../04_debug_playbooks/06_performance_symptoms/gpu_frame_time_high.md`
+- `../../04_debug_playbooks/06_performance_symptoms/barrier_draw_call_stall.md`
+- `../../04_debug_playbooks/04_resource_sync/compute_graphics_sync_error.md`
+
+---
+
+### 13. 关联 Workflow
+
+- `../../05_workflows/07_optimization/optimize_frame_time.md`
+- `../../05_workflows/03_compute_workflows/add_compute_pass.md`
+- `../../05_workflows/03_compute_workflows/compute_to_graphics_sync.md`
+
+
+---
