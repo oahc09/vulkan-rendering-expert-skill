@@ -1,11 +1,11 @@
 ---
 name: vulkan-rendering-expert-skill
-description: Vulkan 渲染工程专家技能。用于 Vulkan API 设计、实现、调试、优化、Validation Error 处理、Android Vulkan 集成、Swapchain/同步/Image Layout/资源生命周期问题、图形引擎架构、Render Pass、Pipeline、Descriptor、Command Buffer、Compute 工作流、引擎子系统架构设计、架构决策和性能分析。
+description: Vulkan 渲染工程专家技能。用于 Vulkan API 设计、实现、调试、优化、Validation Error 处理、Android Vulkan 集成、Swapchain/同步/Image Layout/资源生命周期问题、图形引擎架构、Render Pass、Pipeline、Descriptor、Command Buffer、Compute 工作流、引擎子系统架构设计、架构决策和性能分析。当用户描述 Vulkan 黑屏/闪烁/花屏/崩溃/GPU hang/device lost、遇到 Validation Error 或 VUID 报错、帧耗时高或卡顿、需要实现渲染功能、或需要做架构选型（RenderPass vs Dynamic Rendering、Bindless、RenderGraph、Async Compute、资源生命周期分组）时，使用本技能。
 license: MIT
 metadata:
   author: Vulkan 渲染专家技能贡献者
-  version: 1.0.6
-  last-updated: '2026-09-12'
+  version: 1.0.7
+  last-updated: '2026-09-13'
   keywords: vulkan, rendering, android, graphics-engine, debugging, performance, synchronization, descriptor, pipeline, swapchain
 ---
 
@@ -50,6 +50,34 @@ metadata:
 - 性能优化任务：读取相关优化 workflow、性能症状 playbook、相关案例，必要时读取 API 卡片。
 - Android Vulkan 生命周期或 Swapchain 问题：读取 Android workflow/playbook/case，以及 Surface、Swapchain、Synchronization 相关 API 卡片。
 - 经验案例或复盘请求：读取 `references/06_cases/case_index.md`，再读取相关案例。
+
+症状 / 意图 → 直达速查表（命中即直接加载对应文件，不必先读索引）：
+
+| 症状 / 意图 | 直达文件 |
+|---|---|
+| 黑屏 | `references/04_debug_playbooks/01_visual_issues/black_screen.md` |
+| 闪烁 / 画面抖动 | `references/04_debug_playbooks/01_visual_issues/flickering.md` |
+| 深度错误 / 画面被裁 | `references/04_debug_playbooks/01_visual_issues/depth_test_wrong.md` |
+| 崩溃 / device lost | `references/04_debug_playbooks/02_crash_hang/device_lost.md` |
+| GPU hang / 卡死 | `references/04_debug_playbooks/02_crash_hang/gpu_hang.md` |
+| resize / 旋转后崩溃 | `references/04_debug_playbooks/02_crash_hang/swapchain_recreate_crash.md` |
+| Validation Error / VUID 解码 | `references/04_debug_playbooks/03_validation_errors/validation_error_decode.md` |
+| descriptor / pipeline layout 报错 | `references/04_debug_playbooks/03_validation_errors/descriptor_pipeline_layout_errors.md` |
+| image layout / sync hazard 报错 | `references/04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md` |
+| 显存 / 内存泄漏 | `references/04_debug_playbooks/03_validation_errors/memory_leak.md` |
+| compute 无输出 | `references/04_debug_playbooks/04_resource_sync/compute_no_output.md` |
+| compute ↔ graphics 同步错误 | `references/04_debug_playbooks/04_resource_sync/compute_graphics_sync_error.md` |
+| Android surface 生命周期 / 前后台切换 | `references/04_debug_playbooks/05_android_specific/android_surface_lifecycle.md` |
+| GPU 帧耗时高 | `references/04_debug_playbooks/06_performance_symptoms/gpu_frame_time_high.md` |
+| 带宽 / 全屏 pass 成本高 | `references/04_debug_playbooks/06_performance_symptoms/bandwidth_fullscreen_cost.md` |
+| barrier / draw call stall | `references/04_debug_playbooks/06_performance_symptoms/barrier_draw_call_stall.md` |
+| CPU 侧开销高 | `references/04_debug_playbooks/06_performance_symptoms/cpu_overhead_symptoms.md` |
+| pipeline 创建卡顿 / 首帧卡顿 | `references/04_debug_playbooks/06_performance_symptoms/pipeline_startup_stutter.md` |
+| 从零搭建 renderer | `references/05_workflows/01_renderer_setup/create_renderer_from_scratch.md` |
+| 架构选型 / 迁移决策 | `references/02_core_mental_model/engine_architecture.md`（§10 决策框架） |
+| 查找相似案例 | `references/06_cases/case_index.md` |
+
+速查表未命中的任务回到上方按类型路由。
 
 不要默认加载全部 API 卡片、全部 playbook、全部 workflow 或全部 case。
 

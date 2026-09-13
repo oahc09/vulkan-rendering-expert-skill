@@ -86,6 +86,16 @@
 - `_fix_pb_refs.py` 批量替换留下的 CRLF 行尾统一为 LF，涉及 43 个文件。
 - `git diff --check` 全部干净。
 
+## v1.0.7 — Onboarding
+
+针对 SkillHub 评测（T 4.8 / R 4.5 / A 4.4 / C 4.8 / E 4.8）的上手体验优化，不改动知识主体（API 卡片 / playbook / workflow / case 内容不变），无新增文件（保持 198/200）。
+
+- **适用性（A）**：README ×2 新增"安装与调用"章节（Claude Code / TraeCode / 其他 Agent Skills 宿主的放置路径与降级模式）与 8 条可复制提问示例（每条标注触发模块）；`../../SKILL.md` description 补充触发场景句式，提高宿主自动命中率。
+- **可靠性（R）**：`progressive_retrieval.md` R2 新增分任务类型最小提问模板（9 类任务 × 标准三项信息），信息收集从临时发挥变为固定协议；用户提供齐全时跳过 R2 直接路由。
+- **规范性（C）**：README 新增"上手路径"（直接提问 / 知识地图 / 深入学习三条路线）。
+- **有效性（E）**：`../../SKILL.md` 任务路由段新增"症状 / 意图 → 直达速查表"（20 行症状直达 playbook / workflow / case / 决策框架），免读索引直接加载。
+- **可信任度（T）**：`01_source_map_and_api_manual_strategy/trusted_sources.md` 新增中文辅助阅读资源节，显式标注非官方、冲突以英文官方 Spec 为准、引用等级不高于 [HEUR]。
+
 ## v1.0.6 — Rendering Engine Architect
 
 ### 审查修订（2026-09-12）

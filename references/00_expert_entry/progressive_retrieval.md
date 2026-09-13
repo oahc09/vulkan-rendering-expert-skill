@@ -39,6 +39,22 @@
 - 输出格式见 `00_expert_entry/response_formats.md` §0.5 意图澄清。
 - 用户拒绝补充或确实无法提供 → 按 HEUR 降级路由，回答中显式标注假设。
 
+分任务类型最小提问模板（按 `task_classifier.md` 9 类，每类给出标准三项信息；用户主动提供齐全时跳过 R2 直接路由）：
+
+| 任务类型 | 标准三项信息 |
+|---|---|
+| 故障调试 | ① 平台 + GPU 型号 + Vulkan/驱动版本；② Validation 原文 / VUID / logcat 关键行；③ 复现路径（必现还是偶发、操作序列） |
+| 性能优化 | ① 瓶颈现象与帧耗时数据（CPU / GPU 各多少 ms）；② 设备与 GPU 型号；③ RenderDoc / AGI 抓帧或计数器证据 |
+| 正向开发 | ① 目标效果与验收标准；② 平台与 Vulkan 版本；③ 现有 renderer 结构（是否已有 swapchain / frame loop / 抽象层） |
+| 架构设计 | ① 平台分布与帧预算；② 团队规模与维护周期；③ 现有架构痛点（可观测信号或数量级） |
+| API 细节 | ① API / 结构体 / 字段名；② Vulkan 版本与实现（GPU / 驱动）；③ 报错原文（若有） |
+| Android 专项 | ① Surface 来源（SurfaceView / NativeActivity / 其他）；② Android 版本与设备型号；③ 生命周期事件序列（pause / resume / rotation / surface destroyed） |
+| 经验案例 | ① 现象关键词；② 涉及子系统（descriptor / sync / swapchain…）；③ 平台 |
+| 概念+链路 | ① 概念名；② 使用场景（学习 / 排错 / 设计）；③ 目标深度（速览 / 工程落地） |
+| 简短回答 | 主类型三项中的第一项即可 |
+
+模板用途有二：R2 提问时按对应类型取项；回答开头可提示用户"补齐哪几项可显著提高结论可靠性"。
+
 ## R3 首轮路由
 
 循环入口即现有路由，保持不变：

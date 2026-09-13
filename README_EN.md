@@ -48,12 +48,43 @@ This skill requires output to always provide actionable Vulkan paths rather than
 4. Give the minimal verification approach, e.g. Validation Layer, RenderDoc, AGI, logcat, traces, counters, or targeted asserts.
 5. Explicitly require looking up the Vulkan Spec, Registry, official samples, or platform docs when API details are uncertain.
 
-## Usage
+## Installation & Usage
 
-Use the repository root as the skill directory. The skill entry is `SKILL.md` at the root; runtime materials are loaded on demand from `references/`.
+This skill follows the Agent Skills specification: the repository root is the skill directory, `SKILL.md` is the entry point, and `references/` is loaded on demand.
 
-Example task:
+**Claude Code**
 
-```text
-Debug an Android Vulkan black screen that appears after app pause/resume: give the object chain, the most likely causes, and verification steps.
+```bash
+git clone https://github.com/oahc09/vulkan-rendering-expert-skill ~/.claude/skills/vulkan-rendering-expert-skill
 ```
+
+Once placed in the skills directory, describing a Vulkan problem triggers it automatically; you can also explicitly say "use vulkan-rendering-expert-skill".
+
+**TraeCode / Trae**
+
+Add this repository directory as a local skill in skill management, or install it from the skill marketplace.
+
+**Other Agent Skills-compatible hosts** (Cursor, VS Code extensions, etc.)
+
+Any host that reads the `SKILL.md` frontmatter and loads `references/` files per its instructions works. If the host has no skill mechanism, paste the full `SKILL.md` as a system prompt — the skill runs in degraded mode (routing and answer rules still apply; automatic loading does not).
+
+## Example Prompts
+
+The following prompts are ready to copy; each is labeled with the modules it triggers:
+
+1. `Android Vulkan black screen after pause/resume — give the object chain, most likely causes, and verification steps.` (debug playbook + Android case)
+2. `vkCreateGraphicsPipelines failed with a VUID error — decode this Validation message: <paste it>` (validation decode playbook)
+3. `GPU frame time is 22ms on a Xiaomi 13, dominated by fullscreen post-processing — how do I optimize it?` (performance playbook + optimization workflow)
+4. `Build a minimal Vulkan renderer from scratch: validation-clean, resize-safe.` (renderer workflow + architecture decisions)
+5. `With thousands of materials, descriptor set creation is slow — should I go bindless? Give me a decision analysis.` (architecture decision framework + bindless case)
+6. `Hand-written barriers across 8 passes are getting unmaintainable — evaluate adopting a RenderGraph.` (architecture decision + RenderGraph case)
+7. `How should I choose srcStageMask for vkCmdPipelineBarrier2?` (API card)
+8. `Any real-world cases of crashes caused by swapchain recreation?` (case index)
+
+Attaching key information yields the most accurate answers — see the per-task-type question templates in section R2 of `references/00_expert_entry/progressive_retrieval.md`.
+
+## Getting Started
+
+- **Just ask (recommended)**: no files to read first — the skill routes by symptom/intent to the matching playbook, workflow, or case.
+- **See the knowledge map**: read `references/README.md` and `references/MODULE_SUMMARY.md` for the division of labor across the 8 modules.
+- **Deep dive**: read modules in order `00` → `07`; start with `04_debug_playbooks/` for debugging, `05_workflows/` for implementation, and `02_core_mental_model/engine_architecture.md` for architecture.

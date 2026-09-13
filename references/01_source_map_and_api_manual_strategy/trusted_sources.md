@@ -43,6 +43,16 @@
 | logcat | Android Surface / Swapchain / NDK 日志 |
 | shader reflection 工具 | SPIR-V binding、set、资源类型验证 |
 
+## 中文辅助阅读资源
+
+以下为社区翻译或中文出版物，**非官方来源**，仅用于降低阅读门槛；任何内容与英文官方 Spec / Reference Pages 冲突时，一律以英文官方为准，引用等级不得高于 [HEUR]。
+
+| 来源 | 用途 |
+|---|---|
+| Vulkan Tutorial 社区中文译版（如 GitHub VulkanTutorialCN） | 入门链路的中文对照阅读 |
+| 《Vulkan 编程指南》（Vulkan Programming Guide 中译本） | API 机制的中文系统讲解 |
+| GPU 厂商中文技术博客 / 开发者社区文章 | 移动端优化经验的中文参考 |
+
 ## 使用备注
 
 1. 官方 Spec 和 Reference Pages 是 API 事实源。
