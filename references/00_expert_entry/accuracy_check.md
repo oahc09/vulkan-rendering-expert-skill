@@ -15,6 +15,7 @@
 | `[AGI]` | Android GPU Inspector 文档或 Trace 结果 | 高 |
 | `[VENDOR]` | GPU 厂商最佳实践 | 中高，需平台边界 |
 | `[TOOL]` | Validation / RenderDoc / AGI 可验证 | 高 |
+| `[CODE]` | 当前目标项目源码直接证据 | 高（仅限项目事实） |
 | `[ENGINE]` | 图形引擎工程经验 | 中，需案例支持 |
 | `[CASE]` | 真实项目案例或故障复盘 | 中高，需上下文 |
 | `[HEUR]` | 启发式经验 | 中低，不能写死 |
@@ -30,6 +31,8 @@
 7. 对于 Vulkan API 细节，优先回查 Vulkan Spec / Vulkan Guide。
 8. 对于 Android Vulkan 细节，优先回查 Android NDK 文档。
 9. 对于性能结论，优先用 profiler / trace / counter / frame capture 验证。
+10. 对真实项目的架构、调用链、生命周期和实现现状判断，优先给出 `[CODE]`：文件路径 → 类 / 函数 → 关键行为 → 结论。只有文件名或类名、未读取实现时不得写成项目事实。
+11. `[CODE]` 与 `[SPEC]` 冲突时，以规范判断 API 合法性，并把源码标记为潜在缺陷；禁止用项目实现反推规范。
 
 ## Third-Party Library API Accuracy
 
@@ -61,3 +64,4 @@
 4. 是否避免绝对化表达？
 5. 是否能被真实任务测试？
 6. 是否能定位到 Vulkan 对象和调用链路？
+7. 若结论针对真实仓库，是否有 `[CODE]` 证据或明确“未验证”？
