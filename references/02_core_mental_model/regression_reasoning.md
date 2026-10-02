@@ -103,6 +103,38 @@ Surface destroyed / replaced（Android pause / resume / rotation）
 
 ---
 
+## 3.5 源码级影响面（真实项目）
+
+当任务针对真实仓库时，抽象对象影响链必须映射到源码，不允许只停留在 Vulkan 对象层。
+
+统一输出四级：
+
+- **Must Change**：不改则目标无法达成，或会违反兼容性 / 生命周期 / 同步要求。
+- **Should Change**：不阻塞当前目标，但继续保留会形成明显技术债、重复路径或回归风险。
+- **Can Defer**：当前目标不依赖，可以后置，并写明重新评估条件。
+- **Do Not Change**：当前实现正确且不在影响链上，明确保持不动以控制回归面。
+
+每一项至少记录：
+
+```text
+[CODE] 文件 / 类 / 函数
+→ 当前行为
+→ Vulkan 对象 / 状态
+→ 下游依赖
+→ 生命周期 / 同步 / Android / 性能影响
+→ 修改等级（Must / Should / Can Defer / Do Not Change）
+```
+
+规则：
+
+1. 关键项目事实没有读到实现时标记“未验证”，不能依靠文件名猜测。
+2. `[CODE]` 证明项目当前实现；API 合法性仍由 `[SPEC]` / `[REGISTRY]` / `[REF]` 判断。
+3. 版本升级不得自动等价于“顺便迁移所有现代 Vulkan 路径”；例如 Vulkan 1.3 升级是否迁移 Dynamic Rendering / Sync2，应根据当前源码依赖和目标收益分别决策。
+4. 改造已有引擎时优先复用现有 Resource / Descriptor / Pipeline / Command / Queue 架构，除非证据证明现有抽象本身是目标问题的根因。
+5. 源码级影响面完成后，再用本文件 §4 检查清单和 Verification Gate 确定回归范围。
+
+---
+
 ## 4. 修改前检查清单
 
 - [ ] 影响面清单已列出（被修改对象 + 全部传播对象）。
@@ -111,6 +143,7 @@ Surface destroyed / replaced（Android pause / resume / rotation）
 - [ ] per-frame 资源是否需要成套变化已评估。
 - [ ] 同步两侧（producer / consumer）是否需要同步调整已评估。
 - [ ] Android 场景下 rotation / pause / resume / Surface recreate 的影响已评估。
+- [ ] 若为真实仓库，关键影响项已绑定 `[CODE]` 文件 / 类 / 函数证据，并完成 Must / Should / Can Defer / Do Not Change 分类。
 
 ---
 
