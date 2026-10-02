@@ -209,3 +209,75 @@ Compute 输出给 Fragment 采样黑屏，有没有类似案例？
 - 根因模式
 - 修复方式
 - 可复用经验
+
+## 测试 8：陌生仓库 Architecture Map
+
+输入：
+
+```text
+分析这个 Vulkan Renderer 仓库，先给当前架构图和源码证据，不要先提重构建议。
+```
+
+期望路由：
+
+```text
+根目录 SKILL.md
+→ 05_workflows/01_renderer_setup/project_diagnosis.md
+→ 02_core_mental_model/engine_architecture.md
+```
+
+合格输出必须覆盖：
+
+- [CODE] 文件 / 类 / 函数证据
+- Device / Frame / Rendering / Resource / Descriptor / Pipeline / Sync / Present 主链
+- 不存在 / 未抽象 / 未验证的层明确标记
+- 不根据文件名猜实现
+
+## 测试 9：Vulkan 1.1 → 1.3 源码影响面
+
+输入：
+
+```text
+评估这个项目从 Vulkan 1.1 升级到 Vulkan 1.3，输出源码级影响面；不要把升级自动等价为 Dynamic Rendering / Sync2 全量迁移。
+```
+
+合格输出必须覆盖：
+
+- 当前 apiVersion / feature / extension [CODE] 证据
+- Must Change / Should Change / Can Defer / Do Not Change
+- Device / submit / rendering / descriptor / Android capability 影响面
+- 每项绑定文件 / 类 / 函数
+- Verification / Rollback / DoD
+
+## 测试 10：Android rotation crash 源码映射
+
+输入：
+
+```text
+这个 Android Vulkan 项目横竖屏后 crash，把通用 swapchain playbook 映射到项目具体源码。
+```
+
+合格输出必须覆盖：
+
+- Surface callback → JNI / native event → ANativeWindow → VkSurfaceKHR → Swapchain → in-flight resource
+- 每个候选根因绑定 [CODE] 位置
+- Workaround / Minimal Fix / Structural Fix 不混淆
+- Android lifecycle 回归与 Verification Gate
+
+## 测试 11：已有引擎新增 Compute Pass
+
+输入：
+
+```text
+在这个已有 Vulkan 引擎中新增 Compute Pass，优先复用现有架构，给 coding agent 可执行计划。
+```
+
+合格输出必须覆盖：
+
+- 先识别现有 Resource / Descriptor / Pipeline / Command / Queue 模型
+- 禁止另起平行 Vulkan 管理路径，除非有 [CODE] 根因证据
+- Files To Modify
+- Dependency Order
+- synchronization / lifetime impact
+- Verification / Rollback / DoD
+
