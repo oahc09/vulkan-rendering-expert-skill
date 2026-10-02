@@ -49,6 +49,7 @@ vulkan-rendering-expert-skill/
 5. 故障现象查 `04_debug_playbooks`。
 6. 正向开发任务查 `05_workflows`。
 7. 真实经验和相似问题查 `06_cases`。
-8. API 事实、性能建议、Android 平台细节必须遵守 `01_source_map_and_api_manual_strategy` 的可信等级规则。
-9. 输出必须有验证闭环。
-10. 不确定时不编造，应提示回查 Spec / Reference Page / Android 官方文档 / 工具证据。
+8. 真实仓库诊断任务先查 `05_workflows/01_renderer_setup/project_diagnosis.md`，关键项目事实必须有 `[CODE]` 证据。
+9. API 事实、性能建议、Android 平台细节必须遵守 `01_source_map_and_api_manual_strategy` 的可信等级规则。
+10. 输出必须有验证闭环。
+11. 不确定时不编造，应提示回查 Spec / Reference Page / Android 官方文档 / 工具证据。
