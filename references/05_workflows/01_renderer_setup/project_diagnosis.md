@@ -13,9 +13,7 @@
 
 - 单个 Vulkan API 的概念解释。
 - 没有项目源码且只需要通用方案。
-- 已经明确到单一函数、单一 VUID 的局部修复。
-
----
+- 已明确到单一函数、单一 VUID 的局部修复。
 
 ## 1. 任务目标
 
@@ -45,67 +43,147 @@ Repository Evidence
 
 仓库已能提供的信息不得重复询问。
 
-## 3. Project Reconnaissance
+## 3. 前置检查
 
-按以下顺序建立项目 Vulkan 地图。禁止仅按文件名或类名猜测，必须打开实现确认。
+开始诊断前确认：
 
-### 3.1 Build / Platform
+- [ ] 已能访问目标仓库实际源码，而不是只有目录截图或文件名列表。
+- [ ] 已明确当前任务是诊断 / 升级 / 重构 / Debug / 性能中的哪一种。
+- [ ] 已读取构建入口与平台分支，确认 Android / Desktop / 多平台边界。
+- [ ] 已定位至少一个 Vulkan 初始化入口或调用点，避免根据命名猜架构。
+- [ ] 若是修改类任务，已加载 `../../02_core_mental_model/regression_reasoning.md`。
+- [ ] 若是架构类任务，已加载 `../../02_core_mental_model/engine_architecture.md`。
 
-确认构建入口、平台矩阵、Vulkan loader / NDK / 主要第三方依赖。
+## 4. Vulkan 对象链路
 
-### 3.2 Vulkan Entry
-
-定位：
-
-- VkInstance 创建位置。
-- VkPhysicalDevice 选择逻辑。
-- VkDevice / feature / extension negotiation。
-- graphics / present / compute / transfer queue family。
-
-### 3.3 Frame Loop
-
-定位：
+按实际源码建立项目 Vulkan 主链，不存在或未验证的层必须显式标记：
 
 ~~~text
-Acquire
-→ Frame resource wait/reset
-→ Command recording
-→ Submit
+Application / Platform
+→ VkInstance / VkPhysicalDevice / VkDevice
+→ Queue Family / VkQueue
+→ VkSurfaceKHR / VkSwapchainKHR
+→ Frame Context / CommandPool / CommandBuffer
+→ RenderPass / Dynamic Rendering / RenderGraph
+→ Resource / Descriptor / Pipeline
+→ Queue Submission / Synchronization
 → Present
 ~~~
 
-记录 frame index 与 swapchain image index 的管理方式。
+Project Reconnaissance 至少定位：
 
-### 3.4 Rendering Model
+1. Build / Platform：CMake / Gradle / GN / Bazel、NDK、Vulkan loader、第三方库版本。
+2. Vulkan Entry：Instance、PhysicalDevice、Device、feature / extension negotiation。
+3. Frame Loop：Acquire → wait/reset → record → submit → present。
+4. Rendering Model：传统 RenderPass、Dynamic Rendering、RenderGraph 或混合路径。
+5. Resource Model：Buffer / Image、allocator、deferred destruction、资源生命周期分组。
+6. Descriptor / Binding Model：per-draw / per-material / per-frame、bindless / indexing、pool / cache。
+7. Pipeline Model：PipelineLayout ownership、pipeline cache、dynamic state、rebuild trigger。
+8. Synchronization / Submission：binary / timeline semaphore、fence、Submit / Submit2、barrier / Sync2、multi-queue。
 
-确认项目实际使用：
+每个关键节点映射到项目文件 / 类 / 函数。
 
-- Traditional VkRenderPass / VkFramebuffer
-- Dynamic Rendering
-- RenderGraph / FrameGraph
-- 混合模式
+## 5. 资源设计
 
-必须提供对应函数或创建路径的 [CODE] 证据。
+本 Workflow 不默认新增资源，而是先识别项目现有资源模型：
 
-### 3.5 Resource Model
+| 资源类别 | 必查源码证据 | 影响面 |
+|---|---|---|
+| Persistent | 创建 / owner / 卸载路径 | 长生命周期、deferred destruction |
+| Per-frame | FrameContext / frame index / fence | frames-in-flight 复用 |
+| Transient | pass 创建 / last-use / alias | RenderGraph、显存峰值 |
+| Swapchain-dependent | extent / recreate 注册 | resize / rotation |
+| Streaming | upload / staging / retire | transfer 与可见性 |
 
-识别 Buffer / Image 创建入口、Memory allocator、Persistent / Per-frame / Transient / Swapchain-dependent 资源，以及 deferred destruction / retire queue。
+如果目标改造需要新增资源，必须优先复用现有 allocator / owner / retire 机制；没有证据证明必要时，不另起平行资源系统。
 
-### 3.6 Descriptor / Binding Model
+## 6. Pipeline / Descriptor 设计
 
-识别 per-draw / per-material / per-frame descriptor、descriptor indexing / bindless、pool/cache/update 策略，以及 shader reflection / binding schema。
+诊断项目时先确认：
 
-### 3.7 Pipeline Model
+- Shader set / binding 如何定义，是否有 reflection / schema。
+- DescriptorSetLayout / PipelineLayout 的 owner 与 cache。
+- Descriptor 是 per-frame、per-material、per-draw 还是 bindless。
+- Pipeline 创建入口、缓存键、重建触发条件。
+- RenderPass / Dynamic Rendering format compatibility 如何进入 pipeline key。
 
-识别 pipeline creation / cache、PipelineLayout ownership、dynamic state、pipeline rebuild trigger。
+需要新增 pass / compute 时，优先复用当前 Descriptor / Pipeline 管理路径。若现有抽象本身是目标问题根因，才进入 Structural Fix。
 
-### 3.8 Synchronization / Submission Model
+## 7. 同步与 Layout 设计
 
-识别 binary / timeline semaphore、fence / frames-in-flight、vkQueueSubmit / vkQueueSubmit2、barrier / Sync2、multi-queue / ownership transfer。
+建立真实 producer / consumer 图：
 
-### 3.9 Android Lifecycle（如适用）
+| Producer | Resource | 当前同步 / Layout | Consumer | 源码证据 |
+|---|---|---|---|---|
+| 实际写入点 | Buffer / Image | Barrier / Semaphore / Layout | 实际读取点 | [CODE] 文件 / 函数 |
 
-沿真实代码确认：
+必须确认：
+
+- producer stage / access。
+- consumer stage / access。
+- image oldLayout / newLayout。
+- 同 queue 还是跨 queue。
+- frame-in-flight 资源何时可复用。
+- swapchain acquire / present binary semaphore 边界。
+- Android Surface 无效期间是否停止 acquire / present。
+
+## 8. 实现步骤
+
+### Step 1：Project Reconnaissance
+
+按 §4 主链读取源码，建立 Architecture Map。
+
+### Step 2：Evidence Map
+
+关键判断统一记录：
+
+| 结论 | 文件 / 类 / 函数 | 关键行为 | 证据等级 | 置信度 |
+|---|---|---|---|---|
+| 项目使用传统 RenderPass | Renderer.cpp::createPass | 调用 vkCreateRenderPass，pipeline creation 持有 renderPass handle | [CODE] | 高 |
+| 同步使用 legacy submit | Queue.cpp::submit | 构造 VkSubmitInfo 并调用 vkQueueSubmit | [CODE] | 高 |
+
+规则：
+
+1. `[CODE]` 只证明当前项目如何实现，不能覆盖 `[SPEC]`。
+2. 只有文件名 / 类名、没有读到实现时，标记“未验证”。
+3. 项目代码与 `[SPEC]` 冲突时，报告项目实现风险。
+4. 跨模块架构结论优先使用两条相互印证的源码证据。
+
+### Step 3：Change Impact Analysis
+
+所有修改项分为：
+
+- **Must Change**：不改则目标无法达成，或违反兼容性 / 生命周期 / 同步要求。
+- **Should Change**：不阻塞目标，但继续保留会形成明显技术债或回归风险。
+- **Can Defer**：当前目标不依赖，可以后置，并给重新评估条件。
+- **Do Not Change**：当前实现正确且不在影响链上，明确保持不动。
+
+每项绑定文件 / 类 / 函数 `[CODE]`、Vulkan 对象影响链、生命周期、同步、Android 和性能回归面。
+
+### Step 4：Implementation Handoff
+
+输出给 coding agent：
+
+- Goal
+- Current Evidence
+- Target Design
+- Files To Modify
+- Dependency Order
+- Implementation Steps
+- Risks
+- Verification
+- Rollback
+- Definition of Done
+
+有依赖的修改禁止并行化。
+
+### Step 5：Verification Gate
+
+按 `../../00_expert_entry/verification_gate.md` G1-G6 验证，不把 Validation clean 当成唯一完成条件。
+
+## 9. Android 注意点
+
+Android 项目额外沿真实代码追踪：
 
 ~~~text
 Java/Kotlin Surface
@@ -116,152 +194,62 @@ Java/Kotlin Surface
 → Render thread
 ~~~
 
-覆盖 pause / resume / rotation / surface destroyed / extent=0。
+必须检查：
 
-## 4. Evidence Map
+- SurfaceView / NativeActivity / 其他 Surface 来源。
+- ANativeWindow acquire / release ownership。
+- pause / resume 与 Surface created / destroyed 的实际事件顺序。
+- rotation / resize 后 swapchain-dependent resource 传播。
+- extent=0 时的暂停 / 跳帧路径。
+- render thread 在 Surface 无效期间是否停止 present。
+- logcat / AGI / Validation 的对应证据。
 
-关键判断统一记录：
+## 10. 验证方式
 
-| 结论 | 文件 / 类 / 函数 | 关键行为 | 证据等级 | 置信度 |
-|---|---|---|---|---|
-| 项目使用传统 RenderPass | Renderer.cpp::createPass | 调用 vkCreateRenderPass，pipeline creation 持有 renderPass handle | [CODE] | 高 |
-| 同步仍使用 legacy submit | Queue.cpp::submit | 构造 VkSubmitInfo 并调用 vkQueueSubmit | [CODE] | 高 |
-
-规则：
-
-1. [CODE] 只证明“当前项目如何实现”，不能覆盖 [SPEC]。
-2. 只有类名 / 文件名、没有读到实现时，标记“未验证”，不能写成项目事实。
-3. 项目代码与 [SPEC] 冲突时，应报告项目实现存在风险，而不是用项目实现反推规范。
-4. 关键架构结论至少需要一条直接源码证据；跨模块结论优先给两条相互印证的证据。
-
-## 5. Architecture Map 输出
-
-至少输出：
-
-~~~text
-Application / Platform
-        ↓
-Vulkan Entry / Device
-        ↓
-Renderer / Frame Context
-        ↓
-RenderPass / Dynamic Rendering / RenderGraph
-        ↓
-Resource / Descriptor / Pipeline
-        ↓
-Command Recording
-        ↓
-Queue Submission / Synchronization
-        ↓
-Present
-~~~
-
-每个节点映射到项目文件 / 类 / 函数。某一层不存在时明确写“不存在 / 未抽象 / 未验证”，不要补造。
-
-## 6. Change Impact Analysis
-
-修改前按四级分类：
-
-### Must Change
-
-不改则目标无法达成，或违反兼容性 / 生命周期 / 同步要求。
-
-### Should Change
-
-不阻塞目标，但继续保留会形成明显技术债、重复路径或回归风险。
-
-### Can Defer
-
-当前目标不依赖，可以后置，并说明后置条件。
-
-### Do Not Change
-
-当前已有实现正确且无必要触碰，避免扩大回归面。
-
-每项必须绑定：
-
-- 文件 / 类 / 函数 [CODE]
-- Vulkan 对象影响链
-- 生命周期影响
-- 同步影响
-- Android 生命周期影响（如适用）
-- 性能回归面
-
-## 7. Implementation Handoff
-
-输出给 coding agent 时使用：
-
-### Goal
-一句话说明目标。
-
-### Current Evidence
-列出关键 [CODE] 证据和当前架构。
-
-### Target Design
-描述目标架构，不重复通用 Vulkan 教程。
-
-### Files To Modify
-逐文件列出位置、计划修改、原因和依赖前置。
-
-### Dependency Order
-按真实依赖排序，禁止把有依赖的修改并行化。
-
-### Implementation Steps
-每一步明确 Vulkan 对象 / API / 状态变化。
-
-### Risks
-至少检查 API compatibility、descriptor / pipeline compatibility、resource lifetime、synchronization、frames-in-flight、swapchain-dependent resources、Android lifecycle、performance regression。
-
-### Verification
-复用 00_expert_entry/verification_gate.md G1-G6。
-
-### Rollback
-说明恢复旧路径的方法；架构迁移优先保留可切换边界直到验证完成。
-
-### Definition of Done
-必须是可验证条件，不使用“基本完成”“看起来正常”等表述。
-
-## 8. 典型任务映射
-
-### Vulkan 版本升级
-
-先建立 apiVersion / features / extensions → submit model → rendering model → descriptor model → Android capability，再分为 Must Change / Should Change / Can Defer / Do Not Change。
-
-不要把“升级 Vulkan 版本”自动等价为“必须迁移 Dynamic Rendering / Sync2”。
-
-### Android rotation crash
-
-把通用 Playbook 映射到：
-
-~~~text
-Surface callback
-→ Native event
-→ ANativeWindow owner
-→ VkSurfaceKHR owner
-→ Swapchain recreate
-→ in-flight resource
-~~~
-
-### 新增 Compute Pass
-
-必须优先复用项目现有 resource allocator、descriptor model、pipeline manager、command recording、submission / barrier system，禁止另起一套平行 Vulkan 管理路径。
-
-## 9. 验收
-
-- [ ] 所有关键架构结论有 [CODE] 或显式“未验证”状态。
-- [ ] Architecture Map 能映射到源码。
-- [ ] 修改项已分为 Must / Should / Can Defer / Do Not Change。
-- [ ] 每个 Must Change 有对象链和依赖顺序。
-- [ ] 实施计划可直接交给 coding agent。
-- [ ] Verification Gate G1-G6 有对应验证入口。
+- [ ] 所有关键项目事实均有 `[CODE]` 证据，或明确标记“未验证”。
+- [ ] Architecture Map 每个已确认节点都映射到实际文件 / 类 / 函数。
+- [ ] 修改项已分为 Must Change / Should Change / Can Defer / Do Not Change。
+- [ ] 每个 Must Change 都有对象影响链和 Dependency Order。
+- [ ] 实施计划能直接交给 coding agent，而不是通用 Vulkan 建议。
+- [ ] Verification Gate G1-G6 均有已验证 / 未验证 / 不适用状态。
 - [ ] Android 项目覆盖 Surface / ANativeWindow / Swapchain 生命周期。
 - [ ] 未为了“现代化”无条件引入 RenderGraph / Bindless / Async Compute / Dynamic Rendering。
 
-## 10. 相关模块
+## 11. 常见失败模式
 
-- ../../00_expert_entry/progressive_retrieval.md
-- ../../00_expert_entry/accuracy_check.md
-- ../../02_core_mental_model/engine_architecture.md
-- ../../02_core_mental_model/regression_reasoning.md
-- ../../07_integration_pack/task_routing_rules.md
-- ../../07_integration_pack/regression_checklist.md
+1. 只根据文件名 / 类名猜项目用了 RenderGraph、Bindless 或某种 queue model。
+2. 把 Vulkan 版本升级自动等价为全量迁移 Dynamic Rendering / Synchronization2。
+3. 新增 Compute Pass 时绕过项目现有 Resource / Descriptor / Pipeline / Command 系统，形成第二套平行架构。
+4. 只列“需要修改的文件”，没有沿对象链继续推导下游兼容性。
+5. 只给 Architecture Map，不给可实施的 Dependency Order / Rollback / DoD。
+6. 用 `[CODE]` 替代 `[SPEC]` 判断 Vulkan 合法性。
+
+## 12. 相关 API 卡片
+
+按项目实际命中情况加载，常用入口：
+
+- `../../03_api_manual/01_instance_device_queue/logical_device.md`
+- `../../03_api_manual/02_surface_swapchain/swapchain.md`
+- `../../03_api_manual/03_command_buffer/queue_submit.md`
+- `../../03_api_manual/05_descriptor/descriptor_set.md`
+- `../../03_api_manual/06_pipeline/graphics_pipeline.md`
+- `../../03_api_manual/08_synchronization/pipeline_barrier.md`
+
+## 13. 相关 Debug Playbook
+
+根据问题定向加载：
+
+- `../../04_debug_playbooks/02_crash_hang/swapchain_recreate_crash.md`
+- `../../04_debug_playbooks/02_crash_hang/device_lost.md`
+- `../../04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md`
+- `../../04_debug_playbooks/05_android_specific/android_surface_lifecycle.md`
+
+## 14. 不确定时如何处理
+
+信息不足时不要补造项目事实：
+
+1. 先继续读取能消除分歧的源码调用点。
+2. 只有源码和已有上下文都无法回答、且缺口会改变结论时，按 Progressive Retrieval R2 提 ≤3 个最小问题。
+3. 未读取实现的判断标记“未验证”，不得标 `[CODE]`。
+4. 若项目实现与 Vulkan Spec 冲突，明确区分“项目当前行为”和“规范要求”。
+5. 两轮定向检索仍低置信时，把未验证项交给 Verification Gate，不伪装成确定结论。
