@@ -102,7 +102,27 @@
 5. `06_cases/04_swapchain_android`
 6. 必要时引用 `03_api_manual/02_surface_swapchain` 与 `03_api_manual/08_synchronization` 相关卡片
 
-## 9. 简短回答类
+## 9. 项目诊断类
+
+用户提供真实 Vulkan / 图形引擎仓库，要求理解当前架构、评估版本升级 / 重构影响面、把 Debug Playbook 映射到源码，或生成 coding-agent 实施计划。
+
+使用模块：
+
+1. `00_expert_entry`
+2. `05_workflows/01_renderer_setup/project_diagnosis.md`
+3. `02_core_mental_model/engine_architecture.md`
+4. `02_core_mental_model/regression_reasoning.md`
+5. 按具体子问题补载 playbook / API card / case
+
+处理规则：
+
+1. 先建立 `[CODE]` Evidence Map，再建立 Architecture Map；不根据文件名 / 类名猜项目事实。
+2. 修改影响面分为 Must Change / Should Change / Can Defer / Do Not Change。
+3. Debug 任务必须把通用假设映射到具体文件 / 类 / 函数。
+4. 实现任务输出 Files To Modify、Dependency Order、Rollback、Definition of Done。
+5. `[CODE]` 不能覆盖 `[SPEC]`；冲突时报告实现风险。
+
+## 10. 简短回答类
 
 用户明确要求简短、只要重点、问题较小时使用。
 
@@ -114,7 +134,7 @@
 
 使用模块：与判断出的主类型一致。
 
-## 10. 第三方库集成类
+## 11. 第三方库集成类
 
 用户问：如何集成 ImGui / glfw / glm / tinygltf / stb / Assimp 等第三方库到 Vulkan 工程；ImGui + Vulkan backend 初始化、glTF 模型加载、PBR 渲染管线搭建。
 
@@ -132,9 +152,9 @@
 3. **API 版本变更点显式列出**：若某 API 在不同版本间存在签名 / 参数 / 行为变更，必须显式列出，避免用户使用过时签名。
 4. **不确定时不编造**：若无法确认 API 签名的版本归属，明确说明并提示用户核对所用版本，**不允许编造 API 签名**。
 
-## 11. 统一出口：Verification Gate
+## 12. 统一出口：Verification Gate
 
-适用于第 2 / 3 / 4 / 5 / 6 / 8 / 10 类，以及任何输出修改方案或结论性判断的任务。
+适用于第 2 / 3 / 4 / 5 / 6 / 8 / 9 / 11 类，以及任何输出修改方案或结论性判断的任务。
 
 处理规则：
 
