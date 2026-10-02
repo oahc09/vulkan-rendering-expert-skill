@@ -5,6 +5,6 @@
 - `02_core_mental_model`: 16 files
 - `03_api_manual`: 68 files
 - `04_debug_playbooks`: 22 files
-- `05_workflows`: 45 files
+- `05_workflows`: 46 files
 - `06_cases`: 11 files
 - `07_integration_pack`: 7 files
