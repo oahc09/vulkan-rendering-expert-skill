@@ -60,7 +60,7 @@
 
 循环入口即现有路由，保持不变：
 
-- 路由表：`07_integration_pack/task_routing_rules.md`（9 类任务）。
+- 路由表：`07_integration_pack/task_routing_rules.md`（按 `task_classifier.md` 的 10 类主任务路由；第三方库集成为专项路由）。
 - 检索策略与最小文件上限：`07_integration_pack/retrieval_policy.md` §4（1 workflow + 1 playbook + 1-3 API card + 0-2 case）。
 
 首轮对**每个子问题**分别路由，不合并加载。
