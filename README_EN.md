@@ -14,6 +14,7 @@ This is a Vulkan rendering engineering expert skill package. It is not a Vulkan 
 - Analyzing mobile Vulkan performance bottlenecks, including bandwidth, fullscreen passes, barriers, descriptor updates, and pipeline creation stutter.
 - Handling Android Vulkan `ANativeWindow`, Surface lifecycle, pause/resume, orientation changes, and swapchain recreation.
 - Distinguishing between specification facts, engineering judgment, and items requiring lookup when API details are uncertain.
+- Analyzing real Vulkan / graphics-engine repositories with `[CODE]` evidence, an Architecture Map, source-level change impact, and a coding-agent implementation handoff.
 
 ## Skill Structure
 
@@ -80,6 +81,7 @@ The following prompts are ready to copy; each is labeled with the modules it tri
 6. `Hand-written barriers across 8 passes are getting unmaintainable — evaluate adopting a RenderGraph.` (architecture decision + RenderGraph case)
 7. `How should I choose srcStageMask for vkCmdPipelineBarrier2?` (API card)
 8. `Any real-world cases of crashes caused by swapchain recreation?` (case index)
+9. `Diagnose this existing repository's Vulkan architecture first, then assess the source-level impact of upgrading to Vulkan 1.3. Do not give generic advice.` (project diagnosis + regression reasoning)
 
 Attaching key information yields the most accurate answers — see the per-task-type question templates in section R2 of `references/00_expert_entry/progressive_retrieval.md`.
 
@@ -87,4 +89,4 @@ Attaching key information yields the most accurate answers — see the per-task-
 
 - **Just ask (recommended)**: no files to read first — the skill routes by symptom/intent to the matching playbook, workflow, or case.
 - **See the knowledge map**: read `references/README.md` and `references/MODULE_SUMMARY.md` for the division of labor across the 8 modules.
-- **Deep dive**: read modules in order `00` → `07`; start with `04_debug_playbooks/` for debugging, `05_workflows/` for implementation, and `02_core_mental_model/engine_architecture.md` for architecture.
+- **Deep dive**: read modules in order `00` → `07`; start with `04_debug_playbooks/` for debugging, `05_workflows/` for implementation, and `02_core_mental_model/engine_architecture.md` for architecture, and `05_workflows/01_renderer_setup/project_diagnosis.md` for real-repository diagnosis.
