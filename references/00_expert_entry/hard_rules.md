@@ -24,3 +24,5 @@
 15. **Vulkan 销毁函数必须幂等**：所有 Vulkan 销毁路径（包括 shutdown / destructor / swapchain recreate 共用清理函数）必须满足：开头检查 device handle 是否为空、销毁对象后同步置空 handle、`vkDeviceWaitIdle` 可重复调用。[SPEC]
 16. **现象消失不等于根因修复**：修复输出必须区分 Workaround（临时绕过）、Minimal Fix（根因最小修复）、Structural Fix（结构性修复）三级；使用 Workaround 后必须继续定位根因，或显式标注为临时绕过并说明剩余风险。[ENGINE]
 17. **Validation clean 不是唯一成功标准**：Validation Layer 只能证明 API 使用与显式声明的同步关系合法，不能证明渲染结果正确；结论性输出前必须按 `verification_gate.md` 过 G1-G6 关卡（无法验证的关卡显式标注，不得默认通过）。[TOOL][ENGINE]
+
+18. **真实项目判断必须绑定源码证据**：当任务针对一个实际代码仓库时，关于“当前项目如何实现”的关键结论必须给出 `[CODE]` 证据（文件路径 + 类 / 函数 + 关键行为）；仅看到文件名 / 类名但未读取实现时必须标记“未验证”。`[CODE]` 只证明项目事实，不能覆盖 `[SPEC]`；项目实现与规范冲突时应报告实现风险。[CODE][ENGINE]
