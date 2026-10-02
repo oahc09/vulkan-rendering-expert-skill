@@ -81,6 +81,7 @@ v1.0  可用于真实 Vulkan 工程辅助
 - [ ] 文件命名一致。
 - [ ] 模块编号一致。
 - [ ] 没有重复或废弃文件混入主路径。
+- [ ] Git 跟踪文件总数 ≤200（ClawHub 限制）。
 
 ### 2. 行为检查
 
@@ -92,6 +93,8 @@ v1.0  可用于真实 Vulkan 工程辅助
 - [ ] 经验问题优先走 Cases。
 - [ ] Android 生命周期问题会走 Android 专项路径。
 - [ ] 性能问题会先做瓶颈分类。
+- [ ] 项目诊断能把抽象模型映射到真实源码，并给出 `[CODE]` Evidence Map。
+- [ ] 源码改造任务会输出 Must / Should / Can Defer / Do Not Change 和依赖顺序。
 
 ### 3. 准确性检查
 
@@ -161,6 +164,7 @@ v1.0  可用于真实 Vulkan 工程辅助
 | Android 生命周期问题 | 1 个 Android playbook + 1 个 workflow + 1 个 case |
 | 复杂性能问题 | 1 个 workflow + 1 个 debug playbook + 1 个 case |
 | 真实案例问题 | 1～2 个 case + 相关 playbook |
+| 真实仓库诊断 | 1 个 project diagnosis workflow + 按子问题定向读取源码 + 必要的 mental model / playbook / API card |
 
 ### 3. 输出长度控制
 
