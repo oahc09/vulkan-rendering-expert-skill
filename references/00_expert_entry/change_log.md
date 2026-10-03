@@ -96,13 +96,13 @@
 
 ### 源码级修改影响面
 
-- `regression_reasoning.md` 增加源码级影响面映射：抽象 Vulkan 对象依赖必须落到文件 / 类 / 函数。
+- `../02_core_mental_model/regression_reasoning.md` 增加源码级影响面映射：抽象 Vulkan 对象依赖必须落到文件 / 类 / 函数。
 - 修改项统一分为 Must Change / Should Change / Can Defer / Do Not Change，分别控制必要修改、技术债、可延后项和明确不动项。
 - 版本升级不再自动等价于迁移 Dynamic Rendering / Sync2 等现代路径；必须结合现有源码依赖、目标收益和回归面单独决策。
 
 ### 路由与交付协议
 
-- `SKILL.md`、task classifier、response formats、progressive retrieval、task routing、retrieval policy 接入“项目诊断类”。
+- `../../SKILL.md`、task classifier、response formats、progressive retrieval、task routing、retrieval policy 接入“项目诊断类”。
 - 项目诊断输出要求包含 `[CODE]` Evidence Map、Architecture Map、Files To Modify、Dependency Order、Risks、Rollback、DoD。
 - 真实项目实现任务优先复用项目现有 Resource / Descriptor / Pipeline / Command / Queue 架构，除非源码证据证明现有抽象本身是问题根因。
 
