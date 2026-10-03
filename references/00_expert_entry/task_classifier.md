@@ -2,7 +2,7 @@
 
 收到任务后，先判断属于哪类。分类结果必须与 `07_integration_pack/task_routing_rules.md` 和本文件的 `00_expert_entry/response_formats.md` 保持一致。
 
-若查询跨多个类型，按 `调试问题 > 性能问题 > Android 专项 > 正向开发 > 架构设计 > API 细节 > 经验案例 > 概念+链路 > 简短回答` 的优先级处理主类型，其余类型在主回答后以补充段落覆盖。
+若查询跨多个类型，按 `调试问题 > 性能问题 > Android 专项 > 项目诊断 > 正向开发 > 架构设计 > API 细节 > 经验案例 > 概念+链路 > 简短回答` 的优先级处理主类型，其余类型在主回答后以补充段落覆盖。
 
 跨类型任务先用 `00_expert_entry/progressive_retrieval.md` 的 R1 查询分解拆为子问题，再对每个子问题独立分类与路由；只有子问题无法拆分（单一问题天然横跨多类，如"迁移 OpenGL 项目到 Vulkan 并优化性能"）时才用固定优先级取主类型。
 
@@ -151,7 +151,27 @@
 
 ---
 
-## 9. 简短回答类
+## 9. 项目诊断类
+
+用户提供真实代码仓库，要求理解 Vulkan 架构、评估升级 / 重构影响面、把 Debug Playbook 映射到项目源码，或输出可直接交给 coding agent 的实施计划。
+
+应优先使用：
+
+- `05_workflows/01_renderer_setup/project_diagnosis.md`
+- `02_core_mental_model/engine_architecture.md`
+- `02_core_mental_model/regression_reasoning.md`
+
+应关注：
+
+- `[CODE]` Evidence Map：文件 / 类 / 函数 / 关键行为。
+- Architecture Map：Device / Frame / Rendering / Resource / Descriptor / Pipeline / Sync / Present。
+- 修改影响面：Must Change / Should Change / Can Defer / Do Not Change。
+- 实施依赖顺序、风险、Rollback、DoD 与 Verification Gate。
+- 禁止只凭目录名 / 类名推断项目事实。
+
+---
+
+## 10. 简短回答类
 
 用户明确要求简短、只要重点、问题较小时使用。
 

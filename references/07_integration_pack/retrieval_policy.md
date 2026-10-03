@@ -45,6 +45,18 @@
 → 必要时查官方文档
 ```
 
+### 用户提供真实代码仓库 / 要求源码改造
+
+```text
+05_workflows/01_renderer_setup/project_diagnosis.md
+→ 建立 [CODE] Evidence Map
+→ 02_core_mental_model/engine_architecture.md
+→ 02_core_mental_model/regression_reasoning.md
+→ 按具体子问题补载 playbook / API card / case
+```
+
+规则：优先从仓库读取平台、版本、架构和生命周期证据；源码已经能回答的信息不得重复向用户提问。
+
 ### 用户问真实案例
 
 ```text
@@ -74,6 +86,7 @@
 - 1 个 debug playbook
 - 1～3 个 API card
 - 0～2 个 case
+- 真实仓库任务额外 1 个 `../05_workflows/01_renderer_setup/project_diagnosis.md`；项目源码本身不计入知识文件预算，但只读取与当前子问题相关的代码路径
 
 除非用户明确要求完整方案或文档。
 

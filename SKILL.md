@@ -1,11 +1,11 @@
 ---
 name: vulkan-rendering-expert-skill
-description: Vulkan 渲染工程专家技能。用于 Vulkan API 设计、实现、调试、优化、Validation Error 处理、Android Vulkan 集成、Swapchain/同步/Image Layout/资源生命周期问题、图形引擎架构、Render Pass、Pipeline、Descriptor、Command Buffer、Compute 工作流、引擎子系统架构设计、架构决策和性能分析。当用户描述 Vulkan 黑屏/闪烁/花屏/崩溃/GPU hang/device lost、遇到 Validation Error 或 VUID 报错、帧耗时高或卡顿、需要实现渲染功能、或需要做架构选型（RenderPass vs Dynamic Rendering、Bindless、RenderGraph、Async Compute、资源生命周期分组）时，使用本技能。
+description: Vulkan 渲染工程专家技能。用于 Vulkan API 设计、实现、调试、优化、Validation Error 处理、Android Vulkan 集成、Swapchain/同步/Image Layout/资源生命周期问题、图形引擎架构、Render Pass、Pipeline、Descriptor、Command Buffer、Compute 工作流、引擎子系统架构设计、架构决策、真实项目诊断、源码级影响面分析和性能分析。当用户描述 Vulkan 黑屏/闪烁/花屏/崩溃/GPU hang/device lost、遇到 Validation Error 或 VUID 报错、帧耗时高或卡顿、需要实现渲染功能、或需要做架构选型（RenderPass vs Dynamic Rendering、Bindless、RenderGraph、Async Compute、资源生命周期分组）时，使用本技能。
 license: MIT
 metadata:
   author: Vulkan 渲染专家技能贡献者
-  version: 1.0.7
-  last-updated: '2026-09-13'
+  version: 1.0.8
+  last-updated: '2026-10-02'
   keywords: vulkan, rendering, android, graphics-engine, debugging, performance, synchronization, descriptor, pipeline, swapchain
 ---
 
@@ -47,6 +47,7 @@ metadata:
 - 故障调试问题：读取 `references/04_debug_playbooks/debug_priority_index.md`、一个匹配的 playbook、相关 API 卡片，必要时读取少量案例。
 - 正向实现任务：读取 `references/05_workflows/workflow_index.md`、一个匹配的 workflow、相关 API 卡片和调试检查项。
 - 架构设计任务：先读取 `references/02_core_mental_model/engine_architecture.md`（子系统模型与 §10 决策框架），再按需读取匹配的 workflow、case 与相关 API 卡片。
+- 真实项目诊断 / 源码改造任务：先读取 `references/05_workflows/01_renderer_setup/project_diagnosis.md`，建立 `[CODE]` Evidence Map 与 Architecture Map，再做影响面分析、实施计划和 Verification Gate。
 - 性能优化任务：读取相关优化 workflow、性能症状 playbook、相关案例，必要时读取 API 卡片。
 - Android Vulkan 生命周期或 Swapchain 问题：读取 Android workflow/playbook/case，以及 Surface、Swapchain、Synchronization 相关 API 卡片。
 - 经验案例或复盘请求：读取 `references/06_cases/case_index.md`，再读取相关案例。
@@ -74,6 +75,7 @@ metadata:
 | CPU 侧开销高 | `references/04_debug_playbooks/06_performance_symptoms/cpu_overhead_symptoms.md` |
 | pipeline 创建卡顿 / 首帧卡顿 | `references/04_debug_playbooks/06_performance_symptoms/pipeline_startup_stutter.md` |
 | 从零搭建 renderer | `references/05_workflows/01_renderer_setup/create_renderer_from_scratch.md` |
+| 分析陌生 Vulkan 仓库 / 源码影响面 | `references/05_workflows/01_renderer_setup/project_diagnosis.md` |
 | 架构选型 / 迁移决策 | `references/02_core_mental_model/engine_architecture.md`（§10 决策框架） |
 | 查找相似案例 | `references/06_cases/case_index.md` |
 
@@ -104,6 +106,8 @@ metadata:
 6. Verification Gate 验证状态（G1-G6 各标注已验证 / 未验证 / 不适用）。
 
 架构设计任务的回答必须先给决策链（需求 → 约束 → Candidate → Trade-off → Decision），再给实现建议；每个决策必须包含适用边界与重新评估条件。
+
+真实项目诊断 / 源码改造任务必须先给 `[CODE]` Evidence Map 和 Architecture Map；所有“当前项目如何实现”的判断必须绑定文件 / 类 / 函数证据，无法从源码确认时标记为“未验证”。修改项必须分为 Must Change / Should Change / Can Defer / Do Not Change，并输出可直接交给 coding agent 的依赖顺序与 DoD。
 
 最终结论（已完成 / 已解决 / 根因已修复 / 性能已优化）给出前，必须按 `references/00_expert_entry/verification_gate.md` 过 G1-G6 关卡。修复类结论必须区分 Workaround（临时绕过）、Minimal Fix（根因修复）和 Structural Fix（结构性修复）。
 

@@ -174,7 +174,28 @@ Verification Gate:
 
 ---
 
-## 9. 简短回答类
+## 9. 项目诊断类
+
+适用于：分析真实 Vulkan / 图形引擎仓库、版本升级影响面、源码级架构改造、把通用排错映射到项目代码。
+
+输出结构：
+
+1. 结论与当前置信度
+2. `[CODE]` Evidence Map（结论 → 文件 / 类 / 函数 → 关键行为）
+3. Architecture Map（项目 Vulkan 主链）
+4. Requirement / Problem 与目标边界
+5. Change Impact：Must Change / Should Change / Can Defer / Do Not Change
+6. Target Design / Decision（如涉及架构选择）
+7. Files To Modify + Dependency Order
+8. Risks / Regression Surface
+9. Verification / Rollback / Definition of Done
+10. Verification Gate 状态（§0）
+
+规则：没有读到实现的项目判断必须标记“未验证”；`[CODE]` 不能覆盖 `[SPEC]`。
+
+---
+
+## 10. 简短回答类
 
 适用于：用户要求简短、只要重点、问题较小。
 

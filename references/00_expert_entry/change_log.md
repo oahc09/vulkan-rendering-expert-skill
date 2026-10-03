@@ -86,6 +86,37 @@
 - `_fix_pb_refs.py` 批量替换留下的 CRLF 行尾统一为 LF，涉及 43 个文件。
 - `git diff --check` 全部干净。
 
+## v1.0.8 — Project Diagnosis
+
+### 真实仓库诊断与源码证据
+
+- 新增 `05_workflows/01_renderer_setup/project_diagnosis.md`：把陌生 Vulkan / 图形引擎仓库分析固化为 Project Reconnaissance → Evidence Map → Architecture Map → Change Impact → Implementation Handoff → Verification Gate。
+- 新增 `[CODE]` 来源标签：用于“当前目标项目源码直接证据”；只证明项目事实，不能覆盖 `[SPEC]` / `[REGISTRY]` / `[REF]`，项目实现与规范冲突时必须报告实现风险。
+- `accuracy_check.md` 与 `hard_rules.md` 增加源码证据约束：禁止只根据文件名 / 类名猜项目架构；未读取实现的关键判断标记“未验证”。
+
+### 源码级修改影响面
+
+- `../02_core_mental_model/regression_reasoning.md` 增加源码级影响面映射：抽象 Vulkan 对象依赖必须落到文件 / 类 / 函数。
+- 修改项统一分为 Must Change / Should Change / Can Defer / Do Not Change，分别控制必要修改、技术债、可延后项和明确不动项。
+- 版本升级不再自动等价于迁移 Dynamic Rendering / Sync2 等现代路径；必须结合现有源码依赖、目标收益和回归面单独决策。
+
+### 行为测试修订：Architecture Map 强制出口
+
+- v1.0.8 模型行为测试发现：版本升级评估与 Android crash 场景可能给出 `[CODE]` Evidence Map，却跳过 Architecture Map。
+- `hard_rules.md` 新增规则 #19：真实项目任务无论偏升级 / Debug / 性能 / 实现，都必须先输出 Evidence Map + Architecture Map，再进入根因、Change Impact 或实施计划。
+- `../05_workflows/01_renderer_setup/project_diagnosis.md` Step 2 同步改为 Evidence Map + Architecture Map；允许只画与当前任务相关的子图，但未知层必须显式标记“未验证”。
+
+### 路由与交付协议
+
+- `../../SKILL.md`、task classifier、response formats、progressive retrieval、task routing、retrieval policy 接入“项目诊断类”。
+- 项目诊断输出要求包含 `[CODE]` Evidence Map、Architecture Map、Files To Modify、Dependency Order、Risks、Rollback、DoD。
+- 真实项目实现任务优先复用项目现有 Resource / Descriptor / Pipeline / Command / Queue 架构，除非源码证据证明现有抽象本身是问题根因。
+
+### 文件数量
+
+- 新增 1 个 workflow 文件：`05_workflows` 45 → 46。
+- 预计 Git 跟踪文件 198 → 199，继续满足 ClawHub ≤200 文件限制。
+
 ## v1.0.7 — Onboarding
 
 针对 SkillHub 评测（T 4.8 / R 4.5 / A 4.4 / C 4.8 / E 4.8）的上手体验优化，不改动知识主体（API 卡片 / playbook / workflow / case 内容不变），无新增文件（保持 198/200）。

@@ -13,6 +13,7 @@
 | 建立 frame loop | `01_renderer_setup/setup_frame_loop.md` |
 | 建立 validation/debug | `01_renderer_setup/setup_validation_debug.md` |
 | 建立 swapchain | `01_renderer_setup/setup_swapchain.md` |
+| 诊断陌生 Vulkan 仓库 / 源码影响面 | `01_renderer_setup/project_diagnosis.md` |
 
 ---
 
