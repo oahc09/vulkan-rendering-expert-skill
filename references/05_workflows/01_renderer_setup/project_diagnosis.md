@@ -133,7 +133,9 @@ Project Reconnaissance 至少定位：
 
 按 §4 主链读取源码，建立 Architecture Map。
 
-### Step 2：Evidence Map
+### Step 2：Evidence Map + Architecture Map
+
+先输出关键 `[CODE]` Evidence Map，再输出与当前任务相关的 Architecture Map。即使主任务是版本升级、Debug 或性能分析，也不能跳过 Architecture Map；只允许缩小到相关主链，未知节点标记“未验证”。
 
 关键判断统一记录：
 
