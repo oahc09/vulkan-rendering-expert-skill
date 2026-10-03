@@ -104,7 +104,7 @@
 
 - v1.0.8 模型行为测试发现：版本升级评估与 Android crash 场景可能给出 `[CODE]` Evidence Map，却跳过 Architecture Map。
 - `hard_rules.md` 新增规则 #19：真实项目任务无论偏升级 / Debug / 性能 / 实现，都必须先输出 Evidence Map + Architecture Map，再进入根因、Change Impact 或实施计划。
-- `project_diagnosis.md` Step 2 同步改为 Evidence Map + Architecture Map；允许只画与当前任务相关的子图，但未知层必须显式标记“未验证”。
+- `../05_workflows/01_renderer_setup/project_diagnosis.md` Step 2 同步改为 Evidence Map + Architecture Map；允许只画与当前任务相关的子图，但未知层必须显式标记“未验证”。
 
 ### 路由与交付协议
 
