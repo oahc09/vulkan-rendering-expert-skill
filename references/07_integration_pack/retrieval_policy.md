@@ -86,7 +86,7 @@
 - 1 个 debug playbook
 - 1～3 个 API card
 - 0～2 个 case
-- 真实仓库任务额外 1 个 `project_diagnosis.md`；项目源码本身不计入知识文件预算，但只读取与当前子问题相关的代码路径
+- 真实仓库任务额外 1 个 `../05_workflows/01_renderer_setup/project_diagnosis.md`；项目源码本身不计入知识文件预算，但只读取与当前子问题相关的代码路径
 
 除非用户明确要求完整方案或文档。
 
