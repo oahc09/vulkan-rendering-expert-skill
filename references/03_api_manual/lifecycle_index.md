@@ -22,6 +22,7 @@
 | `VkDeviceMemory` | `04_buffer_image_memory/memory_allocation.md` | 释放前确保没有 resource 仍被 GPU 使用。 |
 | `VkDescriptorSetLayout` | `05_descriptor/descriptor_set_layout.md` | 被 pipeline / descriptor set 引用期间不能销毁。 |
 | `VkDescriptorSet` / `VkDescriptorPool` | `05_descriptor/descriptor_set.md` | in-flight 期间不能 reset / free；resource 引用需保持有效。 |
+| Descriptor Buffer / Heap | `05_descriptor/descriptor_buffer.md` / `05_descriptor/descriptor_heap.md` | 字节与引用资源均须存活到最后访问完成；slot 复用需完成证据。 |
 | `VkPipelineLayout` | `06_pipeline/pipeline_layout.md` | 相关 pipeline 仍使用时销毁需谨慎。 |
 | `VkPipeline` | `06_pipeline/graphics_pipeline.md`<br>`06_pipeline/compute_pipeline.md` | in-flight command buffer 引用时不能销毁。 |
 | `VkShaderModule` | `06_pipeline/shader_module.md` | pipeline 创建后可销毁，但复用期间需保留。 |

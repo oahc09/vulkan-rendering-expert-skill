@@ -137,7 +137,7 @@
 
 ### Validation Layer
 
-- `VUID-VkSwapchainCreateInfoKHR-imageExtent-01274`：extent 越界（resize / 最小化期间常见）。
+- imageExtent 必须满足 surface capabilities 的 extent 约束；resize 或最小化时重新查询，零 extent 时暂停创建。 [官方 VkSwapchainCreateInfoKHR 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkSwapchainCreateInfoKHR.html)。[SPEC]
 - `VUID-vkCreateWin32SurfaceKHR-*`：句柄 / 扩展启用问题。
 - `VUID-vkAcquireNextImageKHR-*` / `VUID-vkQueuePresentKHR-*`：返回码处理与 semaphore 配对。
 

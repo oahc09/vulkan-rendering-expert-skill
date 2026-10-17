@@ -148,7 +148,7 @@ vkAllocateCommandBuffers
 - `VUID-vkResetCommandBuffer-commandBuffer-00045`：command buffer 不能处于 pending 状态。
 - `VUID-vkFreeCommandBuffers-pCommandBuffers-00047`：free 的 command buffer 不能处于 pending 状态。
 - `VUID-vkBeginCommandBuffer-commandBuffer-00049`：只能从 INITIAL 或 EXECUTABLE（若允许 reset）状态开始。
-- `VUID-vkQueueSubmit-pCommandBuffers-00072`：command buffer 必须处于 executable 状态。
+- `VUID-vkQueueSubmit-pCommandBuffers-00072`：被提交的 primary command buffer 内引用的 secondary command buffers 必须处于 pending 或 executable；pending 的合法性还受 SIMULTANEOUS_USE 限制。 [官方 vkQueueSubmit 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueSubmit.html)。[SPEC]
 
 ### RenderDoc / AGI
 

@@ -89,7 +89,7 @@ VkPhysicalDeviceFeatures2
 - `VK_EXT_descriptor_indexing`（最初扩展，2019）。
 - Vulkan 1.2 核心化：通过 `VkPhysicalDeviceVulkan12Features` 字段访问等价 feature；不再需要 pNext 扩展结构体。[SPEC]
 - `VK_KHR_maintenance4` / Vulkan 1.3：放宽了部分 descriptor 兼容性，影响 bindless 实践。
-- `VK_EXT_non_uniform_qualifier`：早期使 `nonuniformEXT` 可用的扩展（已被 descriptor_indexing + Vulkan 1.2 取代）。
+- GLSL 的 `GL_EXT_nonuniform_qualifier` 提供 `nonuniformEXT` 语法；Vulkan 端仍须查询/启用 descriptor indexing 中对应 descriptor 类型的 non-uniform indexing feature。二者属于不同层次，不能把 GLSL 扩展拼成 Vulkan 扩展名。[SPEC]
 
 ---
 
@@ -147,7 +147,7 @@ VkPhysicalDeviceFeatures2
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
 | `VkPhysicalDeviceDescriptorIndexingFeatures::descriptorBindingPartiallyBound` | 必须为 VK_TRUE 才能使用 `PARTIALLY_BOUND` flag。[SPEC] | 未启用该 feature 就在 bindingFlags 中使用 `PARTIALLY_BOUND`，导致 validation error。[TOOL] |
-| `VkPhysicalDeviceDescriptorIndexingFeatures::descriptorBindingUpdateAfterBind` | 必须为 VK_TRUE 才能使用 `UPDATE_AFTER_BIND` flag。[SPEC] | 启用 `UPDATE_AFTER_BIND` 但 pool 未设置 `UPDATE_AFTER_BIND_BIT`。[TOOL] |
+| `VkPhysicalDeviceDescriptorIndexingFeatures` 中对应类型的 `descriptorBinding*UpdateAfterBind` 字段 | 按 descriptor 类型启用 sampled image、storage image、uniform/storage buffer、texel buffer 等各自 feature；不存在统一的 update-after-bind feature 字段。[SPEC] | 仅启用其中一个类型的 feature 就用于所有 descriptor，或遗漏 layout/pool flag。[TOOL] |
 | `VkPhysicalDeviceDescriptorIndexingFeatures::descriptorBindingVariableDescriptorCount` | 必须为 VK_TRUE 才能 allocate 时指定实际 count。[SPEC] | variable binding 没有放在 layout 最后一个 binding 上。[TOOL] |
 | `VkPhysicalDeviceDescriptorIndexingFeatures::shaderSampledImageArrayNonUniformIndexing` | shader 中 `nonuniformEXT` 修饰 sampled image array 索引必须开启。[SPEC] | 用了 `nonuniformEXT` 但未启用对应 feature bit。[TOOL] |
 | `VkDescriptorSetLayoutBindingFlagsCreateInfo::pBindingFlags` | 每个 binding 对应一个 flag；`bindingCount` 必须与 `VkDescriptorSetLayoutCreateInfo::bindingCount` 一致。[SPEC] | flag 数组长度与 binding 数组不匹配。[TOOL] |
@@ -214,12 +214,12 @@ VkPhysicalDeviceFeatures2
 
 ### Validation Layer
 
-- `VUID-VkDescriptorSetLayoutCreateInfo-flags-03000`：binding flag 与 feature bit 对应。
-- `VUID-VkDescriptorSetLayoutBindingFlagsCreateInfo-bindingCount-03004`：bindingCount 与 layout 一致。
-- `VUID-VkDescriptorSetLayoutCreateInfo-pNext-03071`：variable count binding 必须在最后。
+- `VUID-VkDescriptorSetLayoutCreateInfo-flags-03000`：任一 binding 含 UPDATE_AFTER_BIND 时，layout flags 必须含 UPDATE_AFTER_BIND_POOL。 [官方 VkDescriptorSetLayoutCreateInfo 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkDescriptorSetLayoutCreateInfo.html)。[SPEC]
+- bindingCount 非零时必须等于 VkDescriptorSetLayoutCreateInfo.bindingCount（VUID-VkDescriptorSetLayoutBindingFlagsCreateInfo-bindingCount-03002）。 [官方 VkDescriptorSetLayoutBindingFlagsCreateInfo 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkDescriptorSetLayoutBindingFlagsCreateInfo.html)。[SPEC]
+- VARIABLE_DESCRIPTOR_COUNT binding 必须具有最高 binding 编号，不是简单指数组最后一项（VUID-VkDescriptorSetLayoutBindingFlagsCreateInfo-pBindingFlags-03004）。 [官方 VkDescriptorSetLayoutBindingFlagsCreateInfo 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkDescriptorSetLayoutBindingFlagsCreateInfo.html)。[SPEC]
 - `VUID-VkDescriptorSetAllocateInfo-pSetLayouts-03044`：update-after-bind layout 与 pool flag 不匹配。
 - `VUID-vkUpdateDescriptorSets-None-03047`：已绑定未完成的普通 descriptor set 被更新。
-- `VUID-vkCmdDraw-None-02695`：non-uniform indexing feature 未启用。
+- 按 descriptor 类型查询并启用对应 shader*ArrayNonUniformIndexing feature，并核对 SPIR-V NonUniform 修饰与 capabilities；不使用虚构的统一 draw VUID。 [官方 VkPhysicalDeviceDescriptorIndexingFeatures 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceDescriptorIndexingFeatures.html)。[SPEC]
 - Pipeline layout compatibility 错误（update-after-bind 与普通 layout 不兼容）。
 
 ### RenderDoc / AGI

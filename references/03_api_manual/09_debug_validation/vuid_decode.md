@@ -75,8 +75,8 @@ Validation Message
 
 ```text
 收到 validation message
-→ 提取 message ID / VUID（如 VUID-vkCmdDraw-None-02674）
-→ 拆分前缀：VUID- + 对象/命令- + 子对象- + 数字
+→ 提取日志中完整的 message ID / VUID，再按实际命令和 SDK 版本检索，不凭空拼接数字
+→ 拆分前缀：VUID- + 命令/结构- + 参数/成员/None- + 规则标识
 → 在 Vulkan Spec 或 validation layer 源码中检索 VUID
 → 查看触发条件与 required behavior
 → 根据 message 中 object handle / object type 定位具体对象
@@ -91,7 +91,7 @@ Validation Message
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
 | VUID 前缀 `VUID-` | 标识这是规范 Valid Usage ID。[SPEC] | 与实现内部 ID 混淆。[TOOL] |
-| `VUID-VkXXX-vkCmdYYY-zzzzz` | 对象-命令-子对象-数字结构。[SPEC] | 只看数字忽略结构，导致检索困难。[TOOL] |
+| `VUID-<命令或结构>-<参数/成员或 None>-<规则标识>` | 这是格式示意，不是可检索的真实 VUID；末段既可能为数字，也可能为 parameter、parent、sType 等标识。[SPEC] | 把示意占位符当成真实规则，或只看数字忽略完整上下文。[TOOL] |
 | `pMessageIdName` | 回调中的 VUID 字符串。[SPEC] | 某些旧版 layer 或特殊路径可能为空。[TOOL] |
 | `pMessage` | 完整人类可读描述。[SPEC] | 不读完整消息直接搜索，遗漏上下文。[TOOL] |
 | `objectCount` / `pObjects` | 关联的 Vulkan 对象。[SPEC] | 未利用 object handle 定位。[TOOL] |

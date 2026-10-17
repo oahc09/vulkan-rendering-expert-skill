@@ -131,7 +131,7 @@ VkApplicationInfo（app name / engine name / apiVersion）
 ### Validation Layer
 
 - `VUID-VkInstanceCreateInfo-*`：layer/extension 名称、apiVersion 合法性。
-- `VUID-vkCreateInstance-ppEnabledLayerNames-01377` 等。
+- ppEnabledLayerNames 指向 enabledLayerCount 个有效 layer 名称；先枚举可用 layer，缺失 layer 对应 VK_ERROR_LAYER_NOT_PRESENT。 [官方 VkInstanceCreateInfo 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkInstanceCreateInfo.html)。[SPEC]
 
 ### RenderDoc / AGI
 

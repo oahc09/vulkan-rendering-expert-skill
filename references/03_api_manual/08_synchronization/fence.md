@@ -129,9 +129,9 @@ Command Buffer 录制完成
 
 ### Validation Layer
 
-- `VUID-vkResetFences-pFences-01122`：reset 时 fence 不能处于未 signal 的 pending 状态。
+- reset 的 fence 不能仍关联未完成的 queue command；reset 不会等待完成，unsignaled 本身不代表仍 pending。 [官方 vkResetFences 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkResetFences.html)。[SPEC]
 - `VUID-vkDestroyFence-fence-01120`：销毁时 fence 不能仍被 pending queue 使用。
-- `VUID-vkWaitForFences-fence-03283` 等：fence 必须有效且状态正确。
+- pFences 必须是来自该 device 的有效 fence 数组；未 signal 时等待由 waitAll/timeout 决定，不能把未 signal 本身当成非法状态。 [官方 vkWaitForFences 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkWaitForFences.html)。[SPEC]
 
 ### RenderDoc / AGI
 

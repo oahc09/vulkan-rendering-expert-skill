@@ -131,7 +131,7 @@ VkImage
 
 - `VUID-vkCmdDraw-*-imageLayout-*`：layout 与使用场景不匹配。
 - `VUID-VkImageMemoryBarrier-oldLayout-01213` 等：layout transition 合法性。
-- `VUID-vkQueuePresentKHR-pImageIndices-01296`：present 前 layout 检查。
+- present 执行时，所呈现图像的 subresource 必须处于要求的 present layout（通常 VK_IMAGE_LAYOUT_PRESENT_SRC_KHR）；按实际 present 路径核对扩展例外。 [官方 vkQueuePresentKHR 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueuePresentKHR.html)。[SPEC]
 
 ### RenderDoc / AGI
 

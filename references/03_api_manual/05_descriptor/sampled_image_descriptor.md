@@ -134,7 +134,7 @@ VkImage
 
 - `VUID-VkWriteDescriptorSet-*`：descriptor type、image view、sampler 合法性。
 - `VUID-vkCmdDraw-*-imageLayout-*`：采样时 image layout 检查。
-- `VUID-vkUpdateDescriptorSets-None-03047`：image view 与 descriptor type 兼容。
+- `VUID-vkUpdateDescriptorSets-None-03047`：未设置 update-after-bind / update-unused-while-pending 相应标志的 binding，不得更新被 pending command buffer 使用的目标 set；具体例外还须满足相关 feature 与限制。
 
 ### RenderDoc / AGI
 
@@ -174,7 +174,7 @@ VkImage
 
 ### CPU-GPU 同步
 
-- 更新 descriptor set 通常不需要 fence，但修改被 GPU 使用的 descriptor set 需要谨慎。[SPEC]
+- 更新 descriptor 前确认目标 binding 不被 pending 工作使用，或严格满足已启用的 update-after-bind 等例外规则；不能仅凭 CPU 写入快速就覆盖在途使用。[SPEC]
 
 ### GPU-GPU 同步
 
@@ -182,7 +182,7 @@ VkImage
 
 ### 资源访问同步
 
-- Sampled image 必须处于 `SHADER_READ_ONLY_OPTIMAL` 或 `DEPTH_STENCIL_READ_ONLY_OPTIMAL`。[SPEC]
+- Sampled image 必须处于该 descriptor type 允许、且与实际访问时一致的 layout；常见为 `SHADER_READ_ONLY_OPTIMAL`，也可以是 `GENERAL` 或满足条件的其他只读 layout，不能限定只有两个枚举。[SPEC]
 - 若 image 刚被写入，需 barrier 保证 consumer shader 可见。
 
 ---
@@ -190,7 +190,7 @@ VkImage
 ## 11. Android 注意点
 
 - 移动端纹理采样带宽高，尽量使用 mipmapped texture 与合理的 sampler LOD。[ANDROID][ENGINE]
-- YCbCr 视频/相机纹理需要 `VK_KHR_sampler_ycbcr_conversion` 与专用 sampler。[ANDROID]
+- YCbCr 视频/相机纹理需要 Vulkan 1.1 核心或 `VK_KHR_sampler_ycbcr_conversion` 对应能力，并按 conversion 与外部格式规则创建 sampler/view。[ANDROID]
 - 部分低端设备对 anisotropic filtering 支持有限，需查询 feature。[ANDROID]
 - AGI 可分析纹理采样 cache miss 与带宽。[TOOL]
 
@@ -252,3 +252,17 @@ VkImage
 3. YCbCr conversion sampler 的创建与使用规则。
 4. Bindless descriptor array 的动态索引限制。
 5. 不同驱动对 sampler anisotropy 的最大值与性能影响。
+
+
+## AHB / YCbCr 的 descriptor 计数（2026-10-17）
+
+普通 sampler YCbCr conversion 通过匹配 format/tiling/usage 的 `vkGetPhysicalDeviceImageFormatProperties2` 查询链取得 `VkSamplerYcbcrConversionImageFormatProperties::combinedImageSamplerDescriptorCount`，不能假设恒为 1；传统 pool 的 combined descriptor 容量预算也需计入该倍数。[SPEC]
+
+Android `AHardwareBuffer` 先用 `vkGetAndroidHardwareBufferPropertiesANDROID` 及 format properties 查询实际格式/外部格式，不等于取得普通 Vulkan format 的 YCbCr 计数。Android external format 在 descriptor buffer 的写入大小按 `combinedImageSamplerDescriptorSize × VkPhysicalDeviceMaintenance6Properties::maxCombinedImageSamplerDescriptorCount`；普通非 external-format 按 format 查询计数。heap 的 resource writer 也区分这两个计数，并以具体类型写入大小相乘。heap sampler 的 `samplerYcbcrConversionCount` 是另一项，不要混为资源 image 的计数。[SPEC]
+
+同时检查 conversion feature、immutable sampler / image view conversion 一致性、external memory import、queue ownership 和 image layout；只有 descriptor 容量正确不能证明相机/视频路径正确。
+
+来源：[YCbCr format properties](https://docs.vulkan.org/refpages/latest/refpages/source/VkSamplerYcbcrConversionImageFormatProperties.html)、[AHB properties](https://docs.vulkan.org/refpages/latest/refpages/source/vkGetAndroidHardwareBufferPropertiesANDROID.html)、[buffer writer](https://docs.vulkan.org/refpages/latest/refpages/source/vkGetDescriptorEXT.html)、[heap writer](https://docs.vulkan.org/refpages/latest/refpages/source/vkWriteResourceDescriptorsEXT.html)。
+
+
+[描述符写入约束](https://docs.vulkan.org/refpages/latest/refpages/source/vkUpdateDescriptorSets.html) · [采样图像 layout 约束](https://docs.vulkan.org/refpages/latest/refpages/source/VkWriteDescriptorSet.html)。

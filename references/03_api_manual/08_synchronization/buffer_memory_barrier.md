@@ -123,8 +123,8 @@ Producer 命令（如 vkCmdCopyBuffer / vkCmdDispatch 写入 buffer）
 ### Validation Layer
 
 - `VUID-VkBufferMemoryBarrier-*`：offset/size 对齐、queue family index 规则。
-- `VUID-vkCmdPipelineBarrier-bufferMemoryBarrierCount-01178`：family index 合法性。
-- `VUID-VkBufferMemoryBarrier-size-01309`：size 与 offset 对齐。
+- `VUID-vkCmdPipelineBarrier-bufferMemoryBarrierCount-01178`：在使用 VkRenderPass 对象的 render pass instance 内调用时，不能包含 buffer memory barriers。 [官方 vkCmdPipelineBarrier 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdPipelineBarrier.html)。[SPEC]
+- offset 必须小于 buffer 大小；size 为 VK_WHOLE_SIZE 或大于 0 且不超过 buffer 大小减去 offset。这里不是一条通用 offset/size 对齐规则。 [官方 VkBufferMemoryBarrier 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkBufferMemoryBarrier.html)。[SPEC]
 
 ### RenderDoc / AGI
 

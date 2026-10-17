@@ -171,10 +171,10 @@ CPU 侧帧调度
 
 ### Validation Layer
 
-- `VUID-vkQueueSubmit-pWaitSemaphores-00068`：wait semaphore 必须已 signaled 或可被 timeline 满足。[SPEC]
+- `VUID-vkQueueSubmit-pWaitSemaphores-00068`：binary semaphore wait 执行时，不得有其他 queue 正等待同一个 semaphore；此规则不是 timeline wait value 条件。 [官方 vkQueueSubmit 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueSubmit.html)。[SPEC]
 - `VUID-vkQueuePresentKHR-pWaitSemaphores-03267`：present wait semaphore 必须有效。[SPEC]
-- `VUID-vkResetFences-pFences-01122`：reset 前 fence 必须不在 pending submit 中。[SPEC]
-- `VUID-vkSignalSemaphore-value-03258`：timeline semaphore signal value 必须大于当前值。[SPEC]
+- reset 的 fence 不能仍关联未完成的 queue command；reset 不会等待完成，unsignaled 本身不代表仍 pending。 [官方 vkResetFences 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkResetFences.html)。[SPEC]
+- VUID-VkSemaphoreSignalInfo-value-03258：host signal value 必须大于当前值；同时满足 pending signal 与 maxTimelineSemaphoreValueDifference 限制。 [官方 VkSemaphoreSignalInfo 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkSemaphoreSignalInfo.html)。[SPEC]
 
 ### RenderDoc / AGI
 

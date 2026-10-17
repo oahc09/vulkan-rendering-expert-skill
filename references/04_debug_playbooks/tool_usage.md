@@ -110,3 +110,20 @@
 2. surface created / changed / destroyed 必须有日志。
 3. swapchain recreate 前后必须记录尺寸、format、image count。
 4. crash 问题优先结合 tombstone / native stack。
+
+
+## 5. 工具能力矩阵与版本留证（2026-10-17）
+
+每次记录 SDK、VVL build/revision、RenderDoc、AGI、shader 编译器/SPIR-V Tools、OS/GPU/driver 版本。针对实际使用路径填写“支持 / 不支持 / 未核验”，不要用工具名称作保证：
+
+| 路径 | core validation | sync validation | GPU-AV | capture/replay | descriptor 解码 | 目标设备输出对照 |
+|---|---|---|---|---|---|---|
+| 传统 sets / indexing | 按版本实测 | 按配置实测 | 按 shader 能力实测 | 按版本实测 | 按版本实测 | 待提供 |
+| descriptor buffer | 按版本查证 | 按版本查证 | 不假设覆盖 | 不假设支持 | 不假设可读 | 待提供 |
+| descriptor heap / AHB | 按版本查证 | 按版本查证 | 不假设覆盖 | 不假设支持 | 不假设可读 | 待提供 |
+
+Validation clean 只说明当前配置、版本与执行路径没有报告已覆盖错误。捕获工具可能改变执行和时序；先检查支持列表及最小 capture/replay，再依赖其状态视图。性能结论必须来自关闭 validation/GPU-AV 的可比较运行，不能从工具启动成功推导正确性。
+
+SDK 工具变化单独记录：[LunarG release notes](https://vulkan.lunarg.com/doc/view/latest/windows/release_notes.html) 宣布 1.4.363 引入 vkprofiles，并计划下一 SDK 移除 gen_profiles；不能把计划写成已发生。迁移前核对本地帮助、安装版本和官方命令语法，不猜 CLI 替换。
+
+参考：[VVL GPU-AV](https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/main/docs/gpu_validation.md)、[同步验证](https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/main/docs/syncval_usage.md)。

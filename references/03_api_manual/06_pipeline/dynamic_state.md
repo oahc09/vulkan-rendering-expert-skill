@@ -7,7 +7,7 @@
 | 模块 | `03_api_manual` |
 | 分类 | Pipeline 链 |
 | Vulkan 对象 | Dynamic State |
-| 常用 API | `vkCmdSetViewport` / `vkCmdSetScissor` / `vkCmdSetBlendConstants` / `vkCmdSetStencilReference` / `vkCmdSetDepthBias` / `vkCmdSetRasterizerDiscardEnable` / `vkCmdSetDepthClampEnable` |
+| 常用 API | `vkCmdSetViewport` / `vkCmdSetScissor` / `vkCmdSetBlendConstants` / `vkCmdSetStencilReference` / `vkCmdSetDepthBias` / `vkCmdSetRasterizerDiscardEnable` / `vkCmdSetDepthClampEnableEXT` |
 | 适用平台 | 通用 |
 | 来源等级 | `[SPEC] [TOOL] [ENGINE]` |
 | 适用 Vulkan 版本 | Vulkan 1.0（基础 dynamic state）/ `VK_EXT_extended_dynamic_state`（1.3 core）/ `VK_EXT_extended_dynamic_state2` / `VK_EXT_extended_dynamic_state3` |
@@ -109,7 +109,7 @@ VkPipelineDynamicStateCreateInfo (创建 pipeline 时声明动态状态列表)
 
 - Vulkan 1.0 基础动态状态：核心，无扩展。
 - `VK_EXT_extended_dynamic_state`（promoted to 1.3 core，命令与枚举去 `EXT` 后缀）。[REGISTRY]
-- `VK_EXT_extended_dynamic_state2`、`VK_EXT_extended_dynamic_state2_additional`（部分 `logicOp`、`rasterizationSamples` 需 additional feature）。
+- `VK_EXT_extended_dynamic_state2` 的 `extendedDynamicState2LogicOp` 和 `extendedDynamicState2PatchControlPoints` 是独立 feature；动态 rasterizationSamples 来自 `VK_EXT_extended_dynamic_state3` 的 `extendedDynamicState3RasterizationSamples`。不存在 additional 后缀的独立扩展。[SPEC]
 - `VK_EXT_extended_dynamic_state3`：状态最多但大量字段需逐 feature 查询设备支持（feature 位分散在 `VkPhysicalDeviceExtendedDynamicState3FeaturesEXT`）。[SPEC]
 - `VK_EXT_vertex_input_dynamic_state`：动态 vertex input binding/attribute（与本卡相关但独立扩展）。
 - Android 可用性：1.3 core 部分在 Android 14+ 主流设备基本可用；eds2/eds3 视驱动版本，必须查询 feature。[ANDROID]
@@ -120,8 +120,9 @@ VkPipelineDynamicStateCreateInfo (创建 pipeline 时声明动态状态列表)
 
 ```text
 1. 查询设备 feature / extension: extendedDynamicState / ...2 / ...3 各 sub-feature
-2. 启用 device extension + feature (VkPhysicalDeviceVulkan13Features /
-   VkPhysicalDeviceExtendedDynamicState*FeaturesEXT)
+2. 扩展路径启用对应 extension 与 VkPhysicalDeviceExtendedDynamicState*FeaturesEXT；
+   1.3 核心化的动态状态按核心规则使用，VkPhysicalDeviceVulkan13Features 没有 extendedDynamicState 字段；
+   未核心化的 eds2 附加状态与 eds3 仍逐项查询和启用
 3. 创建 pipeline 时:
    - 在 VkPipelineDynamicStateCreateInfo.pDynamicStates 中列出要动态化的状态
    - 对应的静态结构体字段填默认值 (仍需提供合法指针, 值被忽略)
@@ -145,7 +146,7 @@ VkPipelineDynamicStateCreateInfo (创建 pipeline 时声明动态状态列表)
 | `VkPipelineViewportStateCreateInfo::viewportCount` / `scissorCount` | 用 `vkCmdSetViewport/Scissor`（1.0）时数量在 pipeline 创建时固定，运行时必须提供相同数量；用 `vkCmdSetViewportWithCount` 时 pipeline 创建时设为 0。[SPEC] | 混用 WithCount 与非 WithCount；运行时数量与创建时不一致。[TOOL] |
 | `VkDynamicState` 枚举值 | 1.3 core 用无后缀枚举（如 `VK_DYNAMIC_STATE_CULL_MODE`）；EXT 扩展有 `_EXT` 后缀枚举，二者等价。[REGISTRY] | 启用了扩展却用了 core 枚举但未启用对应 feature。 |
 | extended dynamic state feature 位 | 每个子能力对应独立 feature 位（尤其 eds3）。[SPEC] | 启用 extension 但未启用 feature，或未查询就调用 `vkCmdSet*` 导致 validation/未定义行为。[TOOL] |
-| `vkCmdSet*` 调用时机 | 必须在 pipeline bind 之后、draw 之前；rendering inner 状态需在 `vkCmdBeginRendering` 之后。[SPEC] | 在 render pass / dynamic rendering 之外设置 only-rendering-inner 状态。[TOOL] |
+| `vkCmdSet*` 调用时机 | 普通动态状态 setter 不普遍要求位于 pipeline bind 之后或 rendering 内；应在使用该状态的 draw 前设置并保持有效，逐条核对 setter 的 command scope 与状态失效规则。[SPEC] | 把某条命令的限制泛化到所有 setter，或在状态失效后未重设。[TOOL] |
 
 ---
 
@@ -175,7 +176,7 @@ VkPipelineDynamicStateCreateInfo (创建 pipeline 时声明动态状态列表)
 
 ## 7. 高频错误
 
-1. 在 `VkPipelineDynamicStateCreateInfo` 中声明了某状态，但 draw 前从未调用对应 `vkCmdSet*`，validation 报 `VUID-vkCmdDraw-None-07833` 类错误。[TOOL]
+- draw 使用的动态状态必须按其具体有效使用规则提前设置且未失效；逐项匹配状态对应的 VUID，不能套用一个通用数字。 [官方 vkCmdDraw 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdDraw.html)。[SPEC]
 2. 启用了 `VK_EXT_extended_dynamic_state` extension 但未启用 `extendedDynamicState` feature 位。[TOOL]
 3. 使用 `vkCmdSetViewportWithCount` 但 pipeline 创建时 `viewportCount` 未设为 0。[SPEC]
 4. eds3 的某个 `vkCmdSet*` 未查询对应 sub-feature 就调用，部分驱动静默忽略或 validation 报错。[TOOL][VENDOR]
@@ -191,7 +192,7 @@ VkPipelineDynamicStateCreateInfo (创建 pipeline 时声明动态状态列表)
 ### Validation Layer
 
 - `VUID-VkGraphicsPipelineCreateInfo-pDynamicStates-*`：dynamic state 与 feature 一致性。
-- `VUID-vkCmdDraw-None-07833` 系列：draw 时 dynamic state 未设置。
+- draw 使用的动态状态必须按其具体有效使用规则提前设置且未失效；逐项匹配状态对应的 VUID，不能套用一个通用数字。 [官方 vkCmdDraw 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdDraw.html)。[SPEC]
 - `VUID-vkCmdSetViewport-*` / `VUID-vkCmdSetScissor-*` 等：`vkCmdSet*` 参数合法性。
 - `VUID-vkCmdBindPipeline-*`：pipeline bind 后 dynamic state 命令顺序。
 
@@ -311,8 +312,8 @@ Vulkan 1.0 / 1.1 项目且驱动不支持 eds 扩展；单 pass 固定状态 dem
 
 1. `VkDynamicState` 枚举的完整列表与版本归属（哪些是 1.0、哪些是 1.3 core、哪些仅 EXT）。
 2. eds3 每个 `vkCmdSet*` 对应的 feature 位（`VkPhysicalDeviceExtendedDynamicState3FeaturesEXT` 字段众多，必须逐条核对）。
-3. `vkCmdSetViewportWithCount` / `vkCmdSetScissorWithCount` 与 `VK_FEATURE_LINE_RASTER` 等其它 feature 的交互。
+3. `vkCmdSetViewportWithCount` / `vkCmdSetScissorWithCount` 需检查 viewport/scissor 数量匹配、`multiViewport` 与 `maxViewports`；线光栅化相关 feature 另按所用扩展查询。[SPEC]
 4. secondary command buffer 中 dynamic state 继承的完整规则（`VkCommandBufferInheritanceInfo`）。
-5. `VK_EXT_extended_dynamic_state2_additional` 中 `logicOp`、`rasterizationSamples` 的额外限制。
+5. 分别核对 `extendedDynamicState2LogicOp` 与 `extendedDynamicState3RasterizationSamples` 的支持、启用与对应 setter；它们不属于同一个 additional 扩展。[SPEC]
 6. tessellation / mesh shader 下动态切换 primitive topology 的合法性矩阵。
 7. 各 GPU 厂商对 eds3 子集的实际支持与性能开销（需查 vendor best practice + AGI trace）。

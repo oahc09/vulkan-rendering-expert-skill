@@ -124,10 +124,10 @@
 
 ### Validation Layer
 
-- `VUID-vkCmdPipelineBarrier-srcStageMask-04990` 等：stage / access 组合合法性。
-- `VUID-vkCmdPipelineBarrier-dependencyFlags-01188`：`BY_REGION_BIT` 使用限制。
-- `VUID-vkCmdPipelineBarrier-bufferMemoryBarrierCount-01178`：buffer barrier 的 queue family index 规则。
-- `VUID-VkBufferMemoryBarrier-size-01309`：size 与 offset 对齐。
+- stage/access 组合必须匹配，stage 必须满足设备 feature 和 command pool queue family 能力；逐条检查官方 Valid Usage。 [官方 vkCmdPipelineBarrier 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdPipelineBarrier.html)。[SPEC]
+- BY_REGION_BIT 表示 framebuffer-local dependency；render pass 内的 barrier 还必须满足 self-dependency、stage/access 和 framebuffer-space 限制。 [官方 vkCmdPipelineBarrier 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdPipelineBarrier.html)。[SPEC]
+- `VUID-vkCmdPipelineBarrier-bufferMemoryBarrierCount-01178`：在使用 VkRenderPass 对象的 render pass instance 内调用时，不能包含 buffer memory barriers。 [官方 vkCmdPipelineBarrier 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdPipelineBarrier.html)。[SPEC]
+- offset 必须小于 buffer 大小；size 为 VK_WHOLE_SIZE 或大于 0 且不超过 buffer 大小减去 offset。这里不是一条通用 offset/size 对齐规则。 [官方 VkBufferMemoryBarrier 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkBufferMemoryBarrier.html)。[SPEC]
 
 ### RenderDoc / AGI
 
