@@ -240,7 +240,7 @@ vkCreateInstance
 
 - Android GPU 阵列高度异构（Adreno / Mali / PowerVR / Xclipse），不同 SoC 的 `memoryTypes` / `queueFamilyProperties` / `limits` 差异大，**所有能力必须运行时查询，不要硬编码**。[ANDROID]
 - 移动端 GPU 多为 unified memory 架构，通常存在 `DEVICE_LOCAL_BIT | HOST_VISIBLE_BIT | HOST_COHERENT_BIT` memory type，适合 CPU 写入 + GPU 读取的共享资源；但仍需遍历 `memoryTypes` 选择最优组合。[ANDROID]
-- `apiVersion` 取决于设备的 Vulkan loader 与驱动；旧 Android（< Android 10）可能仅支持 Vulkan 1.0；Android 11+ 才大量出现 Vulkan 1.1 驱动；Vulkan 1.2/1.3 需 Android 12+ 与对应驱动。[ANDROID]
+- `apiVersion` 来自该 physical device 的驱动；loader 的 instance 版本与 Android 系统版本不能代替此查询，见下方六层能力证据。
 - 部分设备报告的 `deviceName` 可能包含 SoC 代号或厂商字符串，不能用于精确匹配。[ANDROID]
 - Adreno 设备的 `driverVersion` 编码与 desktop 不同，需查 Qualcomm 文档解读。[ANDROID]
 - `VK_KHR_swapchain` / `VK_KHR_android_surface` 是 present 必需，但还有 `VK_ANDROID_external_memory_android_hardware_buffer` 用于与 Gralloc / HardwareBuffer 共享，需查询支持。[ANDROID]
@@ -275,7 +275,7 @@ vkCreateInstance
 ## 13. 专家经验
 
 **经验**：
-启动时建立一张"能力快照表"：把 `apiVersion` / `deviceType` / `vendorID` / `deviceName` / 关键 `limits` 字段 / 启用的 features / 启用的 extensions / queue family 布局 / memory type 表全部序列化到日志或 dump 文件。一旦线上出现兼容性或性能问题，第一件事是比对设备能力快照与项目假设的差距。Feature 查询统一走 `vkGetPhysicalDeviceFeatures2` + `VkPhysicalDeviceVulkan11Features` / `Vulkan12Features` / `Vulkan13Features` 链，而非分散查每个扩展结构体——后者容易遗漏或重复。
+启动时建立一张"能力快照表"：把 `apiVersion` / `deviceType` / `vendorID` / `deviceName` / 关键 `limits` 字段 / 启用的 features / 启用的 extensions / queue family 布局 / memory type 表全部序列化到日志或 dump 文件。一旦线上出现兼容性或性能问题，第一件事是比对设备能力快照与项目假设的差距。Feature 查询集中走版本/扩展合法的 `vkGetPhysicalDeviceFeatures2` 链；按实际设备版本选择核心聚合结构或扩展结构，不能在老版本上盲接 Vulkan 1.2/1.3 结构，也不能重复表达同一 promoted feature。
 
 多 GPU 系统选择策略：优先 `DISCRETE_GPU` 且支持 surface present 的设备；若仅 `INTEGRATED_GPU`，注意功耗预算。Android 上禁止硬编码 vendor/queue family/memory type 索引，所有决策必须基于运行时查询。
 
@@ -311,5 +311,19 @@ vkCreateInstance
 6. `VkPhysicalDeviceSubgroupProperties` 中 `supportedStages` / `supportedOperations` / `quadOperationsInAllStages` 的精确语义。
 7. Android 上 `VK_ANDROID_external_memory_android_hardware_buffer` 与 Gralloc 用法对应的 physical device 查询入口。
 8. 多 GPU 系统（dual GPU / multi-display）下选择 physical device 的最佳实践与厂商文档。
-9. Vulkan 1.3 中 `VkPhysicalDeviceVulkan13Properties` 新增字段的精确语义（如 `subgroupSize`、`maxInlineUniformBlockSize` 等）。
+9. Vulkan 1.3 中 `VkPhysicalDeviceVulkan13Properties` 新增字段的精确语义（如 `minSubgroupSize`、`maxSubgroupSize`、`maxInlineUniformBlockSize` 等）。
 10. 不同 vendor 对 `protectedMemory` / `subgroupQuadControl` / `shaderSubgroupRotateClustered` 等高级 feature 的支持矩阵。
+
+
+## 能力协商证据：六层不能互相替代（2026-10-17）
+
+1. SDK / headers / 编译器：决定编译时有哪些声明和工具；不证明运行时支持。
+2. Loader / instance：`vkEnumerateInstanceVersion` 查询 loader 支持的 instance 版本（函数不可用时按 1.0 处理）；`VkApplicationInfo::apiVersion` 是应用请求版本。
+3. Physical device：`VkPhysicalDeviceProperties::apiVersion` 与 device extension 枚举反映该驱动设备能力，不能用 SDK 或 Android 系统版本代替。
+4. Supported features：通过合法版本/扩展对应的 `vkGetPhysicalDeviceFeatures2` 链查询。properties/limits 与 feature 开关分开记录。
+5. Enabled features/extensions：device create 实际请求哪些开关单独保存；supported=true 不等于 enabled=true。promotion 也不意味着所有可选 feature 自动开启。
+6. Profile：检查指定 profile 名称、版本、variant 及其必需 API/extensions/features/limits；profile 满足是该集合的证据，不保证 profile 外的 heap、AHB 或工具支持。
+
+能力快照同时记录 OS、GPU/deviceID、driverID/version、headers/SDK/loader、请求和实际 API、supported 与 enabled feature/extension 列表、profile 检查结果。未知项标“未核验”，禁止从设备品牌推断。
+
+官方：[instance version](https://docs.vulkan.org/refpages/latest/refpages/source/vkEnumerateInstanceVersion.html)、[device properties](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceProperties.html)、[device creation](https://docs.vulkan.org/refpages/latest/refpages/source/VkDeviceCreateInfo.html)、[Vulkan Profiles](https://github.com/KhronosGroup/Vulkan-Profiles)。[SPEC][TOOL]

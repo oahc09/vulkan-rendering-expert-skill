@@ -24,8 +24,8 @@ Validation Layer 是 Vulkan 生态的核心调试基础设施，它在应用调�
 
 ```text
 VkInstance（启用 layer + extension）
-→ VkPhysicalDevice（可选 device layer）
-→ VkDevice（启用 device-layer 或继承 instance layer）
+→ VkPhysicalDevice
+→ VkDevice（使用 instance 启用的 layer；device layer 启用机制已弃用）
 → Command Buffer / Queue Submit
 → Validation Layer 拦截与检查
 → Debug Messenger / Debug Report 回调输出
@@ -62,7 +62,7 @@ VkInstance（启用 layer + extension）
 | API | 作用 |
 |---|---|
 | `vkEnumerateInstanceLayerProperties` | 列出 instance 可用 layer。[SPEC] |
-| `vkEnumerateDeviceLayerProperties` | 列出 device 可用 layer；现代项目通常依赖 instance layer，device layer 已较少单独使用。[SPEC] |
+| `vkEnumerateDeviceLayerProperties` | 已弃用的 device-layer 枚举入口；现代路径在 instance 启用 layer。[SPEC] |
 | `vkCreateInstance` | 启用 layer 与 debug extension。[SPEC] |
 | `vkCreateDebugUtilsMessengerEXT` | 创建 debug utils messenger。[SPEC] |
 | `vkDestroyDebugUtilsMessengerEXT` | 销毁 messenger。[SPEC] |
@@ -227,7 +227,7 @@ VkInstance（启用 layer + extension）
 
 ### GPU 侧
 
-- 验证层主要影响 CPU，但对 GPU 时间线也有少量同步检查开销。[HEUR]
+- 验证层主要影响 CPU，但对 GPU-AV 会插桩 shader 并引入 GPU/内存开销；不能把所有 validation 配置都视为只有 CPU 成本。[HEUR]
 
 ### 移动端
 
@@ -269,3 +269,12 @@ VkInstance（启用 layer + extension）
 4. `VK_EXT_debug_report` 到 `VK_EXT_debug_utils` 的 message flag 映射。
 5. Android 系统验证层加载路径与 AGI 的交互细节。
 6. Best Practices layer 的最新启用方式与过滤规则。
+
+
+## 覆盖边界与版本证据（2026-10-17）
+
+Core validation、Synchronization Validation、GPU-Assisted Validation（GPU-AV）与 Best Practices 是不同检查配置；记录 layer build/revision、实际开启的检查和禁用项。普通 validation clean 不证明 shader 运行时索引、descriptor 字节或资源内容正确。同步检查也不是全部 GPU hazard 的形式证明；GPU-AV 会插桩并改变资源使用与性能，不能把插桩结果当 release 性能。
+
+对 descriptor buffer / descriptor heap / buffer device address 必须按所用 VVL 版本核验覆盖；捕获成功、参数检查成功、descriptor 解码成功、shader 访问可检查是不同能力。未支持路径标记“工具覆盖未知/不足”，补最小复现、CPU 断言、输出对照及目标驱动测试，不能写“无报错所以正确”。[TOOL]
+
+来源：[VVL GPU-AV](https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/main/docs/gpu_validation.md)、[Synchronization Validation](https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/main/docs/syncval_usage.md)。

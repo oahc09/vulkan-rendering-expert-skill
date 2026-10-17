@@ -145,8 +145,8 @@ VkAttachmentDescription[]
 ### Validation Layer
 
 - `VUID-VkRenderPassCreateInfo-*`：attachment/subpass/dependency 的合法性。
-- `VUID-vkCmdBeginRenderPass-renderPass-00904`：framebuffer 与 render pass 兼容。
-- `VUID-vkCmdEndRenderPass-02608` 等：subpass 状态与 dependency 检查。
+- VUID-VkRenderPassBeginInfo-renderPass-00904：renderPass 必须与创建 framebuffer 时指定的 renderPass 兼容。 [官方 VkRenderPassBeginInfo 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkRenderPassBeginInfo.html)。[SPEC]
+- 结束 render pass 时检查当前 subpass 是否为最后一个及命令作用域；按完整命令 VUID 检索。 [官方 vkCmdEndRenderPass 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdEndRenderPass.html)。[SPEC]
 
 ### RenderDoc / AGI
 

@@ -683,3 +683,12 @@ Vulkan Mapping：A → 状态写入 `VkGraphicsPipelineCreateInfo` 各状态结�
 - `../03_api_manual/08_synchronization/timeline_semaphore.md` — Queue Model（§8）的 timeline semaphore API 细节。
 - `../03_api_manual/06_pipeline/pipeline_cache.md` — Pipeline Manager（§7）的 cache API。
 - `../03_api_manual/02_surface_swapchain/swapchain_recreate.md` — 链 1 的 swapchain 重建 API。
+
+
+## D8. 新 descriptor 后端的三个独立决策门槛
+
+1. 支持实验后端：先证明 API/feature/limit 协商、shader mapping、allocator、同步及回收方案可实现；添加 capability gate、日志与可比较旧路径。规范存在、SDK 可编译只够开始实现，不能宣布硬件正确。
+2. 默认切换：需要目标 GPU/driver/OS 矩阵上的输出正确性、in-flight 生命周期、resize/pause/resume、AHB/YCbCr（如适用）、工具覆盖和性能预算证据；按 cohort 灰度且有回滚开关。无实测时保持候选方案。
+3. 删除 fallback：另需最低支持设备/profile 策略确认、所有发布 cohort 覆盖、稳定观察期、遗留资产/shader 迁移完成、线上回退替代机制和责任人批准。扩展被标记 deprecated 不是删除旧后端的充分条件。
+
+三项分别记录决定、证据、未决风险、回滚方式和复核触发器。按 [项目能力矩阵](../05_workflows/01_renderer_setup/project_diagnosis.md) 协商能力；[buffer](../03_api_manual/05_descriptor/descriptor_buffer.md) 与 [heap](../03_api_manual/05_descriptor/descriptor_heap.md) 具有不同 ABI/绑定/同步约束，不能只换 API 名称。[ENGINE]

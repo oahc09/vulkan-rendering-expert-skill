@@ -125,11 +125,11 @@ vkQueueSubmit2(queue, 1, &submit, fence_optional);
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
 | `VkSemaphoreTypeCreateInfo.semaphoreType` | 必须为 `VK_SEMAPHORE_TYPE_TIMELINE`；创建后不可切换。[SPEC] | 创建 binary semaphore 后却按 timeline 用 `vkGetSemaphoreCounterValue`。[TOOL] |
-| `VkSemaphoreTypeCreateInfo.initialValue` | Counter 起始值；通常设 0；后续 signal/wait 必须严格大于该值。[SPEC] | initialValue 设非 0 但 wait 逻辑默认从 0 开始递增，导致首帧错位。[ENGINE] |
+| `VkSemaphoreTypeCreateInfo.initialValue` | Counter 起始值；通常设 0；signal 执行时须大于当前 counter；wait value 可以重复，也可以小于或等于当前 counter（此时已满足）。[SPEC] | initialValue 设非 0 但 wait 逻辑默认从 0 开始递增，导致首帧错位。[ENGINE] |
 | `VkSemaphoreSubmitInfo.value` | submit2 中直接嵌入 timeline value；signal value 必须严格单调递增。[SPEC] | 同一 semaphore 的两次 signal value 相同或回退，触发 VUID。[TOOL] |
 | `VkSemaphoreSubmitInfo.stageMask` | signal 阶段 mask；wait 阶段 mask 控制阻塞 pipeline stage。[SPEC] | wait stage 设为 `TOP_OF_PIPE_BIT` 使同步失效或语义错误；应按真实消费阶段设置。[HEUR] |
-| `VkSemaphoreSignalInfo.value` | CPU signal 目标值；必须严格大于当前 counter。[SPEC] | signal 一个 ≤ 当前 counter 的 value → `VK_ERROR_INVALID_VALUE` 或 VUID 触发。[TOOL] |
-| `VkSemaphoreWaitInfo.semaphores` / `pValues` | 多 semaphore 等待时的 value 数组与 semaphore 数组必须按索引对齐。[SPEC] | 数组顺序错位导致等待错误的目标 value。[TOOL] |
+| `VkSemaphoreSignalInfo.value` | CPU signal 目标值；必须严格大于当前 counter。[SPEC] | signal 一个 ≤ 当前 counter 的 value → 违反有效使用约束并可能触发 validation 诊断；不存在保证返回的专用错误码。[TOOL] |
+| `VkSemaphoreWaitInfo.pSemaphores` / `pValues` | 多 semaphore 等待时的 value 数组与 semaphore 数组必须按索引对齐。[SPEC] | 数组顺序错位导致等待错误的目标 value。[TOOL] |
 
 ---
 
@@ -145,7 +145,7 @@ vkQueueSubmit2(queue, 1, &submit, fence_optional);
 ### 使用阶段
 
 - [ ] 同一 timeline semaphore 的 signal value 是否严格单调递增？[SPEC]
-- [ ] wait value 是否 ≤ 已 signal（或即将 signal）的 value？[SPEC]
+- [ ] 是否存在最终能够满足 wait value 的 signal，且依赖图无死锁？Timeline 支持 wait-before-signal，不要求提交 wait 时 signal 已提交。[SPEC]
 - [ ] `VkSemaphoreSubmitInfo.value` 数组与 `VkSubmitInfo2` 中 semaphore 数组是否一一对应？[SPEC]
 - [ ] CPU 侧 `vkSignalSemaphore` 的 value 是否大于当前 counter？[SPEC]
 - [ ] Frames-in-flight 的 wait value 是否正确反映 N 帧延迟？[ENGINE]
@@ -161,9 +161,9 @@ vkQueueSubmit2(queue, 1, &submit, fence_optional);
 
 ## 7. 高频错误
 
-1. Timeline semaphore 的 signal/wait value 非单调递增（回退或重复）。[SPEC]
+1. Timeline semaphore 的 signal 操作执行时未使 counter 严格递增；wait value 不要求递增，允许重复或等待已满足的值。[SPEC]
 2. 用 timeline semaphore 直接作为 `vkAcquireNextImageKHR` 的 acquire semaphore 或 `vkQueuePresentKHR` 的 present semaphore（WSI 通常要求 binary semaphore）。[SPEC]
-3. `vkSignalSemaphore` 一个 ≤ 当前 counter 的 value，触发 `VK_ERROR_INVALID_VALUE` 或 VUID。[TOOL]
+3. `vkSignalSemaphore` 的 value 不大于当前 counter 会违反有效使用约束；检查 validation 诊断，不应期待一个专用的非法 value 返回码。[SPEC]
 4. 把 binary semaphore 误用 `vkGetSemaphoreCounterValue` / `vkWaitSemaphores` / `vkSignalSemaphore` 操作。[SPEC]
 5. `VkSemaphoreSubmitInfo` 与 `VkSubmitInfo2` 的 semaphore/value/stageMask 数组长度不匹配或顺序错位。[TOOL]
 6. Frames-in-flight 计算偏差：wait value 写错，导致首帧或末帧同步错位、过早释放资源引发 hazard。[ENGINE]
@@ -179,10 +179,10 @@ vkQueueSubmit2(queue, 1, &submit, fence_optional);
 ### Validation Layer
 
 - `VUID-VkSemaphoreTypeCreateInfo-semaphoreType-03279`：`semaphoreType` 必须与启用的 feature 一致。[SPEC]
-- `VUID-VkSemaphoreSignalInfo-value-03255`：signal value 必须大于当前 counter。[SPEC]
-- `VUID-vkQueueSubmit2-pSignalSemaphoreInfos-03212`：timeline signal value 必须严格大于之前 signal 的值。[SPEC]
-- `VUID-vkQueueSubmit2-pWaitSemaphoreInfos-03243`：wait value 必须可被满足（≤ 已 signal 或 pending signal 的 value）。[SPEC]
-- `VUID-vkSignalSemaphore-value-03255`：CPU signal value 必须严格大于当前 counter。[SPEC]
+- VUID-VkSemaphoreSignalInfo-value-03258：host signal 的 value 必须大于当前 counter，且小于任何 pending signal 的 value（03259），并满足 maxTimelineSemaphoreValueDifference。 [官方 VkSemaphoreSignalInfo 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkSemaphoreSignalInfo.html)。[SPEC]
+- VUID-VkSubmitInfo2-semaphore-03882：timeline signal 操作执行时，其 value 必须大于 semaphore 当前值；多个 signal 操作需要正确排序。 [官方 VkSubmitInfo2 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkSubmitInfo2.html)。[SPEC]
+- timeline wait 可先于未来的 signal 提交（wait-before-signal）；必须保证最终存在可满足等待值的 signal，避免依赖环和死锁，并满足 maxTimelineSemaphoreValueDifference。 [官方 VkSemaphoreSubmitInfo 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkSemaphoreSubmitInfo.html)。[SPEC]
+- VUID-VkSemaphoreSignalInfo-value-03258：host signal value 必须大于当前 counter；同时检查 pending signal 上界与 maxTimelineSemaphoreValueDifference。 [官方 VkSemaphoreSignalInfo 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkSemaphoreSignalInfo.html)。[SPEC]
 
 ### RenderDoc / AGI
 
@@ -247,14 +247,14 @@ vkQueueSubmit2(queue, 1, &submit, fence_optional);
 ### Swapchain 交互风险
 
 - WSI 规范要求 `vkAcquireNextImageKHR` / `vkQueuePresentKHR` 使用 binary semaphore；不要将 timeline semaphore 直接用于 WSI。[SPEC]
-- 部分 Android 驱动对 timeline semaphore + swapchain 组合支持有限，可能在 present 后错误推进 counter；需在目标设备测试。[ANDROID]
+- Swapchain acquire/present 使用 binary semaphore；timeline 用于应用内部提交与完成点，需建立二者之间的显式提交依赖。present 不会隐式推进 timeline counter。[SPEC]
 
 ---
 
 ## 11. Android 注意点
 
 - 必须运行时查询 `VkPhysicalDeviceVulkan12Features::timelineSemaphore`；旧 Mali / Adreno 驱动可能仅 Vulkan 1.1 不支持 timeline semaphore。[ANDROID]
-- 部分 Android 驱动对 timeline semaphore + swapchain acquire/present 组合支持有限，可能出现 present 后 counter 不推进或 device-lost；建议 swapchain 仍用 binary semaphore。[ANDROID]
+- `vkAcquireNextImageKHR` 与 `vkQueuePresentKHR` 的 semaphore 路径要求 binary 类型；这不是仅限部分 Android 驱动的建议。[SPEC]
 - Android 上 `vkWaitSemaphores` 的 timeout 精度受调度器影响，长 timeout 可能被 ANR 检测器视为应用无响应；建议 ≤ 1s 配合重试。[ANDROID]
 - AGI 在 Android 上可完整捕获 timeline counter 演进，是诊断 frames-in-flight / 跨 queue 死锁的首选工具。[TOOL]
 - Android 低内存场景下 timeline semaphore 销毁需特别小心，部分驱动在 LMK 后 reset 路径存在 corner case，建议在 `onLowMemory` 回调中 `vkDeviceWaitIdle` 后再回收。[ANDROID][HEUR]
@@ -318,10 +318,10 @@ vkQueueSubmit2(queue, 1, &submit, fence_optional);
 
 ## 15. 需要回查官方文档的情况
 
-1. `VkSemaphoreTypeCreateInfo` 在 `pNext` 链中与 `VkExternalSemaphoreTypeCreateInfo`、`VkExportMetalObjectCreateInfoEXT` 等扩展结构体的共存规则。[SPEC]
+1. `VkSemaphoreTypeCreateInfo` 在 `pNext` 链中与 `VkExportSemaphoreCreateInfo`、`VkExportMetalObjectCreateInfoEXT` 等扩展结构体的共存规则。[SPEC]
 2. `vkQueueSubmit2` 中混合使用 binary semaphore（无 value）与 timeline semaphore（有 value）时 `VkSemaphoreSubmitInfo` 的字段语义。[SPEC]
 3. `vkWaitSemaphores` 的 `VkSemaphoreWaitInfo.flags` 中 `VK_SEMAPHORE_WAIT_ANY_BIT` 在不同驱动上的支持差异（Android 旧驱动可能不支持 wait-any）。[SPEC][ANDROID]
-4. Vulkan 1.4 将 timeline semaphore 提升为 mandatory feature 后，是否有 VUID 行为变化或更严格的 monotonic 校验；以及 `VkPhysicalDeviceVulkan12Features.timelineSemaphore`（1.2 promote）的查询路径在 1.4 设备上的最佳实践。[SPEC]
+4. 核对 `VkPhysicalDeviceVulkan12Features.timelineSemaphore` 查询与启用、扩展/核心入口选择，以及 signal 执行顺序和 maxTimelineSemaphoreValueDifference 限制。[SPEC]
 5. Timeline semaphore 与 `VK_KHR_external_semaphore` / `VK_KHR_external_semaphore_fd` 跨进程传递的 counter 语义和同步点。[SPEC]
-6. Android 上 timeline semaphore 在 present 后 counter 是否被驱动隐式推进的实现差异。[ANDROID]
+6. Android 的 WSI binary semaphore 与应用 timeline 之间如何通过提交建立显式依赖；不得依赖 present 隐式推进 counter。[SPEC]
 7. `vkSignalSemaphore` 在 GPU 已 pending signal 但未完成时的精确语义（是否允许 host 提前推进）。[SPEC]

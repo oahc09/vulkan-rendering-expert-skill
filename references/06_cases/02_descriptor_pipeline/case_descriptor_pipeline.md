@@ -786,3 +786,64 @@ CPU struct layout (std140/std430)
 
 
 ---
+
+
+## Case: Descriptor Heap Slot Stride 与写入大小混淆
+
+### 0. Metadata
+
+类型：真实公开案例复盘 `[CASE][SPEC]`；核验日期：2026-10-17；未在本项目复现，不能用作本项目硬件验收。
+
+### 1. 现象
+
+2026-09-20 的公开报告称非零 heap 索引在 fragment 路径取错 descriptor；index 0 正常，另一个设备正常，最初怀疑驱动。[原帖与后续结论](https://forums.developer.nvidia.com/t/rtx-4060-fragment-shader-reads-the-wrong-descriptor-for-any-heap-index-other-than-0/383842)
+
+### 2. 初始上下文
+
+应用使用 `VK_EXT_descriptor_heap`、原生 `layout(descriptor_heap)` 数组和 host resource descriptor writer。用户报告的具体设备/驱动与现象只对该复现适用。
+
+### 3. 初始误判
+
+跨 GPU 表现不同以及 compute 对照正常都不足以证明 driver bug；首先核对 shader 数组寻址和应用 heap allocator 的约定。
+
+### 4. 排查路径
+
+分别打印每种类型 `vkGetPhysicalDeviceDescriptorSizeEXT` 的结果、advertised `bufferDescriptorSize` / `imageDescriptorSize`、slot 起点、writer range 和 shader stride。固定索引 0、1、尾部以及实际动态索引分别验证；检查 padding、保留区、边界和 in-flight 重用。
+
+### 5. 关键证据
+
+9 月 27 日讨论指出实际写入大小不等于原生数组 stride；该复现的 UBO 实际写入 8 字节，而 advertised buffer 大小为 16。9 月 28 日原作者确认是应用误用。这是论坛作者复盘，不是所有 NVIDIA/AMD 设备的常量。[同一来源](https://forums.developer.nvidia.com/t/rtx-4060-fragment-shader-reads-the-wrong-descriptor-for-any-heap-index-other-than-0/383842)
+
+### 6. 根因
+
+把具体类型有效写入字节数当作 shader heap 数组元素步长。在两者恰好相等的实现上问题被遮蔽。
+
+### 7. 修复方案
+
+Minimal Fix：原生 typed heap arrays 按对应 advertised 类别大小排布；writer 的目标容量仍满足实际类型大小及多 descriptor 特例。
+
+Structural Fix：allocator 显式保存 slotStride、writeBytes、descriptorAlignment、array/mapping contract 四项；自定义 stride 只能与匹配的 shader mapping 一起使用，禁止一个 size 变量兼任全部含义。
+
+### 8. 修复后验证
+
+待在目标项目执行：index 0/1/尾部、不同 descriptor 类型、fragment/compute、跨帧更新、YCbCr 多 descriptor、至少目标支持矩阵内驱动的输出对照。此列表是验收计划，不是已通过结果。
+
+### 9. 经验抽象
+
+index 0 正常常会掩盖 stride 错误。可见字节正确不证明 shader 地址计算正确；validation clean 也不能替代该对照。
+
+### 10. 预防规则
+
+保存 API/driver/property 快照；明确 supported/enabled；将 slot ABI 与 shader ABI 一起版本化；默认切换与删除 fallback 另走架构门槛。
+
+### 11. 关联 API 卡片
+
+[Descriptor Heap](../../03_api_manual/05_descriptor/descriptor_heap.md)、[实际类型大小](https://docs.vulkan.org/refpages/latest/refpages/source/vkGetPhysicalDeviceDescriptorSizeEXT.html)。
+
+### 12. 关联 Debug Playbook
+
+[工具能力边界](../../04_debug_playbooks/tool_usage.md)。
+
+### 13. 关联 Workflow
+
+[项目能力诊断](../../05_workflows/01_renderer_setup/project_diagnosis.md)。

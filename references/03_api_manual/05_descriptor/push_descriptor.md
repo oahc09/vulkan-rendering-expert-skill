@@ -51,7 +51,7 @@ VkPipelineLayout (其中某个 set 的 layout 创建时带 VK_DESCRIPTOR_SET_LAY
 
 - `VkPipelineLayout`（含 push descriptor set slot）
 - `VkDescriptorSetLayout`（带 `PUSH_DESCRIPTOR_BIT_KHR`）
-- `VkWriteDescriptorSet` / `VkWriteDescriptorSet2`
+- `VkWriteDescriptorSet`
 - `VkDescriptorUpdateTemplate`（push 路径）
 - `VkPushDescriptorSetInfo`（Vulkan 1.4）
 - `VkPushDescriptorSetWithTemplateInfo`（Vulkan 1.4）
@@ -170,11 +170,11 @@ VkPipelineLayout (其中某个 set 的 layout 创建时带 VK_DESCRIPTOR_SET_LAY
 
 ### Validation Layer
 
-- `VUID-VkDescriptorSetLayoutCreateInfo-flags-00280`：`PUSH_DESCRIPTOR_BIT_KHR` 与其他 flag 的兼容性。
-- `VUID-vkCmdPushDescriptorSetKHR-*`：layout / set / pipeline bind point / binding 数量。
+- `VUID-VkDescriptorSetLayoutCreateInfo-flags-00280`：push descriptor layout 不能包含 UNIFORM_BUFFER_DYNAMIC 或 STORAGE_BUFFER_DYNAMIC descriptor 类型。 [官方 VkDescriptorSetLayoutCreateInfo 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkDescriptorSetLayoutCreateInfo.html)。[SPEC]
+- `VUID-vkCmdPushDescriptorSet-*`（当前规范核心命名；扩展别名按 SDK 日志检索）：layout / set / pipeline bind point / binding 数量。
 - `VUID-VkPushDescriptorSetInfo-*`：Vulkan 1.4 路径的字段合法性。
 - `VUID-vkCmdPushDescriptorSetWithTemplate2-*`：template 与 layout 一致性。
-- `VUID-VkDescriptorUpdateTemplateCreateInfo-templateType-00350`：push template 字段。
+- `VUID-VkDescriptorUpdateTemplateCreateInfo-templateType-00350`：当 templateType 为 DESCRIPTOR_SET 时，descriptorSetLayout 必须是有效 handle；这不是 push-template 字段规则。 [官方 VkDescriptorUpdateTemplateCreateInfo 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkDescriptorUpdateTemplateCreateInfo.html)。[SPEC]
 
 ### RenderDoc / AGI
 

@@ -60,7 +60,7 @@ VkDevice
 - `VkDrawIndexedIndirectCommand`
 - `VkDispatchIndirectCommand`
 - `VkDrawMeshTasksIndirectCommandEXT`（`VK_EXT_mesh_shader`）
-- `VkDrawMeshTasksIndirectCountEXT`（`VK_EXT_mesh_shader`，count 也来自 GPU）
+- `vkCmdDrawMeshTasksIndirectCountEXT`（命令；读取 `VkDrawMeshTasksIndirectCommandEXT` 参数和独立 count buffer）
 
 ### 常用 API
 
@@ -176,7 +176,7 @@ VkDispatchIndirectCommand {
 
 ### 创建阶段
 
-- [ ] `VkBuffer.usage` 是否包含 `INDIRECT_BUFFER_BIT`？[SPEC]
+- [ ] `VkBufferCreateInfo.usage` 是否包含 `INDIRECT_BUFFER_BIT`？[SPEC]
 - [ ] 若采用 GPU-driven，buffer 是否同时含 `STORAGE_BUFFER_BIT`？[ENGINE]
 - [ ] buffer 大小是否满足 `offset + drawCount * stride`？[SPEC]
 - [ ] 是否启用了 `multiDrawIndirect` 与 `drawIndirectFirstInstance` feature？[SPEC]
@@ -209,7 +209,7 @@ VkDispatchIndirectCommand {
 
 ## 7. 高频错误
 
-1. `VkBuffer.usage` 漏写 `INDIRECT_BUFFER_BIT`，validation 报 `VUID-vkCmdDrawIndirect-buffer-02708`。[TOOL]
+- `VUID-vkCmdDrawIndirect-buffer-02708`：非 sparse 的间接参数 buffer 必须完整、连续绑定到单个 VkDeviceMemory；INDIRECT_BUFFER usage 是另一条规则，仍须检查。 [官方 vkCmdDrawIndirect 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdDrawIndirect.html)。[SPEC]
 2. 未启用 `multiDrawIndirect` 就传 `drawCount > 1`。[TOOL]
 3. 未启用 `drawIndirectFirstInstance` 就在 `VkDrawIndirectCommand.firstInstance` 写非 0。[TOOL]
 4. compute pass 写入 indirect buffer 后未插入 barrier，GPU 读取到未完成写入或 cache 不一致的内容。[SPEC]
@@ -227,12 +227,12 @@ VkDispatchIndirectCommand {
 
 ### Validation Layer
 
-- `VUID-vkCmdDrawIndirect-buffer-02708`：buffer 缺少 `INDIRECT_BUFFER_BIT`。
+- `VUID-vkCmdDrawIndirect-buffer-02708`：非 sparse 的间接参数 buffer 必须完整、连续绑定到单个 VkDeviceMemory；INDIRECT_BUFFER usage 是另一条规则，仍须检查。 [官方 vkCmdDrawIndirect 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdDrawIndirect.html)。[SPEC]
 - `VUID-vkCmdDrawIndirect-offset-02710`：offset 对齐错误。
 - `VUID-vkCmdDrawIndirect-drawCount-02718` / `02719`：`multiDrawIndirect` 未启用。
-- `VUID-vkCmdDrawIndirect-stride-02715` / `02716`：stride 不合法。
-- `VUID-vkCmdDrawIndirectFirstInstance-*`：`drawIndirectFirstInstance` 未启用。
-- `VUID-vkCmdDispatchIndirect-x-00417`：dispatch 维度超限。
+- VUID-vkCmdDrawIndirect-drawCount-00476：drawCount > 1 时，stride 必须是 4 的倍数且不小于 sizeof(VkDrawIndirectCommand)；另检查参数缓冲区范围。 [官方 vkCmdDrawIndirect 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdDrawIndirect.html)。[SPEC]
+- `drawIndirectFirstInstance` 未启用时，间接 draw 参数的 `firstInstance` 必须为 0；检查 `VkDrawIndirectCommand` / `VkDrawIndexedIndirectCommand` 的对应有效使用规则。[SPEC]
+- VUID-VkDispatchIndirectCommand-x-00417：x 不超过 maxComputeWorkGroupCount[0]；y、z 分别检查对应维度。 [官方 VkDispatchIndirectCommand 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkDispatchIndirectCommand.html)。[SPEC]
 - `VUID-vkCmdDrawMeshTasksIndirectEXT-*`：mesh shader 间接命令相关。
 
 ### RenderDoc / AGI
@@ -385,7 +385,7 @@ GPU-driven rendering 的关键不是"用了 indirect draw"，而是"indirect dra
 1. `VkDrawIndirectCommand` / `VkDrawIndexedIndirectCommand` / `VkDispatchIndirectCommand` 字段的精确合法范围与 feature 依赖（`firstInstance`、`vertexOffset` 是否允许负值等）。
 2. `multiDrawIndirect` / `drawIndirectFirstInstance` feature 的精确语义：未启用时哪些字段必须为 0。
 3. `vkCmdDrawIndirectCount` / `vkCmdDrawMeshTasksIndirectCountEXT` 的 `countBuffer` 与 `maxCount` 参数语义与 validation 规则。
-4. `VK_EXT_mesh_shader` 中 `VkDrawMeshTasksIndirectCommandEXT` / `VkDrawMeshTasksIndirectCountEXT` 结构与 `groupCountX/Y/Z` 上限。
+4. `VK_EXT_mesh_shader` 中 `VkDrawMeshTasksIndirectCommandEXT` 结构与 `vkCmdDrawMeshTasksIndirectCountEXT` 命令与 `groupCountX/Y/Z` 上限。
 5. `vkCmdPipelineBarrier` 中 `DRAW_INDIRECT_BIT` / `DISPATCH_INDIRECT_BIT` stage 与 `INDIRECT_COMMAND_READ_BIT` access 的精确匹配规则。
 6. 跨 queue family 的 indirect buffer ownership transfer barrier 写法。
 7. `maxDrawIndirectCount` limit 在不同 vendor / 设备上的实际值。

@@ -9,6 +9,7 @@
 
 ---
 
+<a id="r1-decompose"></a>
 ## R1 查询分解
 
 复杂问题先拆为子问题，再逐个路由。拆解维度：
@@ -20,9 +21,10 @@
 规则：
 
 - 每个子问题标记目标模块（playbook / workflow / API card / case）。
-- 跨类型任务（如"黑屏 + Android + 卡顿"）必须拆解，拆解后与 `00_expert_entry/task_classifier.md` 的分类逐一对应。
+- 跨类型任务（如"黑屏 + Android + 卡顿"）必须拆解，拆解后与 `../07_integration_pack/task_routing_rules.md#routing-entry` 的类型逐一对应。
 - 子问题数量 ≤4；超过说明问题过大，先与用户确认范围。
 
+<a id="r2-clarify"></a>
 ## R2 意图澄清
 
 先检查已有上下文与相关项目证据。仅当剩余信息缺口会改变路由或结论，且无法从现有证据补齐时，才对受影响的子问题提问；其余子问题继续检索。触发判据：
@@ -56,15 +58,17 @@
 
 模板用途有二：R2 提问时按对应类型取项；回答开头可提示用户"补齐哪几项可显著提高结论可靠性"。
 
+<a id="r3-route"></a>
 ## R3 首轮路由
 
 循环入口即现有路由，保持不变：
 
-- 路由表：`07_integration_pack/task_routing_rules.md`（按 `task_classifier.md` 的 10 类主任务路由；第三方库集成为专项路由）。
+- 路由表：`07_integration_pack/task_routing_rules.md`（唯一任务路由权威；第三方库集成为叠加专项路由）。
 - 检索策略与最小文件上限：`07_integration_pack/retrieval_policy.md` §4（1 workflow + 1 playbook + 1-3 API card + 0-2 case）。
 
 首轮对**每个子问题**分别路由，不合并加载。
 
+<a id="r4-evaluate"></a>
 ## R4 证据评估
 
 回答前自检。对每个子问题标注置信度：
@@ -78,6 +82,7 @@
 - 任一子问题为低置信 → 必须执行 R5，不允许带低置信直接回答。
 - 证据清单（本轮加载了什么、确认了什么）必须保留，作为 Verification Gate 的输入。
 
+<a id="r5-retrieve"></a>
 ## R5 二轮定向检索
 
 只对低置信子问题定向补载：
@@ -93,11 +98,13 @@
 
 ---
 
+<a id="retrieval-gate-boundary"></a>
 ## 与 Verification Gate 的边界
 
 - 本循环管"回答前找齐证据"；`00_expert_entry/verification_gate.md` 管"结论前过 G1-G6"。
 - 循环的输出（证据清单 + 各子问题置信度）是 Gate 的输入；二者串联，不重叠。
 
+<a id="retrieval-summary"></a>
 ## 决策摘要
 
 | 情形 | 动作 |

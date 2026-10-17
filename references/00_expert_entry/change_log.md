@@ -1,5 +1,23 @@
 # Change Log
 
+## v1.0.9 — 规范对齐与轻量化（2026-10-17）
+
+- 七文件强制预读改为 hard_rules 全文 + task_routing_rules 的 routing-entry 与命中段落；八模块、触发词和宿主配置保留。
+- SKILL 症状直达表移到 task_routing_rules，分类器与检索策略不再维护平行分发表。
+- 输出模板、准确性、检索循环与验证关卡增加稳定锚点，入口 README 内记录旧规则迁移表；入口重构本身不新增文件。
+- 19 条硬规则原文不变，Evidence Map + Architecture Map、修改影响面、R1-R5、G1-G6 与第三方版本约束仍保留。
+- 静态缩减不等于 live 验证；实际 token 降低 30% 为待测目标，不宣称已达标。
+
+### 技术资料同步范围
+
+- 按 Vulkan 1.4.365 registry / validusage 核对 API 卡符号、限定成员和 VUID；纠正已确认的虚构符号、失效编号及语义错配。机械匹配不等于所有规范语义已经验证，复现脚本与审计证据保存在独立测试仓库。
+
+- Descriptor Buffer 文档校正：opaque descriptor 生成、真实 flags、layout 查询、复制与读取可见性。
+- Descriptor Heap 补充能力边界、实际 descriptor 大小与 stride，并新增对应 API 卡片。
+- YCbCr / AHardwareBuffer 补充 descriptor count 与相关使用边界。
+- 能力查询区分 SDK / headers、运行时 ICD 和 feature；工具、Apple 与 Blender 路线按目标能力和工程约束决策。
+- 上述为文档更新范围，不代表已进行 GPU 运行验证或真实模型行为验收；具体执行结果须以对应测试记录为准。
+
 ## v0.1
 
 - 建立专家行为控制模块。

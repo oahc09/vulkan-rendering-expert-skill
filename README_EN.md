@@ -49,6 +49,12 @@ This skill requires output to always provide actionable Vulkan paths rather than
 4. Give the minimal verification approach, e.g. Validation Layer, RenderDoc, AGI, logcat, traces, counters, or targeted asserts.
 5. Explicitly require looking up the Vulkan Spec, Registry, official samples, or platform docs when API details are uncertain.
 
+## v1.0.9: Lightweight Entry (2026-10-17)
+
+Startup reads all 19 hard rules and only the routing-entry section of the single routing authority, then the matching sections. Templates, accuracy rules and retrieval protocols load when needed; G1-G6 verification remains mandatory before completion claims. All 8 modules, triggers, host configuration, Evidence Map and Architecture Map requirements remain intact.
+
+Stable section anchors and whole-file fallbacks are documented in [Retrieval Policy](references/07_integration_pack/retrieval_policy.md#section-read-contract); the [rule migration map](references/00_expert_entry/README.md#rule-migration-map) traces the old entry rules. A 30% reduction in actual model tokens is a measurement target, not a verified result; static size changes do not establish live behavior or quality parity.
+
 ## Installation & Usage
 
 This skill follows the Agent Skills specification: the repository root is the skill directory, `SKILL.md` is the entry point, and `references/` is loaded on demand.
@@ -67,7 +73,7 @@ Add this repository directory as a local skill in skill management, or install i
 
 **Other Agent Skills-compatible hosts** (Cursor, VS Code extensions, etc.)
 
-Any host that reads the `SKILL.md` frontmatter and loads `references/` files per its instructions works. If the host has no skill mechanism, paste the full `SKILL.md` as a system prompt — the skill runs in degraded mode (routing and answer rules still apply; automatic loading does not).
+Any host that reads the `SKILL.md` frontmatter and loads `references/` files per its instructions works. If the host has no skill mechanism, paste the full `SKILL.md` as a system prompt — the skill runs in degraded mode. Supply the required hard rules and matching reference sections as directed; automatic loading is unavailable, and pasting the entry alone does not establish full execution.
 
 ## Example Prompts
 

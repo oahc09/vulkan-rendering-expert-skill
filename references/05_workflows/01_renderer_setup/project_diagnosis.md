@@ -255,3 +255,20 @@ Java/Kotlin Surface
 3. 未读取实现的判断标记“未验证”，不得标 `[CODE]`。
 4. 若项目实现与 Vulkan Spec 冲突，明确区分“项目当前行为”和“规范要求”。
 5. 两轮定向检索仍低置信时，把未验证项交给 Verification Gate，不伪装成确定结论。
+
+
+## 追加检查：能力矩阵与迁移门槛
+
+源码诊断输出必须包含以下矩阵。每个结论附 source path:line 或运行日志；源码只能证明配置/分支存在，不能证明设备实际支持。缺日志写“未核验”，不得补造通过结果。
+
+| 维度 | 编译/配置证据 | 运行时支持证据 | 实际启用/选择证据 | 缺口与下一步 |
+|---|---|---|---|---|
+| SDK / headers / shader 编译器 | build 文件和版本 | 工具版本输出 | 实际构建日志 | 版本不等于驱动能力 |
+| loader / instance API | loader linkage / requested API | instance version | instance create-info | 不与 device API 混同 |
+| device API / extensions | capability 代码 | properties / extension 枚举 | device create-info | 保留缺失分支 |
+| features / limits / profile | feature chain / profile 名称版本 | features2 / properties2 / profile 检查 | enabled feature 快照 | supported 与 enabled 分账 |
+| descriptor 后端 | set/indexing/buffer/heap 源码入口 | 对应扩展、feature、limits | 被选路径与 fallback 原因 | 不按品牌选择 |
+| AHB / YCbCr | import/conversion/allocator 代码 | format/external-format、计数查询 | 实际数据链与 slot 容量 | 单 descriptor 假设排查 |
+| validation / capture | 工具及配置 | 当前版本支持说明 | 最小运行与覆盖结果 | 无报告不是正确性证明 |
+
+诊断结论分别给出“可添加后端 / 可设为默认 / 可删除 fallback”的证据与阻塞项，不能合并为单一“迁移完成”。详见 [设备六层证据](../../03_api_manual/01_instance_device_queue/physical_device.md) 和 [架构门槛](../../02_core_mental_model/engine_architecture.md)。[ENGINE]

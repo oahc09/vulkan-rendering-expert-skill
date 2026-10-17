@@ -131,10 +131,10 @@ Image 生产阶段（如 COLOR_ATTACHMENT_OUTPUT + COLOR_ATTACHMENT_WRITE）
 
 ### Validation Layer
 
-- `VUID-VkImageMemoryBarrier-oldLayout-01208`：oldLayout 必须与当前 layout 匹配（或为 UNDEFINED / PREINITIALIZED）。
-- `VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-01213` / `dstQueueFamilyIndex-01214`：queue family transfer 规则。
-- `VUID-VkImageMemoryBarrier-subresourceRange-01486`：aspect mask 与 image format 一致性。
-- `VUID-vkCmdPipelineBarrier-srcStageMask-4098` 等：stage / access / layout 组合合法性。
+- `VUID-VkImageMemoryBarrier-oldLayout-01208`：在布局不被忽略时，oldLayout 或 newLayout 为 COLOR_ATTACHMENT_OPTIMAL 要求 image 创建时含 COLOR_ATTACHMENT usage。实际旧布局匹配是另一个条件。 [官方 VkImageMemoryBarrier 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkImageMemoryBarrier.html)。[SPEC]
+- 跨 queue family 所有权转移需匹配 release/acquire 的范围与 queue family 索引；并区分普通 family、IGNORED、EXTERNAL 和 FOREIGN 的适用条件。 [官方 VkImageMemoryBarrier 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkImageMemoryBarrier.html)。[SPEC]
+- `VUID-VkImageMemoryBarrier-subresourceRange-01486`：subresourceRange.baseMipLevel 必须小于 image 创建时的 mipLevels；aspectMask 合法性另行检查。 [官方 VkImageMemoryBarrier 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkImageMemoryBarrier.html)。[SPEC]
+- 按 `vkCmdPipelineBarrier` 官方 Valid Usage 检查 stage/access 与 queue capability；layout 与 image usage 约束在 `VkImageMemoryBarrier` 中逐项检查，不能拼接省略前导零的 VUID。
 
 ### RenderDoc / AGI
 

@@ -36,8 +36,8 @@
 | `image layout mismatch` / `TRANSFER_DST_OPTIMAL` | 缺少 layout transition | `../04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md` | `08_synchronization/image_memory_barrier.md` |
 | `synchronization hazard` / `WRITE_AFTER_READ` | 缺少 barrier / stage-access 错误 | `../04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md` | `08_synchronization/pipeline_barrier.md` |
 | `command buffer reset in flight` | 复用仍在 pending 的 command buffer | `../04_debug_playbooks/03_validation_errors/validation_error_decode.md` | `03_command_buffer/command_buffer_lifetime.md` |
-| `VUID-vkAcquireNextImageKHR-surface-*` | surface 无效或已改变 | `../04_debug_playbooks/05_android_specific/android_surface_lifecycle.md` | `02_surface_swapchain/surface.md` |
-| `VUID-vkQueuePresentKHR-surface-*` | present 时 surface/swapchain 状态不匹配 | `../04_debug_playbooks/02_crash_hang/swapchain_recreate_crash.md` | `02_surface_swapchain/swapchain.md` |
+| `vkAcquireNextImageKHR`（按完整日志 VUID 检索） | 检查 swapchain、semaphore/fence 和 acquire 状态；surface 丢失或过期另看返回码 | `../04_debug_playbooks/05_android_specific/android_surface_lifecycle.md` | `02_surface_swapchain/surface.md` |
+| `vkQueuePresentKHR` / `VkPresentInfoKHR`（按完整日志 VUID 检索） | 检查 wait semaphore、swapchain/image index 与 present 状态；surface/swapchain 变化另看返回码 | `../04_debug_playbooks/02_crash_hang/swapchain_recreate_crash.md` | `02_surface_swapchain/swapchain.md` |
 
 ---
 
@@ -75,3 +75,5 @@
 1. 先读 `09_debug_validation/vuid_decode.md` 拆解 message 结构。
 2. 沿对象链路反查相关 API Card。
 3. 必要时回查 [Vulkan Specification](https://registry.khronos.org/vulkan/specs/) 与 [Vulkan Valid Usage Database](https://vulkan.lunarg.com/doc/sdk/)。
+
+官方 valid usage：[vkAcquireNextImageKHR](https://docs.vulkan.org/refpages/latest/refpages/source/vkAcquireNextImageKHR.html)、[vkQueuePresentKHR](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueuePresentKHR.html)。两命令均无 surface 参数，不能据现象构造带该参数名的 VUID；错误返回码与 valid-usage 违反须分别定位。

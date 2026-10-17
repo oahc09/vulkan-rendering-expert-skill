@@ -147,9 +147,9 @@
 
 ### Validation Layer
 
-- `VUID-vkQueueSubmit-pWaitSemaphores-00068`：wait semaphore 必须已被 signal 或处于 pending signal 状态。
+- `VUID-vkQueueSubmit-pWaitSemaphores-00068`：binary semaphore wait 执行时，不得有其他 queue 正等待同一个 semaphore；此规则不是 timeline wait value 条件。 [官方 vkQueueSubmit 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueSubmit.html)。[SPEC]
 - `VUID-vkQueuePresentKHR-pWaitSemaphores-03267`：present 等待的 semaphore 必须有效。
-- `VUID-vkAcquireNextImageKHR-semaphore-01782`：acquire semaphore 必须 unsignaled。
+- VUID-vkAcquireNextImageKHR-semaphore-01286：非空 acquire semaphore 必须 unsignaled；还必须没有 pending signal/wait 操作。 [官方 vkAcquireNextImageKHR 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkAcquireNextImageKHR.html)。[SPEC]
 - Timeline semaphore 相关 VUID：`VUID-VkSemaphoreTypeCreateInfo-semaphoreType-03279` 等。
 
 ### RenderDoc / AGI

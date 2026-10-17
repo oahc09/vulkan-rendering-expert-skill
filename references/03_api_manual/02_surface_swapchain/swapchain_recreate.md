@@ -153,7 +153,7 @@ Surface 尺寸 / 方向变化 或 VK_ERROR_OUT_OF_DATE_KHR
 
 ### Validation Layer
 
-- `VUID-vkCreateSwapchainKHR-surface-01270`：surface 仍被旧 swapchain 使用。
+- 重建时使用有效 oldSwapchain 与相同 surface；保留旧 swapchain 期间仍须完成其 acquired image / present 工作，不能仅凭 graphics fence 判断所有 present 已完成。 [官方 VkSwapchainCreateInfoKHR 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkSwapchainCreateInfoKHR.html)。[SPEC]
 - `VUID-vkDestroySwapchainKHR-swapchain-01282`：swapchain 仍被 command buffer 引用。
 - `VK_ERROR_OUT_OF_DATE_KHR` / `VK_SUBOPTIMAL_KHR` 提示 recreate 触发点。[TOOL]
 

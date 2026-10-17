@@ -6,6 +6,7 @@
 
 ---
 
+<a id="format-verification"></a>
 ## 0. 统一出口段：Verification Gate（所有类型共用）
 
 任何结论性输出（已完成 / 已解决 / 根因已修复 / 性能已优化）前，必须按 `verification_gate.md` 过 G1-G6 关卡，回答末尾附加验证状态：
@@ -20,6 +21,7 @@ Verification Gate:
 
 ---
 
+<a id="format-clarification"></a>
 ## 0.5 意图澄清（R2 信息缺口影响路由或结论时）
 
 触发判据与提问规则见 `00_expert_entry/progressive_retrieval.md` R2。输出格式：
@@ -35,6 +37,7 @@ Verification Gate:
 
 ---
 
+<a id="format-concept"></a>
 ## 1. 概念+链路类
 
 适用于：Vulkan / Descriptor / Pipeline / Barrier / Swapchain 等概念解释。
@@ -52,6 +55,7 @@ Verification Gate:
 
 ---
 
+<a id="format-api"></a>
 ## 2. API 细节类
 
 适用于：单个 API、对象、结构体字段、同步参数解释。
@@ -68,6 +72,7 @@ Verification Gate:
 
 ---
 
+<a id="format-debug"></a>
 ## 3. 故障调试类
 
 适用于：黑屏、闪烁、Crash、Validation Error、GPU Hang、Compute 无输出。
@@ -85,6 +90,7 @@ Verification Gate:
 
 ---
 
+<a id="format-implementation"></a>
 ## 4. 正向开发类
 
 适用于：新增 fullscreen pass、compute pass、SurfaceView 接入、swapchain recreate、offscreen pass、后处理优化、OpenGL / Shadertoy 迁移。
@@ -110,6 +116,7 @@ Verification Gate:
 
 ---
 
+<a id="format-performance"></a>
 ## 5. 性能优化类
 
 适用于：GPU 高、frame time 高、bandwidth 高、移动端发热、后处理 pass 很重。
@@ -126,6 +133,7 @@ Verification Gate:
 
 ---
 
+<a id="format-architecture"></a>
 ## 6. 架构设计类
 
 适用于：Render Graph、RHI 抽象、Resource Lifetime、Pipeline Cache、Frames-in-flight、Descriptor 管理策略。
@@ -143,6 +151,7 @@ Verification Gate:
 
 ---
 
+<a id="format-case"></a>
 ## 7. 经验案例类
 
 适用于：类似案例、误判经验、真实工程踩坑。
@@ -158,6 +167,7 @@ Verification Gate:
 
 ---
 
+<a id="format-android"></a>
 ## 8. Android 专项类
 
 适用于：SurfaceView 接 Vulkan、`ANativeWindow` 生命周期、pause/resume、rotation crash、Surface destroyed 后 present crash。
@@ -174,6 +184,7 @@ Verification Gate:
 
 ---
 
+<a id="format-project"></a>
 ## 9. 项目诊断类
 
 适用于：分析真实 Vulkan / 图形引擎仓库、版本升级影响面、源码级架构改造、把通用排错映射到项目代码。
@@ -195,6 +206,7 @@ Verification Gate:
 
 ---
 
+<a id="format-compact"></a>
 ## 10. 简短回答类
 
 适用于：用户要求简短、只要重点、问题较小。

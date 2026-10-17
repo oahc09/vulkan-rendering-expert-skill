@@ -1,10 +1,6 @@
 # Task Classifier
 
-收到任务后，先判断属于哪类。分类结果必须与 `07_integration_pack/task_routing_rules.md` 和本文件的 `00_expert_entry/response_formats.md` 保持一致。
-
-若查询跨多个类型，按 `调试问题 > 性能问题 > Android 专项 > 项目诊断 > 正向开发 > 架构设计 > API 细节 > 经验案例 > 概念+链路 > 简短回答` 的优先级处理主类型，其余类型在主回答后以补充段落覆盖。
-
-跨类型任务先用 `00_expert_entry/progressive_retrieval.md` 的 R1 查询分解拆为子问题，再对每个子问题独立分类与路由；只有子问题无法拆分（单一问题天然横跨多类，如"迁移 OpenGL 项目到 Vulkan 并优化性能"）时才用固定优先级取主类型。
+本文件只保留任务识别例子与关注点，按需读取对应小节，不作为第二套路由表。实际文件选择、跨类型分解和主类型优先级统一由 `../07_integration_pack/task_routing_rules.md#routing-entry` 定义。第三方库集成使用该文件 #route-third-party 叠加规则。
 
 ---
 
@@ -54,10 +50,7 @@
 
 用户问：黑屏、Validation Error、Android 横竖屏 crash、compute 没输出、texture 黑、GPU hang、device lost。
 
-应优先使用：
-
-- `debug_priority.md`
-- `04_debug_playbooks/debug_priority_index.md`
+资料选择见 `../07_integration_pack/task_routing_rules.md#route-debug`。
 
 ---
 
@@ -129,10 +122,7 @@
 
 用户问：有没有类似案例、为什么容易误判、真实工程怎么踩坑。
 
-应优先使用：
-
-- `06_cases/case_index.md`
-- `04_debug_playbooks/debug_priority_index.md`
+资料选择见 `../07_integration_pack/task_routing_rules.md#route-case`。
 
 ---
 
@@ -140,12 +130,7 @@
 
 用户问：SurfaceView 接 Vulkan、`ANativeWindow` 生命周期、pause/resume、rotation crash、Surface destroyed 后 present crash。
 
-应优先使用：
-
-- `02_core_mental_model/android_surface_swapchain_lifecycle.md`
-- `05_workflows/04_android_integration/`
-- `04_debug_playbooks/05_android_specific/`
-- `06_cases/04_swapchain_android/`
+资料选择见 `../07_integration_pack/task_routing_rules.md#route-android`。
 
 输出格式根据具体问题选择 `故障调试类` 或 `正向开发类`，但必须先覆盖 Android 生命周期要点。
 
@@ -155,11 +140,7 @@
 
 用户提供真实代码仓库，要求理解 Vulkan 架构、评估升级 / 重构影响面、把 Debug Playbook 映射到项目源码，或输出可直接交给 coding agent 的实施计划。
 
-应优先使用：
-
-- `05_workflows/01_renderer_setup/project_diagnosis.md`
-- `02_core_mental_model/engine_architecture.md`
-- `02_core_mental_model/regression_reasoning.md`
+资料选择见 `../07_integration_pack/task_routing_rules.md#route-project`。
 
 应关注：
 

@@ -237,10 +237,10 @@ vkDestroySwapchainKHR
 ### Validation Layer
 
 - `VUID-vkResetCommandBuffer-commandBuffer-00045`：command buffer 不能处于 PENDING 状态（说明 fence 未 wait）。[SPEC]
-- `VUID-vkResetFences-pFences-01122`：reset 前 fence 不在 pending submit 中。[SPEC]
-- `VUID-vkQueueSubmit-pWaitSemaphores-00068`：wait semaphore 必须 signaled 或 timeline 可满足。[SPEC]
+- reset 的 fence 不能仍关联未完成的 queue command；reset 不会等待完成，unsignaled 本身不代表仍 pending。 [官方 vkResetFences 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkResetFences.html)。[SPEC]
+- `VUID-vkQueueSubmit-pWaitSemaphores-00068`：binary semaphore wait 执行时，不得有其他 queue 正等待同一个 semaphore；此规则不是 timeline wait value 条件。 [官方 vkQueueSubmit 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueSubmit.html)。[SPEC]
 - `VUID-vkQueuePresentKHR-pWaitSemaphores-03267`：present wait semaphore 必须有效。[SPEC]
-- `VUID-vkAcquireNextImageKHR-semaphore-01282`：acquire semaphore 不能在 unsignaled 状态被复用。[SPEC]
+- VUID-vkAcquireNextImageKHR-semaphore-01286 / VUID-vkAcquireNextImageKHR-semaphore-01779：非空 acquire semaphore 必须 unsignaled，且没有未完成的 signal/wait 操作。 [官方 vkAcquireNextImageKHR 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkAcquireNextImageKHR.html)。[SPEC]
 
 ### RenderDoc / AGI
 

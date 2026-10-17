@@ -129,8 +129,8 @@ ANativeWindow / Surface（Java/Kotlin 层或 Native 层）
 
 ### Validation Layer
 
-- `VUID-VkAndroidSurfaceCreateInfoKHR-window-01223`：`window` 必须指向有效 `ANativeWindow`。
-- `VUID-vkCreateAndroidSurfaceKHR-instance-01292`：instance extension 已启用。
+- window 必须指向有效 ANativeWindow；不能把其他命令的数字 VUID 作为此结构规则。 [官方 VkAndroidSurfaceCreateInfoKHR 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkAndroidSurfaceCreateInfoKHR.html)。[SPEC]
+- 创建 surface 前启用 VK_KHR_android_surface 及所需依赖，并使用有效 instance。 [官方 vkCreateAndroidSurfaceKHR 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateAndroidSurfaceKHR.html)。[SPEC]
 
 ### RenderDoc / AGI
 

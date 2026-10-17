@@ -96,6 +96,7 @@
 | Push Descriptor | `05_descriptor/push_descriptor.md` |
 | Descriptor Indexing | `05_descriptor/descriptor_indexing.md` |
 | Descriptor Buffer | `05_descriptor/descriptor_buffer.md` |
+| Descriptor Heap / slot stride 与写入大小 | `05_descriptor/descriptor_heap.md` |
 
 ---
 

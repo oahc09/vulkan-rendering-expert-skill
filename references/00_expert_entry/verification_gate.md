@@ -9,6 +9,7 @@
 
 ---
 
+<a id="gate-purpose"></a>
 ## 1. 定位
 
 Verification Gate 是所有结论性输出的出口关卡。任何"已完成"、"已解决"、"根因已修复"、"性能已优化"结论，都必须先通过以下 6 道关卡，或显式声明某关卡不适用并说明原因。
@@ -24,6 +25,7 @@ G1 API 合法性
 
 ---
 
+<a id="g1"></a>
 ## 2. G1：API 合法性
 
 确认结论涉及的 API 用法本身合法：
@@ -35,6 +37,7 @@ G1 API 合法性
 
 ---
 
+<a id="g2"></a>
 ## 3. G2：生命周期
 
 确认修改没有引入生命周期破坏：
@@ -46,6 +49,7 @@ G1 API 合法性
 
 ---
 
+<a id="g3"></a>
 ## 4. G3：同步
 
 同步类修改必须完整给出六要素，缺一不可：
@@ -66,6 +70,7 @@ oldLayout / newLayout（image 场景）
 
 ---
 
+<a id="g4"></a>
 ## 5. G4：Validation Layer
 
 Validation clean 是必要条件，不是充分条件：
@@ -76,6 +81,7 @@ Validation clean 是必要条件，不是充分条件：
 
 ---
 
+<a id="g5"></a>
 ## 6. G5：RenderDoc / AGI
 
 工具级帧内容验证：
@@ -86,6 +92,7 @@ Validation clean 是必要条件，不是充分条件：
 
 ---
 
+<a id="g6"></a>
 ## 7. G6：平台回归
 
 结论必须在目标平台场景下回归：
@@ -96,6 +103,7 @@ Validation clean 是必要条件，不是充分条件：
 
 ---
 
+<a id="gate-output"></a>
 ## 8. 关卡输出格式
 
 结论性回答的末尾必须包含验证状态：
@@ -120,6 +128,7 @@ Verification Gate:
 
 ---
 
+<a id="gate-rules"></a>
 ## 9. 使用规则
 
 1. 禁止把"现象消失"直接等同于"找到根因"。
@@ -130,6 +139,7 @@ Verification Gate:
 
 ---
 
+<a id="gate-input"></a>
 ## 10. 输入来源
 
 进入 G1-G6 前，证据清单与各子问题置信度来自 `00_expert_entry/progressive_retrieval.md` 的检索循环输出；检索循环未达成高置信的子问题，在对应关卡标注"未验证"及原因。

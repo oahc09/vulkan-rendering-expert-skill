@@ -49,6 +49,12 @@
 4. 给出最小验证方式，例如 Validation Layer、RenderDoc、AGI、logcat、trace、counter 或 targeted assert。
 5. 对不确定 API 细节明确要求回查 Vulkan Spec、Registry、官方示例或平台文档。
 
+## v1.0.9：轻量入口（2026-10-17）
+
+启动只加载全部 19 条硬规则、唯一路由入口段落及命中类型，再按需读取模板、准确性规则与检索协议。保留全部 8 模块、触发词、宿主配置、Evidence Map / Architecture Map，以及结论前必做的 G1-G6 验证。
+
+稳定锚点与全文读取回退见[检索协议](references/07_integration_pack/retrieval_policy.md#section-read-contract)，旧规则去向见[规则迁移映射](references/00_expert_entry/README.md#rule-migration-map)。实际模型 token 降低 30% 是待测目标；静态体积变化不能证明 live 行为或质量不回退，未取得对应证据前不宣称达标。
+
 ## 安装与调用
 
 本技能遵循 Agent Skills 规范：仓库根目录即技能目录，`SKILL.md` 是入口，`references/` 按需加载。
@@ -67,7 +73,7 @@ git clone https://github.com/oahc09/vulkan-rendering-expert-skill ~/.claude/skil
 
 **其他支持 Agent Skills 的宿主**（Cursor、VS Code 插件等）
 
-凡能读取 `SKILL.md` frontmatter 并按其指令加载 `references/` 文件的宿主均可使用。宿主不支持技能机制时，可把 `SKILL.md` 全文粘贴为系统提示词，技能以降级模式工作（路由与回答规则仍生效，自动加载失效）。
+凡能读取 `SKILL.md` frontmatter 并按其指令加载 `references/` 文件的宿主均可使用。宿主不支持技能机制时，可把 `SKILL.md` 全文粘贴为系统提示词，技能以降级模式工作；仍需按入口要求提供硬规则与命中参考段落（自动加载失效，不能仅凭入口全文声称完整执行）。
 
 ## 提问示例库
 
