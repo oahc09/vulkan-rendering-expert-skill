@@ -141,9 +141,9 @@
 ### Validation Layer
 
 - `VUID-vkCmdPipelineBarrier2-synchronization2-03848`：必须启用 synchronization2。
-- `VUID-VkMemoryBarrier2-srcStageMask-03851` / `dstStageMask-03852`：stage / access 组合合法性。
-- `VUID-VkSubmitInfo2-semaphore-03882`：wait semaphore 必须处于合法状态。
-- `VUID-vkQueueSubmit2-fence-03863`：fence 不能处于 pending 状态。
+- srcAccessMask/dstAccessMask 的每个访问类型必须由对应 stage mask 支持；还需满足 feature 和 queue capability 限制。 [官方 VkMemoryBarrier2 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkMemoryBarrier2.html)。[SPEC]
+- `VUID-VkSubmitInfo2-semaphore-03882`：pSignalSemaphoreInfos 中 timeline semaphore 的 signal value 在 signal 执行时必须大于当前 counter；此条是 signal 规则。 [官方 VkSubmitInfo2 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkSubmitInfo2.html)。[SPEC]
+- 非空 fence 必须 unsignaled，且不能仍关联未完成的 queue command；等待完成后再 reset 并复用。 [官方 vkQueueSubmit2 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueSubmit2.html)。[SPEC]
 
 ### RenderDoc / AGI
 

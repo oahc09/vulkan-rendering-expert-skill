@@ -176,7 +176,8 @@ CPU 侧帧调度
 
 - semaphore 错误按实际消息回查 [vkQueueSubmit](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueSubmit.html) / [vkQueuePresentKHR](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueuePresentKHR.html)，binary wait 可以等待已提交但仍 pending 的 signal。[SPEC]
 - `VUID-vkResetFences-pFences-01123`：reset 的 fence 不得关联尚未执行完成的 queue 命令，见 [vkResetFences](https://docs.vulkan.org/refpages/latest/refpages/source/vkResetFences.html)。[SPEC]
-- `VUID-vkSignalSemaphore-value-03258`：timeline semaphore signal value 必须大于当前值。[SPEC]
+- `VUID-vkQueueSubmit-pWaitSemaphores-00068`：binary semaphore wait 执行时，不得有其他 queue 正等待同一个 semaphore；此规则不是 timeline wait value 条件。 [官方 vkQueueSubmit 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueSubmit.html)。[SPEC]
+- VUID-VkSemaphoreSignalInfo-value-03258：host signal value 必须大于当前值；同时满足 pending signal 与 maxTimelineSemaphoreValueDifference 限制。 [官方 VkSemaphoreSignalInfo 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkSemaphoreSignalInfo.html)。[SPEC]
 
 ### RenderDoc / AGI
 

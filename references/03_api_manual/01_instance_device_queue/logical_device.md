@@ -62,7 +62,7 @@ VkInstance
 | API | 作用 |
 |---|---|
 | `vkCreateDevice` | 从 physical device 创建逻辑设备。[SPEC] |
-| `vkDestroyDevice` | 销毁逻辑设备；会自动释放大部分子对象。[SPEC] |
+| `vkDestroyDevice` | 销毁逻辑设备；调用前完成工作并显式销毁要求销毁的子对象。[SPEC] |
 | `vkGetDeviceQueue` / `vkGetDeviceQueue2` | 获取 device 创建的 queue。[SPEC] |
 | `vkEnumerateDeviceExtensionProperties` | 查询物理设备支持的 device extensions。[SPEC] |
 
@@ -94,7 +94,7 @@ vkEnumeratePhysicalDevices
 
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
-| `queueCreateInfoCount` / `pQueueCreateInfos` | 每个 queue family 的 queue 数量与优先级。[SPEC] | 同一 family 重复创建或优先级未归一化。[TOOL] |
+| `queueCreateInfoCount` / `pQueueCreateInfos` | 每个 queue family 的 queue 数量与优先级。[SPEC] | queueFamilyIndex/flags 重复或 priority 不在 [0,1]。[TOOL] |
 | `pEnabledFeatures` / `pNext` 链上的 features | 必须显式启用才能使用，如 `samplerAnisotropy`。[SPEC] | 未启用 feature 就使用对应功能。[TOOL] |
 | `ppEnabledExtensionNames` | device extensions，如 swapchain、dynamic rendering。[SPEC] | 漏开 `VK_KHR_swapchain`。[TOOL] |
 | `pNext` | 可接 `VkPhysicalDeviceFeatures2`、feature structures。[SPEC] | 结构体类型链错误。[TOOL] |
@@ -129,7 +129,7 @@ vkEnumeratePhysicalDevices
 3. Queue family 不支持某种操作却向其提交对应命令。[TOOL]
 4. `pEnabledFeatures` 与 `pNext` 链上的 feature 结构冲突或重复。[TOOL]
 5. 销毁 device 时仍有 in-flight command buffer 或处于 recording 状态的 command buffer。[TOOL]
-6. 同一 queue family 创建多个 `VkDeviceQueueCreateInfo` 导致失败。[TOOL]
+6. queue create-info 的 queueFamilyIndex 与 flags 组合必须唯一；同一 family 的 protected/unprotected 队列组合须按规范，而非一概禁止同一 family 多条记录。[TOOL]
 
 ---
 
@@ -138,7 +138,7 @@ vkEnumeratePhysicalDevices
 ### Validation Layer
 
 - `VUID-VkDeviceCreateInfo-*`：queue family、features、extensions 合法性。
-- `VUID-vkCreateDevice-ppEnabledExtensionNames-01387` 等。
+- `VUID-vkCreateDevice-ppEnabledExtensionNames-01387`：所启用扩展要求的 device extension 依赖也须列入启用列表（按核心 promotion 等规则处理）。
 
 ### RenderDoc / AGI
 
@@ -245,3 +245,10 @@ vkEnumeratePhysicalDevices
 3. Queue family 的 `queueFlags` 与 present 支持查询。
 4. Device extension 之间的依赖关系。
 5. 不同 GPU 厂商对同一 feature 的语义差异。
+
+
+## 启用与支持分账
+
+创建前使用 [physical device 六层证据](physical_device.md)；将 supported-feature 查询结构与 enabled-feature 请求结构分离，避免把所有 true 无意开启。使用 `VkPhysicalDeviceFeatures2` 放入 device `pNext` 时，`pEnabledFeatures` 必须为空；避免 promoted 核心结构和对应扩展 feature 结构重复表达同一能力。保存最终 create-info 快照与拒绝原因。
+
+`vkDestroyDevice` 前必须销毁/释放要求显式销毁的子对象并确保工作完成，不能以“device 会自动释放子对象”作为生命周期策略。[VkDeviceCreateInfo](https://docs.vulkan.org/refpages/latest/refpages/source/VkDeviceCreateInfo.html)、[vkDestroyDevice](https://docs.vulkan.org/refpages/latest/refpages/source/vkDestroyDevice.html)。[SPEC]

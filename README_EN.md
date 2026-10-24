@@ -14,6 +14,7 @@ This is a Vulkan rendering engineering expert skill package. It is not a Vulkan 
 - Analyzing mobile Vulkan performance bottlenecks, including bandwidth, fullscreen passes, barriers, descriptor updates, and pipeline creation stutter.
 - Handling Android Vulkan `ANativeWindow`, Surface lifecycle, pause/resume, orientation changes, and swapchain recreation.
 - Distinguishing between specification facts, engineering judgment, and items requiring lookup when API details are uncertain.
+- Analyzing real Vulkan / graphics-engine repositories with `[CODE]` evidence, an Architecture Map, source-level change impact, and a coding-agent implementation handoff.
 
 ## Skill Structure
 
@@ -48,6 +49,12 @@ This skill requires output to always provide actionable Vulkan paths rather than
 4. Give the minimal verification approach, e.g. Validation Layer, RenderDoc, AGI, logcat, traces, counters, or targeted asserts.
 5. Explicitly require looking up the Vulkan Spec, Registry, official samples, or platform docs when API details are uncertain.
 
+## v1.0.9: Lightweight Entry (2026-10-17)
+
+Startup reads all 19 hard rules and only the routing-entry section of the single routing authority, then the matching sections. Templates, accuracy rules and retrieval protocols load when needed; G1-G6 verification remains mandatory before completion claims. All 8 modules, triggers, host configuration, Evidence Map and Architecture Map requirements remain intact.
+
+Stable section anchors and whole-file fallbacks are documented in [Retrieval Policy](references/07_integration_pack/retrieval_policy.md#section-read-contract); the [rule migration map](references/00_expert_entry/README.md#rule-migration-map) traces the old entry rules. A 30% reduction in actual model tokens is a measurement target, not a verified result; static size changes do not establish live behavior or quality parity.
+
 ## Installation & Usage
 
 This skill follows the Agent Skills specification: the repository root is the skill directory, `SKILL.md` is the entry point, and `references/` is loaded on demand.
@@ -66,7 +73,7 @@ Add this repository directory as a local skill in skill management, or install i
 
 **Other Agent Skills-compatible hosts** (Cursor, VS Code extensions, etc.)
 
-Any host that reads the `SKILL.md` frontmatter and loads `references/` files per its instructions works. If the host has no skill mechanism, paste the full `SKILL.md` as a system prompt — the skill runs in degraded mode (routing and answer rules still apply; automatic loading does not).
+Any host that reads the `SKILL.md` frontmatter and loads `references/` files per its instructions works. If the host has no skill mechanism, paste the full `SKILL.md` as a system prompt — the skill runs in degraded mode. Supply the required hard rules and matching reference sections as directed; automatic loading is unavailable, and pasting the entry alone does not establish full execution.
 
 ## Example Prompts
 
@@ -80,6 +87,7 @@ The following prompts are ready to copy; each is labeled with the modules it tri
 6. `Hand-written barriers across 8 passes are getting unmaintainable — evaluate adopting a RenderGraph.` (architecture decision + RenderGraph case)
 7. `How should I choose srcStageMask for vkCmdPipelineBarrier2?` (API card)
 8. `Any real-world cases of crashes caused by swapchain recreation?` (case index)
+9. `Diagnose this existing repository's Vulkan architecture first, then assess the source-level impact of upgrading to Vulkan 1.3. Do not give generic advice.` (project diagnosis + regression reasoning)
 
 Attaching key information yields the most accurate answers — see the per-task-type question templates in section R2 of `references/00_expert_entry/progressive_retrieval.md`.
 
@@ -87,4 +95,4 @@ Attaching key information yields the most accurate answers — see the per-task-
 
 - **Just ask (recommended)**: no files to read first — the skill routes by symptom/intent to the matching playbook, workflow, or case.
 - **See the knowledge map**: read `references/README.md` and `references/MODULE_SUMMARY.md` for the division of labor across the 8 modules.
-- **Deep dive**: read modules in order `00` → `07`; start with `04_debug_playbooks/` for debugging, `05_workflows/` for implementation, and `02_core_mental_model/engine_architecture.md` for architecture.
+- **Deep dive**: read modules in order `00` → `07`; start with `04_debug_playbooks/` for debugging, `05_workflows/` for implementation, and `02_core_mental_model/engine_architecture.md` for architecture, and `05_workflows/01_renderer_setup/project_diagnosis.md` for real-repository diagnosis.

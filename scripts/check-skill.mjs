@@ -89,7 +89,9 @@ for (const field of ['name', 'description']) {
 }
 const routes = new Set([...entry.matchAll(/`(references\/[^`\n]+)`/g)].map(match => match[1]));
 for (const route of routes) {
-  if (!existsSync(resolve(root, route))) errors.push(`SKILL.md: missing route ${route}`);
+  // Upstream routes may name a section. Check the file, not the fragment;
+  // anchor validation is deliberately outside this checker's scope.
+  if (!existsSync(resolve(root, route.split('#')[0]))) errors.push(`SKILL.md: missing route ${route}`);
 }
 
 const summary = documents.get('references/MODULE_SUMMARY.md') ?? '';

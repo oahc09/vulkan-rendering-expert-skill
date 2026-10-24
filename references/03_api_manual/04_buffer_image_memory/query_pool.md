@@ -72,7 +72,7 @@ VkDevice
 ### 相关扩展 / 版本
 
 - `VK_EXT_host_query_reset`（Vulkan 1.2 核心 `vkResetQueryPool`）：host 侧批量重置，避免占用 command buffer。[SPEC]
-- `VK_KHR_performance_query` / `VK_EXT_performance_query`：性能计数器查询（厂商 / Counter-based profiling）。[SPEC]
+- `VK_KHR_performance_query`：性能计数器查询（厂商 / Counter-based profiling）。[SPEC]
 - `VK_EXT_transform_feedback`：与 `VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT` 配合。
 - Android 可用性：核心 occlusion / timestamp / pipeline stats 全部可用；`vkResetQueryPool` 在 Vulkan 1.2+ 设备可用；performance query 受驱动支持。[ANDROID]
 

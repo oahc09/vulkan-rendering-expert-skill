@@ -255,6 +255,7 @@ WSI 仍使用 acquireSemaphore[slot] / renderCompleteSemaphore[imageIndex]（bin
 - `VUID-vkAcquireNextImageKHR-semaphore-01286`：acquire semaphore 必须为 unsignaled。[SPEC]
 - `VUID-vkAcquireNextImageKHR-semaphore-01779`：acquire semaphore 不得有未完成的 signal / wait 操作。[SPEC]
 - present semaphore 复用检查及 signal 错误解释见 [Swapchain Semaphore Reuse](https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html)；按实际报错回查 [vkQueueSubmit](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueSubmit.html) / [vkQueuePresentKHR](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueuePresentKHR.html)。
+- `VUID-vkQueueSubmit-pWaitSemaphores-00068`：binary semaphore wait 执行时，不得有其他 queue 正等待同一个 semaphore；此规则不是 timeline wait value 条件。 [官方 vkQueueSubmit 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueSubmit.html)。[SPEC]
 
 ### RenderDoc / AGI
 

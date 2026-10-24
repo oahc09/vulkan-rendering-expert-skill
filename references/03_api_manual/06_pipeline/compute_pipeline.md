@@ -276,4 +276,4 @@ compute 与 graphics 混合的后处理、粒子、剔除、GPU culling 等场�
 2. Storage image / storage buffer 的 layout 与 access flag 要求。
 3. Compute 与 graphics 在同一 queue 与不同 queue 的同步语义差异。
 4. `vkCmdDispatchIndirect` 的 buffer usage 与 alignment 要求。
-5. Subpass 内 compute shader 使用的限制（如 `VK_SUBPASS_SHADER_STAGE_*` 相关扩展）。
+5. 普通 `vkCmdDispatch` 必须在 render pass instance 外执行；如使用 tile shading 等扩展的特殊执行路径，应逐项核对该扩展的命令作用域，不能把普通 compute dispatch 当作通用 subpass 操作。[SPEC]

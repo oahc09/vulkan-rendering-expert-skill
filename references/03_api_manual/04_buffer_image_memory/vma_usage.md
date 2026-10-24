@@ -177,7 +177,7 @@ VkInstance / VkPhysicalDevice / VkDevice
 
 - VMA 透传 `vkCreateBuffer` / `vkCreateImage` / `vkAllocateMemory` / `vkBind*Memory`，所有相关 VUID 仍生效。[TOOL]
 - `VUID-vkBindBufferMemory-*` / `VUID-vkBindImageMemory-*`：memory type / offset / alignment（VMA 自动满足，但 custom pool 配置错误时仍可能触发）。
-- `VUID-vkMapMemory-memory-00683`：map 非 host-visible memory（VMA 通常先返回错误，但若绕过仍会触发）。
+- `VUID-vkMapMemory-memory-00683`：memory 不能以 multiple instances 分配；HOST_VISIBLE 要求是独立规则，不能用此 VUID 代替。 [官方 vkMapMemory 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkMapMemory.html)。[SPEC]
 
 ### RenderDoc / AGI
 

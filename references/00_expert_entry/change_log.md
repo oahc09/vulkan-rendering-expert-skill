@@ -8,6 +8,25 @@
 - 保持发布版本不变；未执行真实 Vulkan / GPU / Android 运行验收。
 - 静态验证：skill-creator `quick_validate.py` 通过；新增无依赖 `scripts/check-skill.mjs`，检查 Git 可见文件的 UTF-8、Markdown 围栏、本地文件链接、入口路径和模块计数。检查发现的两份 API 模板嵌套围栏已改用外层四反引号。
 - 四项定向行为评估已在隔离上下文执行并通过，原始回答、加载文件与证据边界见 `../07_integration_pack/behavior_evaluation.md`；不代表完整历史题库、模型稳定性或 GPU 运行验收通过。
+- 提交交付时同步远端 v1.0.9，保留精简入口、项目诊断与规范修订，合并本轮适用验证范围与同步修复。历史四项行为证据不覆盖合并后输入；合并后结构检查单独记录，源文件 202 超出旧 200 文件预算，不宣称发布就绪。
+
+## v1.0.9 — 规范对齐与轻量化（2026-10-17）
+
+- 七文件强制预读改为 hard_rules 全文 + task_routing_rules 的 routing-entry 与命中段落；八模块、触发词和宿主配置保留。
+- SKILL 症状直达表移到 task_routing_rules，分类器与检索策略不再维护平行分发表。
+- 输出模板、准确性、检索循环与验证关卡增加稳定锚点，入口 README 内记录旧规则迁移表；入口重构本身不新增文件。
+- 19 条硬规则原文不变，Evidence Map + Architecture Map、修改影响面、R1-R5、G1-G6 与第三方版本约束仍保留。
+- 静态缩减不等于 live 验证；实际 token 降低 30% 为待测目标，不宣称已达标。
+
+### 技术资料同步范围
+
+- 按 Vulkan 1.4.365 registry / validusage 核对 API 卡符号、限定成员和 VUID；纠正已确认的虚构符号、失效编号及语义错配。机械匹配不等于所有规范语义已经验证，复现脚本与审计证据保存在独立测试仓库。
+
+- Descriptor Buffer 文档校正：opaque descriptor 生成、真实 flags、layout 查询、复制与读取可见性。
+- Descriptor Heap 补充能力边界、实际 descriptor 大小与 stride，并新增对应 API 卡片。
+- YCbCr / AHardwareBuffer 补充 descriptor count 与相关使用边界。
+- 能力查询区分 SDK / headers、运行时 ICD 和 feature；工具、Apple 与 Blender 路线按目标能力和工程约束决策。
+- 上述为文档更新范围，不代表已进行 GPU 运行验证或真实模型行为验收；具体执行结果须以对应测试记录为准。
 
 ## v0.1
 
@@ -94,6 +113,37 @@
 
 - `_fix_pb_refs.py` 批量替换留下的 CRLF 行尾统一为 LF，涉及 43 个文件。
 - `git diff --check` 全部干净。
+
+## v1.0.8 — Project Diagnosis
+
+### 真实仓库诊断与源码证据
+
+- 新增 `05_workflows/01_renderer_setup/project_diagnosis.md`：把陌生 Vulkan / 图形引擎仓库分析固化为 Project Reconnaissance → Evidence Map → Architecture Map → Change Impact → Implementation Handoff → Verification Gate。
+- 新增 `[CODE]` 来源标签：用于“当前目标项目源码直接证据”；只证明项目事实，不能覆盖 `[SPEC]` / `[REGISTRY]` / `[REF]`，项目实现与规范冲突时必须报告实现风险。
+- `accuracy_check.md` 与 `hard_rules.md` 增加源码证据约束：禁止只根据文件名 / 类名猜项目架构；未读取实现的关键判断标记“未验证”。
+
+### 源码级修改影响面
+
+- `../02_core_mental_model/regression_reasoning.md` 增加源码级影响面映射：抽象 Vulkan 对象依赖必须落到文件 / 类 / 函数。
+- 修改项统一分为 Must Change / Should Change / Can Defer / Do Not Change，分别控制必要修改、技术债、可延后项和明确不动项。
+- 版本升级不再自动等价于迁移 Dynamic Rendering / Sync2 等现代路径；必须结合现有源码依赖、目标收益和回归面单独决策。
+
+### 行为测试修订：Architecture Map 强制出口
+
+- v1.0.8 模型行为测试发现：版本升级评估与 Android crash 场景可能给出 `[CODE]` Evidence Map，却跳过 Architecture Map。
+- `hard_rules.md` 新增规则 #19：真实项目任务无论偏升级 / Debug / 性能 / 实现，都必须先输出 Evidence Map + Architecture Map，再进入根因、Change Impact 或实施计划。
+- `../05_workflows/01_renderer_setup/project_diagnosis.md` Step 2 同步改为 Evidence Map + Architecture Map；允许只画与当前任务相关的子图，但未知层必须显式标记“未验证”。
+
+### 路由与交付协议
+
+- `../../SKILL.md`、task classifier、response formats、progressive retrieval、task routing、retrieval policy 接入“项目诊断类”。
+- 项目诊断输出要求包含 `[CODE]` Evidence Map、Architecture Map、Files To Modify、Dependency Order、Risks、Rollback、DoD。
+- 真实项目实现任务优先复用项目现有 Resource / Descriptor / Pipeline / Command / Queue 架构，除非源码证据证明现有抽象本身是问题根因。
+
+### 文件数量
+
+- 新增 1 个 workflow 文件：`05_workflows` 45 → 46。
+- 预计 Git 跟踪文件 198 → 199，继续满足 ClawHub ≤200 文件限制。
 
 ## v1.0.7 — Onboarding
 

@@ -28,6 +28,7 @@
 - 新增 graphics / compute pipeline
 - 优化 fullscreen pass / bandwidth / descriptor / barrier
 - 从 OpenGL / Shadertoy / GLSL 效果迁移到 Vulkan
+- 分析陌生 Vulkan / 图形引擎仓库，建立源码证据、架构图和修改影响面
 
 ---
 
@@ -82,7 +83,8 @@
 │   ├── setup_instance_device_queue.md
 │   ├── setup_swapchain.md
 │   ├── setup_frame_loop.md
-│   └── setup_validation_debug.md
+│   ├── setup_validation_debug.md
+│   └── project_diagnosis.md
 │
 ├── 02_render_pass_effects/
 │   ├── add_fullscreen_pass.md
@@ -154,4 +156,4 @@
 07_optimization/optimize_fullscreen_pass.md
 ```
 
-这 9 个 workflow 覆盖 Vulkan 工程最常见的正向开发任务。
+这 9 个 workflow 覆盖 Vulkan 工程最常见的正向开发任务。真实仓库分析使用 `01_renderer_setup/project_diagnosis.md`，负责把通用模型映射到实际文件 / 类 / 函数并输出 coding-agent handoff。

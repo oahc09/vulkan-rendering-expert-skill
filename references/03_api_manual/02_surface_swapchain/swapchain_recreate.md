@@ -159,6 +159,7 @@ Surface 尺寸 / 方向变化 或 VK_ERROR_OUT_OF_DATE_KHR
 ### Validation Layer
 
 - 创建/销毁错误按实际 VUID 核对 [vkCreateSwapchainKHR](https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateSwapchainKHR.html) / [vkDestroySwapchainKHR](https://docs.vulkan.org/refpages/latest/refpages/source/vkDestroySwapchainKHR.html)，不把 surface 或 in-flight 错误归到未经核实的编号。
+- 重建时使用有效 oldSwapchain 与相同 surface；保留旧 swapchain 期间仍须完成其 acquired image / present 工作，不能仅凭 graphics fence 判断所有 present 已完成。 [官方 VkSwapchainCreateInfoKHR 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkSwapchainCreateInfoKHR.html)。[SPEC]
 - `VK_ERROR_OUT_OF_DATE_KHR` / `VK_SUBOPTIMAL_KHR` 提示 recreate 触发点。[TOOL]
 
 ### RenderDoc / AGI

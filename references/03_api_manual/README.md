@@ -103,3 +103,11 @@
 ```
 
 模块 4 必须承接模块 2 的来源等级规则，也必须复用模块 3 的对象链路和生命周期模型。
+
+
+## v1.0.9 能力边界入口
+
+- [Descriptor Buffer](05_descriptor/descriptor_buffer.md)：opaque 字节生成、复制、可见性和 shader 读取。
+- [Descriptor Heap](05_descriptor/descriptor_heap.md)：真实 EXT API、slot stride / write bytes、能力与工具边界。
+- [Physical Device](01_instance_device_queue/physical_device.md)：SDK、loader、API、extensions、supported/enabled features、profile 分账。
+- [Validation](09_debug_validation/validation_layer.md)：按版本确认覆盖，不以 clean 代替 GPU 正确性证据。

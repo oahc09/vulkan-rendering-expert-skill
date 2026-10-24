@@ -14,6 +14,7 @@
 - 分析移动端 Vulkan 性能瓶颈，包括 bandwidth、fullscreen pass、barrier、descriptor 更新和 pipeline 创建卡顿。
 - 处理 Android Vulkan 的 `ANativeWindow`、Surface 生命周期、pause/resume、横竖屏和 swapchain recreate。
 - 在不确定 API 细节时，区分规范来源、经验判断和需要回查的内容。
+- 分析真实 Vulkan / 图形引擎仓库，建立 `[CODE]` 源码证据、Architecture Map、源码级影响面和 coding-agent 实施计划。
 
 ## 技能结构
 
@@ -48,6 +49,12 @@
 4. 给出最小验证方式，例如 Validation Layer、RenderDoc、AGI、logcat、trace、counter 或 targeted assert。
 5. 对不确定 API 细节明确要求回查 Vulkan Spec、Registry、官方示例或平台文档。
 
+## v1.0.9：轻量入口（2026-10-17）
+
+启动只加载全部 19 条硬规则、唯一路由入口段落及命中类型，再按需读取模板、准确性规则与检索协议。保留全部 8 模块、触发词、宿主配置、Evidence Map / Architecture Map，以及结论前必做的 G1-G6 验证。
+
+稳定锚点与全文读取回退见[检索协议](references/07_integration_pack/retrieval_policy.md#section-read-contract)，旧规则去向见[规则迁移映射](references/00_expert_entry/README.md#rule-migration-map)。实际模型 token 降低 30% 是待测目标；静态体积变化不能证明 live 行为或质量不回退，未取得对应证据前不宣称达标。
+
 ## 安装与调用
 
 本技能遵循 Agent Skills 规范：仓库根目录即技能目录，`SKILL.md` 是入口，`references/` 按需加载。
@@ -66,7 +73,7 @@ git clone https://github.com/oahc09/vulkan-rendering-expert-skill ~/.claude/skil
 
 **其他支持 Agent Skills 的宿主**（Cursor、VS Code 插件等）
 
-凡能读取 `SKILL.md` frontmatter 并按其指令加载 `references/` 文件的宿主均可使用。宿主不支持技能机制时，可把 `SKILL.md` 全文粘贴为系统提示词，技能以降级模式工作（路由与回答规则仍生效，自动加载失效）。
+凡能读取 `SKILL.md` frontmatter 并按其指令加载 `references/` 文件的宿主均可使用。宿主不支持技能机制时，可把 `SKILL.md` 全文粘贴为系统提示词，技能以降级模式工作；仍需按入口要求提供硬规则与命中参考段落（自动加载失效，不能仅凭入口全文声称完整执行）。
 
 ## 提问示例库
 
@@ -80,6 +87,7 @@ git clone https://github.com/oahc09/vulkan-rendering-expert-skill ~/.claude/skil
 6. `现有 8 个 pass 的手写 barrier 维护不动了，评估是否引入 RenderGraph。`（架构决策 + RenderGraph 案例）
 7. `vkCmdPipelineBarrier2 的 srcStageMask 怎么选？`（API 卡片）
 8. `有没有 swapchain recreate 导致崩溃的真实案例？`（case 索引）
+9. `先诊断现有仓库的 Vulkan 架构，再评估升级 Vulkan 1.3 的源码影响面，不要给通用建议。`（project diagnosis + regression reasoning）
 
 提问时附带关键信息可获得最准回答，各类任务的信息清单见 `references/00_expert_entry/progressive_retrieval.md` R2 节的分任务类型提问模板。
 
@@ -87,4 +95,4 @@ git clone https://github.com/oahc09/vulkan-rendering-expert-skill ~/.claude/skil
 
 - **直接提问（推荐）**：无需先读任何文件，技能按症状/意图自动路由到对应 playbook、workflow 或案例。
 - **看知识地图**：读 `references/README.md` 和 `references/MODULE_SUMMARY.md`，了解 8 个模块的分工与规模。
-- **深入学习**：按模块编号 `00` → `07` 顺序阅读；调试优先读 `04_debug_playbooks/`，实现优先读 `05_workflows/`，架构优先读 `02_core_mental_model/engine_architecture.md`。
+- **深入学习**：按模块编号 `00` → `07` 顺序阅读；调试优先读 `04_debug_playbooks/`，实现优先读 `05_workflows/`，架构优先读 `02_core_mental_model/engine_architecture.md`；真实仓库分析优先读 `05_workflows/01_renderer_setup/project_diagnosis.md`。

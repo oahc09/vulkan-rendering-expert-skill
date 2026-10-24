@@ -130,7 +130,7 @@ vkCreateEvent
 ### Validation Layer
 
 - `VUID-vkCmdWaitEvents-*`：event 状态、stage/access、barrier 合法性。
-- `VUID-vkCmdSetEvent-stageMask-01183`：stage mask 合法性。
+- stageMask 只能包含 queue family 支持且已满足 feature 条件的 stage，不能含 HOST_BIT；synchronization2 未启用时不能为 0。 [官方 vkCmdSetEvent 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdSetEvent.html)。[SPEC]
 
 ### RenderDoc / AGI
 

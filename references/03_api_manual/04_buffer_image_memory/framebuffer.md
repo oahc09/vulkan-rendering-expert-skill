@@ -129,7 +129,7 @@ VkRenderPass
 ### Validation Layer
 
 - `VUID-VkFramebufferCreateInfo-*`：attachment 数量、顺序、兼容性。
-- `VUID-vkCmdBeginRenderPass-renderPass-00904`：framebuffer 与 render pass 兼容。
+- VUID-VkRenderPassBeginInfo-renderPass-00904：renderPass 必须与创建 framebuffer 时指定的 renderPass 兼容。 [官方 VkRenderPassBeginInfo 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkRenderPassBeginInfo.html)。[SPEC]
 
 ### RenderDoc / AGI
 

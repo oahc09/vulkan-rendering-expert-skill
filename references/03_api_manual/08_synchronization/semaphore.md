@@ -150,6 +150,7 @@
 - `VUID-vkAcquireNextImageKHR-semaphore-01286`：acquire semaphore 必须 unsignaled。
 - `VUID-vkAcquireNextImageKHR-semaphore-01779`：acquire semaphore 不得有未完成的 signal / wait 操作。
 - 其他错误按实际 Validation 消息回查 [vkQueueSubmit](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueSubmit.html)、[vkQueuePresentKHR](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueuePresentKHR.html)、[VkSemaphoreTypeCreateInfo](https://docs.vulkan.org/refpages/latest/refpages/source/VkSemaphoreTypeCreateInfo.html)，不要用未经核对的 VUID 概括多种错误。
+- `VUID-vkQueueSubmit-pWaitSemaphores-00068`：binary semaphore wait 执行时，不得有其他 queue 正等待同一个 semaphore；此规则不是 timeline wait value 条件。 [官方 vkQueueSubmit 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueSubmit.html)。[SPEC]
 
 ### RenderDoc / AGI
 
