@@ -425,7 +425,7 @@ swapchain image 没有正确 acquire；
 GPU 挂起或驱动 bug。
 ```
 
-但 RenderDoc 中 draw call 已录制、pipeline 状态正常，且 Validation Layer 对 shader / layout / barrier 保持 silent。最终发现 command buffer 录制完成后并没有被提交到 queue，或提交后没有等待 fence，也没有调用 present。
+代码检查或录制日志显示 draw 命令已录制，Validation 没有直接报错，但提交/呈现链缺失：command buffer 没有被提交，或已经提交却没有调用 present。CPU 没有等待 fence 本身不会阻止 GPU 执行；它影响的是后续资源复用是否安全。[SPEC][ENGINE]
 
 ---
 
@@ -437,7 +437,7 @@ GPU 挂起或驱动 bug。
 4. 检查 submit 的 `pSignalSemaphores` 和 present 的 `pWaitSemaphores` 是否配对。
 5. 检查 fence 是否被正确 wait，以及 wait 返回是否被忽略。
 6. 检查 `vkQueuePresentKHR` 是否在 render 线程主循环中被意外注释或提前 return。
-7. 沿 `acquire → record → submit → wait → present` 链路定位缺失环节。
+7. 沿 `acquire → record → submit → present` 链路定位缺失环节；CPU 在对应 frame slot 复用前等待提交完成，不要求 present 前先 host wait fence。
 
 ---
 
@@ -446,38 +446,37 @@ GPU 挂起或驱动 bug。
 ### Validation Layer
 
 - 通常无直接报错（`[SPEC]`），因为录制 command buffer 本身合法。
-- 若仍尝试 present 未提交渲染的 image，可能触发：
-  - `VUID-vkQueuePresentKHR-pSwapchains-01283`：`pImageIndices` 对应的 image 没有 semaphore 信号保证完成。
-  - `VUID-vkAcquireNextImageKHR-swapchain-01802`：未在合理时间内释放 swapchain image。
+- 若 present 等待了从未被 signal 的 semaphore，或一直 acquire 而不呈现/释放 image，按实际 Validation 消息与返回值检查，不给这些现象套用未经核对的 VUID。
 - 若 fence 未等待就复用 command buffer，后续帧可能报 command buffer 生命周期错误。
 
 ### RenderDoc / AGI
 
 - 观察到：
-  - Capture 中显示了 command buffer 的内容，包括 render pass 和 draw call。
-  - 但 Event Browser 中没有 Queue Submit 节点，或 Submit 后没有 Present 调用。
+  - 抓帧中检查实际提交的 render pass / draw；从未 submit 的录制内容需通过代码或日志证明，不能假设一定在 capture 中可见。
+  - 用 API trace 或定向日志确认是否调用了 Submit 与 Present。
   - Texture Viewer 中 swapchain image 保持为初始 acquire 状态或上一帧内容。
 - 关键 resource：command buffer、queue submit info、fence、swapchain semaphore。
 
 ### Log / Code
 
 - 返回值：
-  - `vkQueueSubmit` 返回 `VK_SUCCESS`，但函数从未被调用。
+  - 区分真正调用 `vkQueueSubmit` 后返回的 `VK_SUCCESS`，与只打印默认初始化为成功的变量。
   - `vkQueuePresentKHR` 返回 `VK_SUCCESS`，但参数中 wait semaphore 数量为零或信号从未被发出。
 - 关键代码：
 
 ```text
-// 录制完成但缺少以下任一调用：
+// 渲染和呈现链路；省略 CPU wait 不会阻止 GPU 执行：
 vkQueueSubmit(graphicsQueue, 1, &submitInfo, frameFence);
-vkWaitForFences(device, 1, &frameFence, VK_TRUE, timeout);
 vkQueuePresentKHR(graphicsQueue, &presentInfo);
+// 复用本 frame slot 资源前，再等待其提交完成：
+vkWaitForFences(device, 1, &frameFence, VK_TRUE, timeout);
 ```
 
 ---
 
 ### 6. 根因
 
-根因：command buffer 录制完成后，没有通过 `vkQueueSubmit` 提交到 GPU，或提交后没有等待 fence、没有调用 present，导致 GPU 从未执行该帧的渲染命令。
+根因分支：缺少 submit 时 GPU 没有执行该 command buffer；缺少 present 时 GPU 可以已经执行渲染，但画面没有被送入呈现链。未等待 fence 是资源复用风险，不是“GPU 未执行”的原因。[SPEC][ENGINE]
 
 ---
 
@@ -486,14 +485,14 @@ vkQueuePresentKHR(graphicsQueue, &presentInfo);
 ### Minimal Fix（针对根因的最小修复）
 
 - 在 `vkEndCommandBuffer` 后显式调用 `vkQueueSubmit`，并传入该帧对应的 fence。
-- 在复用 command buffer 或交换到下一帧之前，先 `vkWaitForFences` 等待 fence signaled。
+- 在复用同一 frame slot 的 command buffer / 资源之前等待其 fence；可先准备其他 slot，不必每次进入下一帧或 present 前都 host wait。
 - 在 submit 之后调用 `vkQueuePresentKHR`，并确保 present wait semaphores 与 submit signal semaphores 一致。
 
 ### Structural Fix（结构性 / 防复发修复）
 
-- 在 frame loop 中建立 `acquire → record → submit → wait → present` 的显式状态断言。
+- 在 frame loop 中建立 `wait slot → acquire → record → reset fence → submit → present` 的状态断言；acquire 失败不 reset，submit 失败进入恢复。present wait semaphore 按 swapchain image 管理。
 - 每帧维护一个 FrameState 结构，记录是否已 submit、是否已 present；若某个分支提前 return，必须清理状态。
-- 对 `vkQueueSubmit` 和 `vkQueuePresentKHR` 的返回值做检查，遇到 `VK_ERROR_OUT_OF_DATE_KHR` / `VK_SUBOPTIMAL_KHR` 时触发 swapchain recreate。
+- 检查 submit 返回值，失败进入提交恢复；acquire / present 的 `VK_ERROR_OUT_OF_DATE_KHR` / `VK_SUBOPTIMAL_KHR` 按各自语义处理重建，不假设 submit 返回 WSI 状态码。
 
 - 封装 FrameLoop 类，把 acquire、record、submit、present 封装为不可跳过的固定阶段。
 - 引入 Tracy / custom GPU profiler marker，确保每个 frame 都能追踪到 submit / present 事件。

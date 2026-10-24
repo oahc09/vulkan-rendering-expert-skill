@@ -4,7 +4,7 @@
 
 后续 `03_api_manual` 中的 API 卡片建议统一使用 `03_api_manual/api_card_template.md`。
 
-```md
+````md
 # API Card：<对象 / 链路名称>
 
 ## 适用场景
@@ -75,11 +75,11 @@ Create
 - Vulkan Spec / Reference Page
 - Vulkan Guide / Samples
 - Android NDK / AGI 文档
-```
+````
 
 ## 示例：Descriptor Set 卡片骨架
 
-```md
+````md
 # API Card：Descriptor Set
 
 ## 适用场景
@@ -122,4 +122,4 @@ Shader set/binding
 3. PipelineLayout 不包含当前 descriptor set layout。
 4. image descriptor 的 imageLayout 与实际 layout 不一致。
 5. 资源被 GPU 使用期间提前销毁。
-```
+````

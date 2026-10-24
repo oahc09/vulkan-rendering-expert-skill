@@ -76,7 +76,7 @@ FrameResource
 | 资源 | 类型 | Usage | 生命周期 | 是否随 swapchain 重建 |
 |---|---|---|---|---|
 | imageAvailableSemaphore | `VkSemaphore` | acquire → submit | per-frame | 否 |
-| renderFinishedSemaphore | `VkSemaphore` | submit → present | per-frame | 否 |
+| renderFinishedSemaphore | `VkSemaphore` | submit → present | per-swapchain-image | 是，旧数组随旧 present 资源退役 |
 | inFlightFence | `VkFence` | CPU 等 GPU | per-frame | 否 |
 | command buffer | `VkCommandBuffer` | record frame commands | per-frame 或 per-image | 视策略而定 |
 
@@ -110,22 +110,23 @@ Frame loop 本身不直接设计 pipeline / descriptor。
 - Fence 管 CPU-GPU。
 - Semaphore 管 GPU-GPU / Queue-Present。
 - frame index 不等于 swapchain image index。
+- acquire semaphore 按 frame index 管理；renderFinishedSemaphore 按 acquired image index 管理。submit fence 完成不代表 present 已消费 semaphore。
 - command buffer 被 GPU 使用期间不能 reset / free。
 
 ---
 
 ## 8. 实现步骤
 
-1. 创建 per-frame sync objects。
+1. 创建 per-frame acquire semaphore / fence；按 swapchain image 数量创建 renderFinishedSemaphore。
 2. 每帧 wait 当前 frame fence。
 3. 调用 `vkAcquireNextImageKHR`。
-4. 处理 `VK_ERROR_OUT_OF_DATE_KHR`。
-5. reset fence。
-6. reset command buffer。
-7. record command buffer。
-8. submit command buffer，并等待 imageAvailableSemaphore。
-9. signal renderFinishedSemaphore。
-10. present 等待 renderFinishedSemaphore。
+4. OUT_OF_DATE 标记重建并返回；TIMEOUT / NOT_READY 跳过本轮；SUCCESS / SUBOPTIMAL 继续，后者标记稍后重建。Surface / device lost 走恢复路径。
+5. reset command buffer。
+6. record command buffer；成功 acquire 后若中途退出，必须处理 image 与待消费的 acquire 信号。
+7. 确定会提交后，紧邻 submit reset frame fence。
+8. submit command buffer，并等待 imageAvailableSemaphore[frameIndex]；wait stage 覆盖 image 最早访问。
+9. signal renderFinishedSemaphore[imageIndex]；检查 submit 返回值，失败则恢复，不进入普通 present / fence wait。
+10. present 等待 renderFinishedSemaphore[imageIndex]。
 11. 处理 `VK_SUBOPTIMAL_KHR` / `VK_ERROR_OUT_OF_DATE_KHR`。
 12. frame index 递增。
 
@@ -155,12 +156,14 @@ Frame loop 本身不直接设计 pipeline / descriptor。
 
 ## 11. 常见失败模式
 
-1. fence reset 在 acquire 失败后执行，导致死锁。
+1. fence 在 acquire 前或仍可能跳过 submit 时 reset，导致下一次 wait 死锁。
 2. frame index 和 image index 混用。
 3. command buffer 仍 in-flight 就 reset。
 4. present 没等待 renderFinishedSemaphore。
 5. acquire 返回 out-of-date 后继续提交。
 6. Android Surface destroyed 后继续 render。
+
+依据：[Swapchain Recreation](https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/04_Swap_chain_recreation.html)、[Swapchain Semaphore Reuse](https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html)。
 
 ---
 

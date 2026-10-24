@@ -25,7 +25,7 @@
 ## 3. Resource Lifecycle 回归
 
 - [ ] 新建对象全部有对应销毁路径（无泄漏）。
-- [ ] 销毁 / 重建前 in-flight 工作已等待（fence / `vkDeviceWaitIdle`）。
+- [ ] 销毁前相关提交已完成；present semaphore / swapchain 另有 presentation 资源退役证据，不能只等 submit fence / WaitIdle。
 - [ ] swapchain recreate 后旧资源（image view / framebuffer / 尺寸相关 image）同步销毁。
 - [ ] 销毁函数幂等（重复调用不崩溃、不 double free）。
 - [ ] 内存 / 对象计数稳定（长时间运行无持续增长）。
@@ -34,8 +34,8 @@
 
 - [ ] 修改涉及的每个依赖都明确了 producer / consumer / stage / access / layout。
 - [ ] fence / semaphore / barrier 的用途没有混用。
-- [ ] acquire / present 的 semaphore 配对正确。
-- [ ] 跨 queue（compute ↔ graphics）依赖有 barrier 或 semaphore 覆盖。
+- [ ] acquire semaphore 按 frame slot、present wait semaphore 按 swapchain image 复用，或提供等效完成证明；acquire 失败不 reset 未提交的 fence。
+- [ ] 跨 queue（compute ↔ graphics）有 semaphore 依赖，并补齐必要的 layout / queue-family ownership release-acquire barrier。
 - [ ] 多帧压力下无闪烁、无撕裂、无 GPU hang。
 
 ## 5. Android Lifecycle 回归

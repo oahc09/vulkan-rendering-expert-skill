@@ -1,5 +1,9 @@
 # Integration Test Plan
 
+本文件是可随仓库检出复用的行为评估输入与判据，不是自动化测试执行记录。当前仓库未跟踪 pytest 测试套件；不能依据历史本地测试命令声称本次通过。评估时记录日期、所用模型 / 宿主、仓库提交及工作区差异、实际加载资料、回答、通过 / 失败 / 未运行和判定依据。知识库行为评估不等于真实 Vulkan 运行验证。
+
+结构预检运行 `node scripts/check-skill.mjs`，按需加 `--max-files 200`；最新定向行为执行证据见 [behavior_evaluation.md](behavior_evaluation.md)。重新评估时只向答题上下文提供原始问题和技能入口，不加载本文件或历史答案；由评估方按本文件判据核对结果。
+
 ## 测试 1：黑屏调试
 
 输入：
@@ -209,3 +213,16 @@ Compute 输出给 Fragment 采样黑屏，有没有类似案例？
 - 根因模式
 - 修复方式
 - 可复用经验
+
+## 定向回归：版本、帧循环与证据边界
+
+仅在对应规则变化时执行相关行，无需扩展为全平台测试矩阵。每行是一个输入场景，重点判断实际决策是否安全，不匹配固定措辞或标题。
+
+| 输入 | 合格行为 | 不合格行为 |
+|---|---|---|
+| `设备 apiVersion 要和哪个 1.4 宏比较？scalarBlockLayout、sync2、timelineSemaphore 分别在哪个 feature struct 启用？` | 使用 VK_API_VERSION_1_4；scalarBlockLayout / timelineSemaphore 归 Vulkan12Features、sync2 归 Vulkan13Features；区分核心化、必须支持和启用 | 使用 VK_VERSION_1_4 作版本数值；将所有字段写进 Vulkan14Features；把 sync2 / timeline 的必须支持起点写为 1.4 |
+| `帧开始 wait 后立刻 reset fence，acquire 返回 OUT_OF_DATE 就 return；SUBOPTIMAL 也 return，可以吗？` | 指出无 submit 的 unsignaled fence 会造成后续等待卡死；把 reset 移至实际 submit 前；区分 OUT_OF_DATE 与已取得 image 的 SUBOPTIMAL；submit 失败进入恢复 | 只增加 WaitIdle 或重建 semaphore，保留错误 fence 顺序；忽略 SUBOPTIMAL 的 image / 信号处理 |
+| `2 个 frame slot、3 个 swapchain image，renderFinished 按 frame slot 分配；frame fence 结束后能复用或随旧 swapchain 释放吗？` | 分开 currentFrame 与 imageIndex；present wait semaphore 按 image 管理或提供等效完成证明；退役独立追踪，submit fence / WaitIdle 不单独证明 presentation 资源可释放 | 仅等待 submit fence 后复用 / 释放；只改数组长度不改索引；对 retired swapchain 再 acquire |
+| `只解释 barrier2 的 srcStageMask；另给一个未运行的同步方案，能否宣布运行验证通过？` | 简单问答引用规范和边界，无需整张 G1-G6；方案可作静态判断并列执行计划，未运行项如实标注；实际修复声明仍检查所有适用关卡 | Validation clean 被表述为完整合法性证明；因为没有抓帧而拒绝解释 API；把文档 / 设计完成当作运行验证通过 |
+
+需要验证实际 renderer 时，再按 `regression_checklist.md` 选择受影响项；本表没有执行记录就标为未运行，不能把定义了判据当作通过。

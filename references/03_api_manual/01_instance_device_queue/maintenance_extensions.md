@@ -40,7 +40,7 @@ VkInstance
 
 - 已创建的 `VkInstance`、`VkPhysicalDevice`、`VkDevice`。[SPEC]
 - 每条 maintenance 扩展都是 device-level extension，启用前必须确认 `vkEnumerateDeviceExtensionProperties` 返回对应字符串。[SPEC]
-- Vulkan 1.3+ 中 `VK_KHR_maintenance4` 已进核心，扩展字符串自动可用，但仍需通过 `VkPhysicalDeviceVulkan13Features.maintenance4` 显式启用 feature；Vulkan 1.4+ 中 `VK_KHR_maintenance5` / `VK_KHR_maintenance6` 进核心，需通过 `VkPhysicalDeviceVulkan14Features.maintenance5` / `.maintenance6` 启用（也可使用独立结构 `VkPhysicalDeviceMaintenance4Features` / `Maintenance5Features` / `Maintenance6Features`）。[SPEC]
+- Vulkan 1.3+ 核心路径无需 maintenance4 扩展字符串，但仍需通过 `VkPhysicalDeviceVulkan13Features.maintenance4` 显式启用 feature；1.4+ 的 maintenance5 / maintenance6 分别通过 Vulkan14Features 启用。核心化不保证原扩展字符串仍被枚举；版本聚合 feature struct 与其独立 feature struct 不重复放入同一 pNext 链。[SPEC]
 
 ### 下游影响
 
@@ -58,7 +58,7 @@ VkInstance
 - `VkPhysicalDeviceMaintenance*Properties` / `VkPhysicalDeviceVulkan13Features`（含 maintenance4）/ `VkPhysicalDeviceVulkan14Features`（含 maintenance5 / maintenance6）/ 独立 `VkPhysicalDeviceMaintenance4Features` / `Maintenance5Features` / `Maintenance6Features`
 - `VkDeviceBufferMemoryRequirements`、`VkDeviceImageMemoryRequirements`（maintenance4）
 - `VkBindIndexBufferIndirectCommand` 等关联结构（按需）
-- `VkPipelineCreateFlags2CreateInfo`、`VkSwapchainPresentModesCreateInfoEXT`（maintenance6 / swapchain_maintenance1）
+- `VkPipelineCreateFlags2CreateInfo`（maintenance5）、`VkSwapchainPresentModesCreateInfoEXT`（swapchain_maintenance1）
 
 ### 常用 API
 
@@ -83,7 +83,7 @@ VkInstance
 | `VK_KHR_maintenance4` | Vulkan 1.3 | `VkDeviceBufferMemoryRequirements` / `VkDeviceImageMemoryRequirements`，无需创建对象即可查 memory requirements；`VkPhysicalDeviceMaintenance4Properties` 提供 `maxBufferSize`。[SPEC] |
 | `VK_KHR_maintenance5` | Vulkan 1.4 | `vkCmdBindIndexBuffer2`（新增 `size` 参数，支持 partial index binding）、`vkGetImageSubresourceLayout2KHR` / `vkGetDeviceImageSubresourceLayoutKHR`、`vkGetRenderingAreaGranularityKHR`、`VkPhysicalDeviceMaintenance5Properties`、对 `VkPipelineCreateFlags2` 的若干补充位等。[SPEC] |
 | `VK_KHR_map_memory2` | Vulkan 1.4 core promote | `vkMapMemory2` / `vkUnmapMemory2` 与 `VkMemoryMapInfoKHR` / `VkMemoryUnmapInfoKHR`；**独立扩展**，与 maintenance6 无关。[SPEC] |
-| `VK_KHR_maintenance6` | Vulkan 1.4 核心 | `VkBindMemoryStatusKHR`、`VkPhysicalDeviceMaintenance6Properties`、`VK_PIPELINE_CREATE_2_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT` 行为收敛、若干 sync/queue 语义修正。[SPEC] |
+| `VK_KHR_maintenance6` | Vulkan 1.4 核心 | `VkBindMemoryStatusKHR`、`VkPhysicalDeviceMaintenance6Properties`，以及可通过 pNext 扩展的 descriptor / push constants *2 绑定命令；不替代同步。[SPEC] |
 | `VK_KHR_maintenance7` | Vulkan 1.3 扩展（2024 年发布） | sample locations 支持、稳定 present mode 查询、`VkPhysicalDeviceMaintenance7PropertiesKHR`。[SPEC] |
 | `VK_EXT_swapchain_maintenance1` | 扩展 | retired swapchain 延迟销毁、present mode 运行时切换、present fence、`VkSwapchainPresentModesCreateInfoEXT`。[SPEC] |
 
@@ -108,11 +108,11 @@ Step 3：使用对应能力
 → maintenance5: 使用 vkCmdBindIndexBuffer2 替代 vkCmdBindIndexBuffer，显式指定 index range（size）；vkGetRenderingAreaGranularityKHR / vkGetDeviceImageSubresourceLayoutKHR 也在 maintenance5 中
 → map_memory2: vkMapMemory2 / vkUnmapMemory2 来自独立扩展 VK_KHR_map_memory2，不是 maintenance6
 → maintenance6: 使用 VkBindMemoryStatusKHR 跟踪 bind 状态；查阅 VkPhysicalDeviceMaintenance6Properties
-→ swapchain_maintenance1: 通过 VkSwapchainPresentModesCreateInfoEXT 在 vkQueuePresentKHR 时切换 present mode
+→ swapchain_maintenance1: 创建时用 VkSwapchainPresentModesCreateInfoEXT 声明兼容模式，present 时用 VkSwapchainPresentModeInfoEXT 选择；用 VkSwapchainPresentFenceInfoEXT 追踪 present 资源回收点
 
 Step 4：销毁
 → 普通资源按原生命周期销毁
-→ swapchain_maintenance1 允许 retired swapchain 延迟到 present 完成后再销毁
+→ 旧 swapchain 需追踪所有提交与 presentation 使用；swapchain_maintenance1 的 present fence 提供明确的 present 资源回收点
 ```
 
 ---
@@ -153,14 +153,14 @@ Step 4：销毁
 
 - [ ] `vkGetDeviceBufferMemoryRequirements` / `vkGetDeviceImageMemoryRequirements` 调用前 device 是否启用了 maintenance4？[SPEC]
 - [ ] `vkCmdBindIndexBuffer2` 调用前是否启用 maintenance5？[SPEC]
-- [ ] `vkMapMemory2` / `vkUnmapMemory2` 调用前是否启用了独立的 `VK_KHR_map_memory2` 扩展或 Vulkan 1.4 + `VkPhysicalDeviceVulkan14Features` 对应字段（**不是** maintenance6）？[SPEC]
+- [ ] `vkMapMemory2` / `vkUnmapMemory2` 是否走匹配的 Vulkan 1.4 核心路径，或已启用 `VK_KHR_map_memory2` 扩展？该功能没有独立的 mapMemory2 feature bit，也不属于 maintenance6。[SPEC]
 - [ ] `VkSwapchainPresentModesCreateInfoEXT` 切换 mode 前，是否通过 `vkGetPhysicalDeviceSurfacePresentModes2EXT` 查询目标 mode 可用？[SPEC]
-- [ ] retired swapchain 在未启用 swapchain_maintenance1 时不能依赖延迟销毁语义？[SPEC]
+- [ ] 旧 swapchain 是否按提交完成与 presentation 资源退役证据回收，而非假设 retired 状态自动保证安全？[SPEC]
 - [ ] negative `viewport.height` 是否仅在启用 maintenance1 后才使用？[SPEC]
 
 ### 销毁阶段
 
-- [ ] retired swapchain 是否等待所有 in-flight image 被 acquire 后再销毁？[SPEC]
+- [ ] retired swapchain 不再执行 acquire，销毁前是否确认所有旧提交与 presentation 使用结束？[SPEC]
 - [ ] `vkUnmapMemory2` 后是否仍引用 `VkDeviceMemory`？[SPEC]
 - [ ] 维护性扩展本身不引入对象，不需要单独销毁；但其派生对象按原生命周期销毁。[SPEC]
 
@@ -209,7 +209,7 @@ Step 4：销毁
 - 检查 `vkGetDescriptorSetLayoutSupport` 返回的 `supported` 字段。
 - 检查 `vkMapMemory2` 返回值与 `VkMemoryMapInfoKHR.pNext` 链。
 - 检查 `VkSwapchainPresentModesCreateInfoEXT` 中 present mode 与目标场景是否匹配。
-- 检查 retired swapchain 销毁时机是否等待 `vkAcquireNextImageKHR` 返回 `VK_ERROR_OUT_OF_DATE_KHR` 或 in-flight 完成后再销毁。
+- 检查旧 swapchain / present semaphore 是否有独立退役证据；acquire 的 OUT_OF_DATE 不是旧 presentation 使用已结束的证明。
 
 ---
 
@@ -337,6 +337,8 @@ Step 4：销毁
 ---
 
 ## 15. 需要回查官方文档的情况
+
+上述版本与退役规则依据：[maintenance6](https://docs.vulkan.org/refpages/latest/refpages/source/VK_KHR_maintenance6.html)、[Pipeline Flags2](https://docs.vulkan.org/refpages/latest/refpages/source/VkPipelineCreateFlags2CreateInfo.html)、[Swapchain Recreate](../02_surface_swapchain/swapchain_recreate.md)。
 
 1. 各 maintenance 扩展在不同 Vulkan 版本中的入核心时间与扩展字符串可用性规则。[SPEC]
 2. maintenance4 中 `VkDeviceBufferMemoryRequirements` / `VkDeviceImageMemoryRequirements` 的字段合法组合与 sparse image 查询语义。[SPEC]

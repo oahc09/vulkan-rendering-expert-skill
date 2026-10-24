@@ -130,6 +130,7 @@ recreate 前必须确保旧资源不再被 GPU 使用：
 3. Android 上确认 Surface / ANativeWindow 仍有效。
 4. 如果 extent 为 0，暂停 recreate。
 5. 等待相关 in-flight fence，必要时 `vkDeviceWaitIdle`。
+   这仅覆盖提交侧；旧 present semaphore / swapchain 另按已启用的 present fence 或官方样例的退役策略回收，不以 WaitIdle 单独证明可释放。
 6. 销毁旧 framebuffer / image view / depth / offscreen resources。
 7. 创建新 swapchain，可传 oldSwapchain。
 8. 获取新 swapchain images。
@@ -139,6 +140,8 @@ recreate 前必须确保旧资源不再被 GPU 使用：
 12. 更新 descriptor。
 13. 重新录制 command buffer。
 14. 恢复 frame loop。
+
+新 swapchain 按实际 imageCount 创建 render-finished semaphore 数组；旧数组保留至旧 presentation 使用结束。acquire 的 SUBOPTIMAL 已取得 image，应处理本帧的 acquire 信号；OUT_OF_DATE 不继续 submit、不 reset 未提交 frame 的 fence。依据：[Swapchain Recreate API 卡片](../../03_api_manual/02_surface_swapchain/swapchain_recreate.md)。
 
 ---
 

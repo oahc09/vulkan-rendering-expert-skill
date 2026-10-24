@@ -79,16 +79,19 @@ CPU 侧帧调度
 ### 典型帧渲染流程（ Fence + Binary Semaphore ）
 
 ```text
-每帧准备 per-frame 资源（command buffer、fence 已 reset）
-→ vkAcquireNextImageKHR(acquireSemaphore)
+等待 frameFence 完成，准备 per-frame 资源
+→ vkAcquireNextImageKHR(acquireSemaphore[frameIndex], &imageIndex)
+→ 处理返回值：SUCCESS / SUBOPTIMAL 继续，OUT_OF_DATE 重建并返回且不 reset fence
 → 录制渲染命令到 command buffer
+→ 确定会提交后 vkResetFences(frameFence)
 → vkQueueSubmit(
-       waitSemaphore = acquireSemaphore,
-       signalSemaphore = renderCompleteSemaphore,
+       waitSemaphore = acquireSemaphore[frameIndex],
+       signalSemaphore = renderCompleteSemaphore[imageIndex],
        fence = frameFence)
-→ vkQueuePresentKHR(waitSemaphore = renderCompleteSemaphore)
+→ 检查 submit 返回值，失败则恢复，不继续普通 present / fence wait
+→ vkQueuePresentKHR(waitSemaphore = renderCompleteSemaphore[imageIndex])
 → CPU 在需要时 vkWaitForFences(frameFence) 等待 GPU 完成
-→ vkResetFences(frameFence) 后复用资源
+→ 复用对应提交资源；旧 present 资源需独立完成证明
 ```
 
 ### Timeline Semaphore 简化多队列/多帧依赖
@@ -171,9 +174,8 @@ CPU 侧帧调度
 
 ### Validation Layer
 
-- `VUID-vkQueueSubmit-pWaitSemaphores-00068`：wait semaphore 必须已 signaled 或可被 timeline 满足。[SPEC]
-- `VUID-vkQueuePresentKHR-pWaitSemaphores-03267`：present wait semaphore 必须有效。[SPEC]
-- `VUID-vkResetFences-pFences-01122`：reset 前 fence 必须不在 pending submit 中。[SPEC]
+- semaphore 错误按实际消息回查 [vkQueueSubmit](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueSubmit.html) / [vkQueuePresentKHR](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueuePresentKHR.html)，binary wait 可以等待已提交但仍 pending 的 signal。[SPEC]
+- `VUID-vkResetFences-pFences-01123`：reset 的 fence 不得关联尚未执行完成的 queue 命令，见 [vkResetFences](https://docs.vulkan.org/refpages/latest/refpages/source/vkResetFences.html)。[SPEC]
 - `VUID-vkSignalSemaphore-value-03258`：timeline semaphore signal value 必须大于当前值。[SPEC]
 
 ### RenderDoc / AGI
@@ -248,7 +250,7 @@ CPU 侧帧调度
 
 ### CPU 侧
 
-- 每帧 `vkWaitForFences` 后 `vkResetFences` 是常见模式；CPU 等待时间应小于一帧预算。[ENGINE]
+- 每帧开始 wait frame fence；成功 acquire 和录制后、紧邻实际 submit 再 reset，避免跳过提交留下永不 signal 的 fence。[ENGINE]
 - Timeline semaphore 的 `vkWaitSemaphores` 可用于非阻塞轮询，减少 CPU 阻塞。[ENGINE]
 
 ### GPU 侧

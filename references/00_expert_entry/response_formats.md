@@ -8,7 +8,7 @@
 
 ## 0. 统一出口段：Verification Gate（所有类型共用）
 
-任何结论性输出（已完成 / 已解决 / 根因已修复 / 性能已优化）前，必须按 `verification_gate.md` 过 G1-G6 关卡，回答末尾附加验证状态：
+纯知识问答引用规范和适用边界；设计 / 只读审查说明可行性、风险与待执行验证计划。只有实际实现、修复或性能改善的结论需要按 `verification_gate.md` 检查 G1-G6，并在回答末尾附加验证状态：
 
 ```text
 Verification Gate:

@@ -74,6 +74,8 @@ v1.0  可用于真实 Vulkan 工程辅助
 
 ### 1. 结构检查
 
+仓库根目录执行 `node scripts/check-skill.mjs`；发布渠道仍使用 200 文件预算时加 `--max-files 200`。该命令只做结构与引用检查，能力验收按 `integration_test_plan.md` 执行并记录实际回答，不能把结构 PASS 当作行为或运行验收 PASS。
+
 - [ ] 目录结构完整。
 - [ ] 每个模块有 README。
 - [ ] 模板文件齐全。

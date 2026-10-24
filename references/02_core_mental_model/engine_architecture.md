@@ -122,7 +122,7 @@ feature / 扩展协商结果变化
 按 frame-in-flight 索引成套持有：
   VkCommandBuffer（及其 VkCommandPool）
   VkFence（本索引 in-flight 完成信号）
-  acquire / present VkSemaphore（必须是 binary；timeline 只用于 submit 间同步）
+  acquire VkSemaphore（binary；present wait semaphore 按 swapchain image 单独持有）
   UBO ring buffer 的本索引 offset
   per-frame descriptor set（或 bindless 写入区）
 ```
@@ -142,10 +142,12 @@ feature / 扩展协商结果变化
 
 ```text
 创建：与 frames-in-flight 数量一起创建（典型 2-3 套）。[ENGINE]
-每帧：wait 本索引 fence → reset fence → reset/allocate cmd → 录制 → 提交。
+每帧：wait 本索引 fence → acquire 并检查返回值 → reset/allocate cmd → 录制成功 → reset fence → 提交并检查返回值。
 重建：frames-in-flight 数量变化时必须成套扩展 / 收缩（regression_reasoning.md §2.4）。
 销毁：等待全部 fence 后销毁；早于 GPU 完成销毁即 use-after-free。[SPEC]
 ```
+
+Frame Context 的提交完成信号不证明 presentation 资源可回收；present wait semaphore 按 swapchain image 管理，并随对应 swapchain 单独退役。timeline 可追踪提交完成，也支持 host 等待，但不替代 WSI binary semaphore。依据：[Swapchain Semaphore Reuse](https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html)。[SPEC][ENGINE]
 
 ### 影响链
 
@@ -428,7 +430,7 @@ acquire / present semaphore（与 surface 模块的交界）
 创建：启动期选择 queue family（能力 + 数量权衡）。
 每帧：按依赖序提交各 queue 批次，signal / wait timeline value。
 重建：family 选择通常不重建；async compute 开关变化时增删提交路径。
-销毁：等待全部 in-flight 完成后销毁 semaphore。
+销毁：等待全部相关提交完成后回收提交同步对象；present semaphore 另需 presentation 资源退役证明。
 ```
 
 ### 影响链

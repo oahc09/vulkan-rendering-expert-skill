@@ -16,7 +16,7 @@
 
 ## 1. 一句话定位
 
-`VK_KHR_synchronization2`（Vulkan 1.3 core）是 Vulkan 同步模型的扩展版本，通过 `VkDependencyInfo` 统一描述 barrier、semaphore 信号/等待的 stage/access 语义，并提供更细粒度的 pipeline stage 与 access flag，用于替代旧版 `vkCmdPipelineBarrier` 和 `vkQueueSubmit` 中的同步表达。[SPEC]
+`VK_KHR_synchronization2`（Vulkan 1.3 core）通过 `VkDependencyInfo` 描述 barrier 的 stage/access，通过 `VkSemaphoreSubmitInfo` 描述提交的 semaphore stage/value，提供更细粒度的 stage 与 access flag，用于改进旧版 barrier 和 submit 的同步表达。[SPEC]
 
 ---
 
@@ -251,13 +251,13 @@
 
 Vulkan 1.4 对 Synchronization2 的主要变更：
 
-### promote 为 mandatory feature
+### 1.3 已核心化且必须支持
 
-Vulkan 1.4 将 `VK_KHR_synchronization2` 的 API promote 进 core，并提升为 mandatory feature（保证被支持）。[SPEC]
+`VK_KHR_synchronization2` 在 Vulkan 1.3 已核心化并要求支持，1.4 继承该要求。必须支持不等于自动启用。依据：[Feature Requirements](https://docs.vulkan.org/spec/latest/chapters/features.html#features-requirements)。[SPEC]
 
 - 1.4 设备保证支持 synchronization2，无需运行时查询 feature 即可确认能力存在；但 **mandatory feature 仍需在 `VkDeviceCreateInfo.pNext` 中通过 `VkPhysicalDeviceVulkan13Features.synchronization2 = VK_TRUE`（或独立结构 `VkPhysicalDeviceSynchronization2Features.synchronization2`）显式启用** 后才能调用 sync2 API（`vkCmdPipelineBarrier2` / `vkQueueSubmit2` / `VkImageMemoryBarrier2` 等）。注意 `synchronization2` 是 Vulkan 1.3 promote，因此字段位于 `VkPhysicalDeviceVulkan13Features`，**不在 `VkPhysicalDeviceVulkan14Features`**。[SPEC]
 - 启用后可省略 `vkCmdPipelineBarrier` 的 fallback 路径。[ENGINE]
-- 判断条件：`VkPhysicalDeviceProperties.apiVersion >= VK_VERSION_1_4` 且 device 创建时已启用 `synchronization2` feature。[SPEC]
+- 判断条件：应用采用匹配的 1.3+ 核心路径、设备 `apiVersion >= VK_API_VERSION_1_3`，且创建 device 时已启用 `synchronization2`。[SPEC]
 
 ### 与 Timeline Semaphore 的深度配合
 
@@ -270,18 +270,22 @@ Vulkan 1.4 将 `VK_KHR_synchronization2` 的 API promote 进 core，并提升为
 ### 完整帧同步模型（1.4 推荐）
 
 ```text
-Frame N:
-  vkAcquireNextImageKHR (binary semaphore: acquireSem)
+单 queue，timeline 初始 0；各 slotDoneValue 初始 0：
+  CPU 复用 frame slot 前等待 timeline >= slotDoneValue[frameIndex]
+  vkAcquireNextImageKHR (binary: acquireSem[frameIndex], &imageIndex)
+  处理返回值并完成资源更新、命令录制
+  分配单调递增的 N
   vkQueueSubmit2:
-    wait: acquireSem (binary), timelineSem value >= N-2 (等待最老帧完成)
-    signal: timelineSem value = N
-  vkQueuePresentKHR (binary semaphore: renderSem)
-  CPU: vkGetSemaphoreCounterValue(timelineSem) >= N-2 时可复用 Frame N-2 资源
+    wait: acquireSem[frameIndex] (binary，stage 覆盖 swapchain image 最早访问)
+    signal: timelineSem value = N (ALL_COMMANDS), renderSem[imageIndex] (binary, ALL_COMMANDS)
+  submit 成功后记录 slotDoneValue[frameIndex] = N；失败进入恢复
+  vkQueuePresentKHR (wait: renderSem[imageIndex])
+  不能以 timeline 的提交完成 value 证明 present 资源已安全退役
 ```
 
 ### maintenance6 对同步的影响
 
-`VK_KHR_maintenance6`（1.4 核心）引入简化同步表达。[SPEC]
+`VK_KHR_maintenance6` 提供可扩展的 descriptor / push constants 绑定命令，不代替同步机制；stage / access / layout / ownership 仍需按实际依赖设计。[SPEC]
 
 ---
 

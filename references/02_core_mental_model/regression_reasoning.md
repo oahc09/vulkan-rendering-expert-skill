@@ -64,10 +64,12 @@ Android 场景下 extent 可能为 0（Surface 未就绪），必须处理等待
 ```text
 frames-in-flight 数量变化
 → per-frame 的 command pool / command buffer
-→ per-frame 的 fence / semaphore
+→ per-frame 的 fence / acquire semaphore
 → per-frame 的 uniform buffer / descriptor set
 必须按新的数量成套扩展或收缩；只改数量不改资源集会导致串帧或 use-after-free。[ENGINE]
 ```
+
+present wait semaphore 通常按 swapchain image 数量分配，由 imageIndex 索引，不随 frame slot 数量直接变化；其退役条件独立于 submit fence。
 
 ### 2.5 Barrier → producer / consumer
 
@@ -76,7 +78,7 @@ Barrier 参数变化
 → producer 侧：srcStage / srcAccess / oldLayout
 → consumer 侧：dstStage / dstAccess / newLayout
 两侧必须同时核对；只调整一侧会产生 hazard 或 layout mismatch。
-跨 queue 场景还必须核对 semaphore（barrier 不跨 queue 生效）。[SPEC]
+跨 queue 场景需 semaphore 建立提交间依赖；必要的 queue-family ownership transfer 由两侧 release/acquire barrier 配合，不能用其中一种代替另一种。[SPEC]
 ```
 
 ### 2.6 Surface / ANativeWindow → Swapchain

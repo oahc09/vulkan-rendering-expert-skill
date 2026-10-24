@@ -72,13 +72,15 @@ Command Buffer 录制完成
 ## 4. 标准使用流程
 
 ```text
-创建 signaled fence（可选 VK_FENCE_CREATE_SIGNALED_BIT）
-→ 录制 command buffer
+创建 fence（若首轮直接 wait，使用 VK_FENCE_CREATE_SIGNALED_BIT）
+→ 等待该 fence 对应的前次提交完成；首次未提交的 unsignaled fence 跳过等待
+→ 如需 WSI，先 acquire 并检查返回值；失败返回时不 reset fence
+→ 录制 command buffer 成功
+→ 紧邻实际 submit 前 vkResetFences（目标 fence 无 pending 提交）
 → vkQueueSubmit(cmd, fence = unsignaled fence)
 → CPU 继续处理或调用 vkWaitForFences
 → fence signal 后，回收 command buffer / 资源
-→ vkResetFences 重置为 unsignaled
-→ 重新录制并提交
+→ 准备下一次录制；下一次确定提交后再 reset
 ```
 
 ---
@@ -88,7 +90,7 @@ Command Buffer 录制完成
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
 | `flags`（`VK_FENCE_CREATE_SIGNALED_BIT`） | 控制初始状态；per-frame fence 常初始为 signaled，避免第一帧等待特殊处理。[ENGINE] | 未设置 signaled bit 却在未提交前调用 `vkWaitForFences` 导致死锁。[TOOL] |
-| `fenceCount`（`vkResetFences` / `vkWaitForFences`） | 可批量处理；注意数组中每个 fence 必须处于合法状态。[SPEC] | 对未 signal 的 fence 调用 `vkResetFences` 引发 validation error。[TOOL] |
+| `fenceCount`（`vkResetFences` / `vkWaitForFences`） | 可批量处理；reset 的 fence 不得关联未完成的 queue 命令，非 pending 的 unsignaled fence 也可 reset。[SPEC] | 对仍关联 pending 命令的 fence reset，或 reset 后跳过 submit 导致后续 wait 死锁。[TOOL] |
 | `waitAll`（`vkWaitForFences`） | `VK_TRUE` 等待全部；`VK_FALSE` 等待任意一个。[SPEC] | 需要等待全部完成却误设为 `VK_FALSE` 导致资源回收时机错误。[ENGINE] |
 | `timeout`（`vkWaitForFences`） | 单位为纳秒；`UINT64_MAX` 为无限等待。[SPEC] | 超时时间过短在低端设备触发 `VK_TIMEOUT`，却未处理该返回值。[TOOL] |
 
@@ -118,7 +120,7 @@ Command Buffer 录制完成
 ## 7. 高频错误
 
 1. 对同一次提交同时使用 fence 和 semaphore，但 CPU 侧未等待 fence 就复用资源。[SPEC]
-2. `vkResetFences` 在 fence 尚未 signal 时调用，或重置了仍被 `vkQueueSubmit` 引用的 fence。[TOOL]
+2. reset 仍关联 pending queue 命令的 fence，或 reset 后跳过 submit 导致后续等待卡死；非 pending 的 unsignaled fence 可以合法 reset。[SPEC][ENGINE]
 3. 生产环境使用 `UINT64_MAX` 无限等待，导致 GPU 挂起时 CPU 同步卡死。[ENGINE]
 4. 每帧创建/销毁 fence 而不是复用 per-frame fence pool。[ENGINE]
 5. 多线程下不同线程同时操作同一个 fence 状态而未加锁。[ENGINE]
@@ -129,9 +131,9 @@ Command Buffer 录制完成
 
 ### Validation Layer
 
-- `VUID-vkResetFences-pFences-01122`：reset 时 fence 不能处于未 signal 的 pending 状态。
+- `VUID-vkResetFences-pFences-01123`：reset 的 fence 不得关联尚未执行完成的 queue 命令，见 [vkResetFences](https://docs.vulkan.org/refpages/latest/refpages/source/vkResetFences.html)。
 - `VUID-vkDestroyFence-fence-01120`：销毁时 fence 不能仍被 pending queue 使用。
-- `VUID-vkWaitForFences-fence-03283` 等：fence 必须有效且状态正确。
+- 等待错误按实际消息核对 [vkWaitForFences](https://docs.vulkan.org/refpages/latest/refpages/source/vkWaitForFences.html) 的 handle / device 归属与返回值，不把等待 unsignaled fence 本身当作非法。
 
 ### RenderDoc / AGI
 
@@ -210,7 +212,7 @@ Command Buffer 录制完成
 ## 13. 专家经验
 
 **经验**：
-在 double/triple buffering 框架中，为每个 in-flight frame 维护一个 fence，提交时传入对应 fence，帧循环开始时 wait 该帧的 fence。不要为每次 `vkQueueSubmit` 都新建 fence，也不要在 wait 成功前 reset。
+在 double/triple buffering 框架中，为每个 frame slot 维护一个 fence，帧开始先等待该 slot 的前次提交完成；acquire 与录制成功、确定本轮会 submit 后再 reset。submit 失败进入恢复，不能继续等待一个没有关联提交的 unsignaled fence。依据：[Swapchain Recreation](https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/04_Swap_chain_recreation.html)。
 
 **适用条件**：
 典型渲染循环、有 per-frame 资源池、需要 CPU 端知道 GPU 完成时机。

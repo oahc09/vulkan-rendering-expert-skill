@@ -11,7 +11,15 @@
 
 ## 1. 定位
 
-Verification Gate 是所有结论性输出的出口关卡。任何"已完成"、"已解决"、"根因已修复"、"性能已优化"结论，都必须先通过以下 6 道关卡，或显式声明某关卡不适用并说明原因。
+Verification Gate 按任务的实际声明选择适用范围：
+
+| 任务 | 所需证据与输出 |
+|---|---|
+| 纯概念 / API 问答 | 核对相关规范、字段、版本和边界；不要求运行或逐项输出 G1-G6 |
+| 设计 / 只读审查 | 评估相关 G1-G3 风险，给出 G4-G6 的适用验证计划；明确方案尚未运行 |
+| 实际实现 / 修复 / 性能优化 | 列出 G1-G6 状态；不适用需说明原因，受影响但未执行必须标未验证 |
+
+"文档已修订"或"方案已形成"不代表运行时验证通过。只有所有适用关卡都有足够证据时，才能给出对应的"已解决"、"根因已修复"或"性能已优化"结论。
 
 ```text
 G1 API 合法性
@@ -41,7 +49,7 @@ G1 API 合法性
 
 1. 创建顺序正确（instance → device → queue → 资源）。
 2. 销毁顺序与依赖关系逆序一致，且满足 `hard_rules.md` 第 15 条幂等要求。[SPEC]
-3. 销毁 / 重建前所有 in-flight 工作已等待完成（fence / `vkDeviceWaitIdle`）。
+3. 销毁前确认所有相关提交完成；present semaphore / swapchain 还需独立的 presentation 资源退役证据，不能仅依赖 submit fence / WaitIdle。详见 `../03_api_manual/02_surface_swapchain/swapchain_recreate.md`。
 4. swapchain recreate 路径中，旧 image view / framebuffer / 尺寸相关资源同步销毁或重建。[ENGINE]
 
 ---
@@ -60,7 +68,7 @@ oldLayout / newLayout（image 场景）
 
 同时确认：
 
-1. fence 用于 CPU↔GPU 等待，semaphore 用于 queue 间 / acquire / present 顺序，barrier 用于 command buffer 内依赖，三者不混用。[SPEC]
+1. fence 用于 host 追踪提交完成；semaphore 建立提交间 / acquire / present 依赖，timeline 也支持 host 等待；barrier 处理访问范围、layout 与必要的 queue-family ownership。跨 queue 常需 semaphore 与 release/acquire barrier 配合。[SPEC]
 2. descriptor 的 imageLayout 与 image 实际 layout 一致。[SPEC]
 3. 资源生命周期覆盖同步对象本身（fence / semaphore 的 reset 与复用时机）。[ENGINE]
 
@@ -70,9 +78,9 @@ oldLayout / newLayout（image 场景）
 
 Validation clean 是必要条件，不是充分条件：
 
-1. Validation 只能证明 API 使用和显式声明的同步关系合法。[TOOL]
+1. Validation clean 只表示当前层版本、启用配置和实际执行路径中未检测到相关违规，不能证明所有 API 用法或同步关系合法；同步检查与 GPU 辅助检查还取决于配置和工具覆盖。[TOOL]
 2. 以下问题 Validation 无法发现：错误的 clear value / winding / MVP、内容为空的纹理、语义错误的合法参数、性能回退。[ENGINE]
-3. G4 通过不能单独作为"已解决"的依据，必须与 G5 / G6 联合判定。
+3. G4 通过不能单独作为"已解决"的依据，需与适用的内容验证和平台回归联合判定。
 
 ---
 
@@ -82,7 +90,7 @@ Validation clean 是必要条件，不是充分条件：
 
 1. RenderDoc：draw / dispatch 存在、pipeline 绑定正确、descriptor 指向正确资源、每个 pass 的输入输出符合预期、image layout 状态符合预期。[TOOL]
 2. AGI（Android）：能抓到 frame、GPU counter 无异常、帧耗时符合预期。[ANDROID][AGI]
-3. 无法提供工具证据时，结论必须降级为"待验证"，并给出建议的验证方式。
+3. 受影响的帧内容或性能结论没有工具证据时标记未验证；可以采用能验证同一目标的 readback、图像对比、GPU timestamp / counter 等证据并说明局限，不强制使用某个工具品牌。纯知识问答和未实施的设计不要求提供运行证据。
 
 ---
 
@@ -98,7 +106,7 @@ Validation clean 是必要条件，不是充分条件：
 
 ## 8. 关卡输出格式
 
-结论性回答的末尾必须包含验证状态：
+实际实现 / 修复 / 性能改善结论的末尾包含验证状态；纯问答与设计审查按 §1 输出即可：
 
 ```text
 Verification Gate:
@@ -124,8 +132,8 @@ Verification Gate:
 
 1. 禁止把"现象消失"直接等同于"找到根因"。
 2. Validation clean 不能作为唯一成功标准。
-3. 涉及同步的修改，G3 六要素不完整时不得给出最终结论。
-4. Android 相关修改，G6 未覆盖 rotation / pause / resume / Surface recreate 时不得给出最终结论。
+3. 涉及同步的修改，G3 所需依赖要素不完整时不得宣布同步正确；buffer 无 image layout 时注明不适用。
+4. Android 修改按影响面选择回归；涉及 Surface / Swapchain 生命周期时必须覆盖 rotation / pause / resume / Surface recreate。未执行项不得默认通过。
 5. 无法验证的关卡必须显式标注"未验证"并给出建议验证方式，不得默认通过。
 
 ---

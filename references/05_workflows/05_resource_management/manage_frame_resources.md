@@ -112,7 +112,7 @@ Swapchain
 必须说明：
 
 - `vkAcquireNextImageKHR` 返回的 `imageIndex` 是 swapchain image index，不一定是 ring index；frame-in-flight 使用独立的 `currentFrame % frameInFlight` [SPEC]。
-- `vkQueueSubmit` 的 wait semaphore stage 应为 `COLOR_ATTACHMENT_OUTPUT_BIT`（graphics），而非 `TOP_OF_PIPE` [SPEC]。
+- acquire wait stage 覆盖 swapchain image 的最早访问及 transition；直接绘制 color attachment 常用 `COLOR_ATTACHMENT_OUTPUT_BIT`，transfer / compute 首次访问应选对应 stage [SPEC]。
 - fence 等待后必须 `vkResetFences` 再 submit 下一帧使用同一 fence [SPEC]。
 - command buffer 复用前可 `vkResetCommandBuffer` 或 `vkResetCommandPool` [SPEC]。
 
@@ -122,30 +122,34 @@ Swapchain
 
 1. **确定 frame-in-flight 数量**：通常 2~3；移动端 2 可降低 latency，PC 3 可提升吞吐 [HEUR]。
 2. **创建 per-frame fence**：`VK_FENCE_CREATE_SIGNALED_BIT`，初始状态为 signaled，第一帧 `vkWaitForFences` 不阻塞 [ENGINE]。
-3. **创建 semaphore**：每帧一对 `imageAcquiredSemaphore` 和 `renderFinishedSemaphore`。
+3. **创建 semaphore**：`imageAcquiredSemaphore` 按 frame slot 创建；`renderFinishedSemaphore` 按 swapchain image 创建，submit fence 不证明 present 对 semaphore 的使用结束。
 4. **创建 per-frame command pool**：`VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT`，每帧一个 pool 可简化 reset；或单 pool + `vkResetCommandBuffer` [SPEC]。
 5. **分配 per-frame command buffer**：从对应 pool 分配 primary command buffer。
 6. **创建 per-frame 资源**：UBO、staging buffer、query pool 等按 frameInFlight 数量分配。
 7. **Frame loop 流程**：
    - `vkWaitForFences(perFrameFence[currentFrame], TRUE, timeout)` [SPEC]
-   - `vkResetFences(perFrameFence[currentFrame])` [SPEC]
    - `vkAcquireNextImageKHR(..., imageAcquiredSemaphore[currentFrame], ...)`
+   - OUT_OF_DATE 标记重建并返回；TIMEOUT / NOT_READY 跳过；SUCCESS / SUBOPTIMAL 继续，后者标记稍后重建；其他错误进入恢复
    - 重置并录制 command buffer
-   - `vkQueueSubmit(..., wait=imageAcquiredSemaphore, signal=renderFinishedSemaphore, fence=perFrameFence[currentFrame])`
-   - `vkQueuePresentKHR(..., wait=renderFinishedSemaphore)`
+   - 录制成功且确定会提交后 `vkResetFences(perFrameFence[currentFrame])` [ENGINE]
+   - `vkQueueSubmit(..., wait=imageAcquiredSemaphore[currentFrame], signal=renderFinishedSemaphore[imageIndex], fence=perFrameFence[currentFrame])`
+   - 检查 submit 返回值；失败时进入恢复，不能等待本次未提交的 fence
+   - `vkQueuePresentKHR(..., wait=renderFinishedSemaphore[imageIndex])`
    - `currentFrame = (currentFrame + 1) % frameInFlight`
-8. **处理 `VK_ERROR_OUT_OF_DATE_KHR` / `VK_SUBOPTIMAL_KHR`**：停止录制，等待 GPU idle，重建 swapchain 与尺寸相关的 per-frame image [SPEC]。
+8. **处理重建**：成功 acquire（含 SUBOPTIMAL）后先完成信号消费与 image 处理，再进入重建；OUT_OF_DATE 不继续 submit。其他中途退出路径也必须处理已取得的 image / acquire 信号 [SPEC][ENGINE]。
 9. **Recreate 路径**：
-   - `vkDeviceWaitIdle` 或等待所有 per-frame fence [SPEC]
+   - 等待引用旧渲染资源的提交完成；旧 present semaphore / swapchain 另按 present fence 或官方样例退役策略管理 [SPEC]
    - 销毁尺寸相关的 image / image view / framebuffer / depth image
    - 重建 swapchain
    - 重建尺寸相关资源
    - 重置 `currentFrame` 到 0
 10. **销毁路径**：
-    - 等待 device idle
+   - 等待所有相关提交完成，并确认 presentation 资源可释放；WaitIdle 不能单独证明后者
     - 按 `command buffer → command pool → fence → semaphore → per-frame buffer/image → memory` 顺序销毁 [ENGINE]
-11. **Ring index 管理**：资源数组大小 = frameInFlight，CPU 写入前确保对应 fence signaled；swapchain imageIndex 仅用于选择 present image，不用于资源索引 [SPEC]。
+11. **Ring index 管理**：per-frame 数组按 frameInFlight 分配；swapchain image 与 renderFinishedSemaphore 数组按实际 imageCount 分配，用 imageIndex 索引，不能混为同一组 [ENGINE]。
 12. **错误处理**：acquire / present 返回 `OUT_OF_DATE` 时，标记 recreate 标志，不直接 crash [ANDROID]。
+
+依据：[帧循环 API 卡片](../../03_api_manual/03_command_buffer/frames_in_flight.md)、[present semaphore 复用](https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html)、[swapchain 退役](../../03_api_manual/02_surface_swapchain/swapchain_recreate.md)。
 
 ---
 

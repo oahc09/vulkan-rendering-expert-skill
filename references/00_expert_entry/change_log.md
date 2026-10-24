@@ -1,5 +1,14 @@
 # Change Log
 
+## 未发布修订（2026-10-24 至 2026-10-25）
+
+- 修正 API 版本数值宏、1.2 / 1.3 / 1.4 feature 必须支持起点与字段归属，以及 1.4 核心化扩展、limits、scalar layout 和 maintenance5/6 边界；为关键规则补充官方链接。
+- 修正 frame fence reset 时机与 acquire / submit 失败路径，present wait semaphore 改按 swapchain image 管理；区分提交完成和 presentation 资源退役，同步关联模型、API 卡片与 workflow。
+- Verification Gate 按纯知识问答、设计审查和实际实现结论选择范围，修正 Validation clean 的证据强度；补充四个定向行为评估场景，不将其视为已执行结果。
+- 保持发布版本不变；未执行真实 Vulkan / GPU / Android 运行验收。
+- 静态验证：skill-creator `quick_validate.py` 通过；新增无依赖 `scripts/check-skill.mjs`，检查 Git 可见文件的 UTF-8、Markdown 围栏、本地文件链接、入口路径和模块计数。检查发现的两份 API 模板嵌套围栏已改用外层四反引号。
+- 四项定向行为评估已在隔离上下文执行并通过，原始回答、加载文件与证据边界见 `../07_integration_pack/behavior_evaluation.md`；不代表完整历史题库、模型稳定性或 GPU 运行验收通过。
+
 ## v0.1
 
 - 建立专家行为控制模块。

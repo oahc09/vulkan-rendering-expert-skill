@@ -12,11 +12,11 @@ Vulkan 1.4 于 2024 年 12 月正式发布（Khronos 于 2024-12-04 公开宣布
 核心变更可以概括为三类：
 
 ```text
-1. 把若干 KHR 扩展 promote 到 core API（含 VK_KHR_maintenance6 等 11 项）。[SPEC]
-2. 把 1.3 时代已 promote 但仍为可选的特性升级为 mandatory：
-   synchronization2、dynamic rendering、maintenance5、shader integer dot product 等。[SPEC]
+1. 把 16 项 KHR / EXT 扩展 promote 到 core API（含 maintenance5 / maintenance6）。[SPEC]
+2. 把早期核心版本中仍可选的特性升级为 mandatory，例如 scalarBlockLayout。
+   synchronization2、dynamicRendering、shaderIntegerDotProduct 在 1.3 已必须支持。[SPEC]
 3. 把若干 1.4 新 promote 的特性直接设为 mandatory：
-   push descriptor、dynamic rendering local read、scalar block layout、
+   push descriptor、dynamic rendering local read、
    shader expect assume、shader float controls2、index type uint8 等。[SPEC]
 ```
 
@@ -25,21 +25,22 @@ Vulkan 1.4 于 2024 年 12 月正式发布（Khronos 于 2024-12-04 公开宣布
 判断设备是否为 1.4：
 
 ```text
-VkPhysicalDeviceProperties.apiVersion >= VK_VERSION_1_4
+VkPhysicalDeviceProperties.apiVersion >= VK_API_VERSION_1_4
 ```
 
-`apiVersion` 由驱动返回，代表驱动实际支持的最高 Vulkan API 版本，与 `instance` 创建时传入的 `vkGetInstanceProcAddr` 链无关。[SPEC]
+`apiVersion` 是物理设备支持的 API 版本；核心调用路径还必须匹配应用请求的 API 版本和实际可用入口。`VK_VERSION_1_4` 是头文件能力宏，不能用作版本数值比较。[SPEC]
 
 ---
 
 ## 2. 核心化扩展
 
-Vulkan 1.4 把以下 KHR 扩展 promote 进 core（不再需要 `VK_KHR_*` 扩展名 / 不再需要在 device extensions 列表里加入这些扩展名）：[SPEC]
+Vulkan 1.4 把以下 16 项扩展 promote 进 core；走对应核心路径时无需启用原扩展字符串，但 feature、properties 和核心化后的差异仍需核对：[SPEC]
 
 ```text
 VK_KHR_maintenance6
+VK_KHR_maintenance5
+VK_KHR_map_memory2
 VK_KHR_line_rasterization
-VK_KHR_calibrated_timestamps
 VK_KHR_push_descriptor              （同时成为 mandatory feature，见 §3）
 VK_KHR_shader_expect_assume
 VK_KHR_shader_subgroup_rotate
@@ -48,6 +49,10 @@ VK_KHR_dynamic_rendering_local_read （同时成为 mandatory feature，见 §3�
 VK_KHR_global_priority
 VK_KHR_index_type_uint8
 VK_KHR_load_store_op_none
+VK_KHR_vertex_attribute_divisor
+VK_EXT_host_image_copy
+VK_EXT_pipeline_protected_access
+VK_EXT_pipeline_robustness
 ```
 
 重点说明：
@@ -59,48 +64,36 @@ VK_KHR_load_store_op_none
 ```text
 - VkBindMemoryStatus：vkBindBufferMemory2 / vkBindImageMemory2 可携带返回结果状态，
   便于一次性检查批量 bind 是否成功。
-- VkPipelineCreateFlags2CreateInfo：pipeline create flags 升级到 64-bit，
-  替代旧的 32-bit VkPipelineCreateFlagBits，避免未来 flag 位用尽。
-- vkCmdBindDescriptorSets2KHR：descriptor set 绑定接口的扩展版本，
-  支持与 push descriptor / descriptor set variable count 配合更紧凑的绑定路径。
-- 允许 vkCmdBindVertexBuffers2 在 vertexInputBindingStride == 0 时复用上一次的 stride。
-- 支持 sparse 的 push descriptor 更新（partial update）。
+- vkCmdBindDescriptorSets2 / vkCmdPushConstants2：提供可通过 pNext 扩展的绑定接口。
+- 配合 push descriptor 提供 vkCmdPushDescriptorSet2 / vkCmdPushDescriptorSetWithTemplate2。
+- 放宽 index buffer 的空 handle 绑定规则；读取零值仍需 nullDescriptor 等前提。
+- VkPipelineCreateFlags2CreateInfo 来自 maintenance5，不属于 maintenance6。
 ```
 
-工程影响：引擎层在 1.4 设备上可以直接使用 `VkPipelineCreateFlags2CreateInfo` 和 `vkCmdBindDescriptorSets2KHR`，无需在 device extensions 列表声明 `VK_KHR_maintenance6`。[ENGINE]
+工程影响：按需启用 maintenance5 / maintenance6 feature 后使用对应核心命令，不把 64-bit pipeline flags 或 stride 行为误归到 maintenance6。依据：[maintenance5](https://docs.vulkan.org/refpages/latest/refpages/source/VK_KHR_maintenance5.html)、[maintenance6](https://docs.vulkan.org/refpages/latest/refpages/source/VK_KHR_maintenance6.html)。[SPEC][ENGINE]
 
-### 2.2 注意：扩展名仍可保留
+### 2.2 核心化不保证扩展名仍被枚举
 
-虽然 promote 到 core 后不再需要启用扩展，但旧代码继续把扩展名放进 `ppEnabledExtensionNames` 不会报错，只是冗余。建议在 1.4 代码路径下移除这些扩展名，避免 device extension 数量增长。[GUIDE]
+核心化不保证设备仍枚举原扩展名。只有 `vkEnumerateDeviceExtensionProperties` 确认支持的扩展才能放进 `ppEnabledExtensionNames`；走 1.4 核心路径时移除不再需要的字符串，低版本扩展路径继续按查询结果启用。[SPEC]
 
 ---
 
 ## 3. 强制功能
 
-Vulkan 1.4 把以下 feature 设为 mandatory，所有声称支持 1.4 的实现必须支持（通过 `vkGetPhysicalDeviceFeatures2` 返回的对应字段必为 `VK_TRUE`）：[SPEC]
+下列为常用 feature 的最低核心支持版本与字段归属，完整清单查 [Feature Requirements](https://docs.vulkan.org/spec/latest/chapters/features.html#features-requirements)。不要把扩展名、feature 字段和无独立 feature bit 的功能混列。[SPEC]
 
 ```text
-pushDescriptor                    （来自 VK_KHR_push_descriptor）
-dynamicRenderingLocalRead         （来自 VK_KHR_dynamic_rendering_local_read）
-scalarBlockLayout                 （来自 VK_KHR_scalar_block_layout / VK_EXT_scalar_block_layout）
-synchronization2                  （1.3 已 promote，1.4 升为 mandatory）
-dynamicRendering                  （1.3 已 promote，1.4 升为 mandatory）
-maintenance5                      （1.4 promote 并 mandatory）
-maintenance6                      （1.4 promote 并 mandatory）
-shaderIntegerDotProduct           （1.3 promote，1.4 mandatory）
-shaderSubgroupUniformControlFlow
-shaderTerminateInvocation
-shaderZeroInitializeWorkgroupMemory
-uniformBufferStandardLayout
-workgroupMemoryExplicitLayout
-indexTypeUint8
-lineRasterization
-calibratedTimestamps
-shaderExpectAssume
-shaderFloatControls2
-shaderSubgroupRotate
-globalPriorityQuery
-loadStoreOpNone
+Vulkan 1.2 已必须支持（VkPhysicalDeviceVulkan12Features）：
+  timelineSemaphore / uniformBufferStandardLayout
+Vulkan 1.3 已必须支持（VkPhysicalDeviceVulkan13Features）：
+  synchronization2 / dynamicRendering / shaderIntegerDotProduct /
+  shaderTerminateInvocation / shaderZeroInitializeWorkgroupMemory / maintenance4
+Vulkan 1.4 新增必须支持：
+  scalarBlockLayout（VkPhysicalDeviceVulkan12Features，1.2 已核心化）
+  pushDescriptor / dynamicRenderingLocalRead / maintenance5 / maintenance6 /
+  indexTypeUint8 / bresenhamLines / shaderExpectAssume / shaderFloatControls2 /
+  shaderSubgroupRotate / shaderSubgroupRotateClustered / globalPriorityQuery /
+  pipelineRobustness（以上字段位于 VkPhysicalDeviceVulkan14Features）
 ```
 
 > **注意**：mandatory 只表示"实现必须支持"，**不等于"自动启用"**。使用上述任何 feature 前，仍需在 `VkDeviceCreateInfo.pNext` 中通过对应版本的 feature struct 显式启用（1.2 promote → `VkPhysicalDeviceVulkan12Features`；1.3 promote → `VkPhysicalDeviceVulkan13Features`；1.4 promote → `VkPhysicalDeviceVulkan14Features`）。详见 §6.3 与 §7.2。[SPEC]
@@ -141,23 +134,24 @@ loadStoreOpNone
 ### 3.3 Scalar Block Layout [SPEC]
 
 ```text
-- 允许 buffer / uniform / storage block 按 scalar（4-byte）对齐，而非 std140 / std140 relaxed 规则。
-- shader 端通过 SCALAR 扩展修饰（GLSL `scalar` / HLSL 风格）或 SPIR-V 的 ScalarBlockLayout 装饰启用。
+- 按成员 scalar 类型的大小计算对齐，不是统一 4-byte；向量、矩阵和数组仍需核对布局。
+- GLSL 使用 GL_EXT_scalar_block_layout 与 layout(scalar)；SPIR-V 通过 Offset /
+  ArrayStride / MatrixStride 等表达具体布局，不存在 ScalarBlockLayout 装饰。
 - 1.4 强制支持，意味着引擎在 1.4 设备上可以统一使用 scalar layout，
   简化 CPU 端结构体布局与 GPU 端读取的对齐处理。
 ```
 
-工程影响：在 1.4 设备上，可以安全地用 C/C++ `struct` 直接 memcpy 到 uniform buffer，不需要手动加 padding，前提是 struct 中没有比 4 字节更小的类型混排导致跨平台问题。[GUIDE][HEUR]
+工程影响：可减少部分 padding，但 memcpy 前仍需用反射结果与 `offsetof` / `sizeof` 核对成员偏移、数组/矩阵 stride、矩阵主序和 host 类型布局，不能因启用 scalar layout 就假设任意 C/C++ struct 自动匹配。依据：[Shader Memory Layout](https://docs.vulkan.org/guide/latest/shader_memory_layout.html)。[GUIDE][ENGINE]
 
-### 3.4 Synchronization2 与 Dynamic Rendering 的强制化 [SPEC]
+### 3.4 Synchronization2 与 Dynamic Rendering 的版本边界 [SPEC]
 
 ```text
-- 1.3 时代 promote 但仍可选 → 1.4 mandatory。
-- 引擎在 1.4 设备上可以省略：
+- 1.3 已核心化且必须支持，1.4 继承该要求。
+- 应用采用 1.3+ 核心路径并显式启用 feature 后，可以省略：
     if (hasSync2) vkCmdPipelineBarrier2(...) else vkCmdPipelineBarrier(...)
   这类 fallback 路径（"无需 feature 检查" 指无需 vkGetPhysicalDeviceFeatures2 查询是否支持，
    因 mandatory 保证被支持；但仍需在 VkDeviceCreateInfo.pNext 中显式启用对应字段，见 §3 注意）。
-- 同理 vkCmdBeginRendering / vkCmdEndRendering 在 1.4 上无需运行时查询支持性，
+- 同理 vkCmdBeginRendering / vkCmdEndRendering 在 1.3+ 上保证支持，
   但仍需通过 VkPhysicalDeviceVulkan13Features.dynamicRendering 显式启用。
 ```
 
@@ -169,12 +163,13 @@ Vulkan 1.4 把若干 `VkPhysicalDeviceLimits` 字段的最低要求值上调。1
 
 | Limit 字段 | 1.3 最低 | 1.4 最低 | 工程影响 |
 |---|---|---|---|
-| `maxFramebufferWidth` | 4096 | **7680** | 可直接渲染大尺寸 RT，无需先查询 |
+| `maxFramebufferWidth` | 4096 | **7680** | 仍需核对 image format、samples、内存与 surface 限制 |
 | `maxFramebufferHeight` | 4096 | **7680** | 同上 |
-| `maxFramebufferLayers` | 256 | **2048** | 多层渲染 / 立体贴图 / array RT 能力大幅提升 |
-| `maxColorAttachments` | 7 | **8** | deferred / G-Buffer 路径可绑定 8 个 color attachment |
+| `maxFramebufferLayers` | 256 | **256** | 1.4 未将该下限提高到 2048 |
+| `maxImageArrayLayers` | 256 | **2048** | 区分 image array 层数与 framebuffer 层数 |
+| `maxColorAttachments` | 4 | **8** | 1.3 核心下限为 4，Roadmap 2022 才要求 7 |
 | `maxBoundDescriptorSets` | 4 | **7** | 可同时绑定 7 个 descriptor set（push descriptor + bindless 配合） |
-| `maxPushDescriptors` | （扩展定义，0 表示不支持） | **>= 32** | push descriptor 至少 32 个 binding 可用 |
+| `maxPushDescriptors` | 非 1.3 核心保证；扩展路径查询 | **>= 32** | 限制单个 push descriptor set 的 descriptor 总数，不是 binding 数 |
 | `maxPushConstantsSize` | 128 | **256** | push constants 容量翻倍，可放更多 per-draw 数据 |
 
 注意点：
@@ -184,12 +179,14 @@ Vulkan 1.4 把若干 `VkPhysicalDeviceLimits` 字段的最低要求值上调。1
    仍需查询 VkSurfaceCapabilitiesKHR.currentExtent / maxImageExtent。[ANDROID][SPEC]
 2. maxColorAttachments 提升到 8 仅意味着 attachment 数量上限，
    不保证 8 个 attachment 都能在 tile 内一次性 resolve（移动端 tile memory 仍是真实瓶颈）。[VENDOR]
-3. 7 个 bound descriptor sets 是上限值，pipeline layout 实际使用的 set 数量
-   仍需匹配 shader 中声明的 set 索引。[SPEC]
+3. 7 是 1.4 对 maxBoundDescriptorSets 的最低保证值，不是所有设备的固定上限；
+   实际数量查设备属性，pipeline layout 覆盖 shader 中使用的 set 索引。[SPEC]
 4. maxPushConstantsSize 提升到 256 字节，但仍需按 4 字节对齐使用。[SPEC]
 ```
 
 最低限制只是 floor。具体设备的 limit 仍可能更高，必须用 `vkGetPhysicalDeviceProperties` 读取实际值后再使用。[SPEC]
+
+依据：[Limits / Required Limits](https://docs.vulkan.org/spec/latest/chapters/limits.html#limits-minmax)。`maxPushDescriptors` 在 1.4 通过 `VkPhysicalDeviceVulkan14Properties` 查询，不是 `VkPhysicalDeviceLimits` 成员。
 
 ---
 
@@ -198,47 +195,43 @@ Vulkan 1.4 把若干 `VkPhysicalDeviceLimits` 字段的最低要求值上调。1
 | 维度 | Vulkan 1.3 | Vulkan 1.4 |
 |---|---|---|
 | 发布时间 | 2022-01 | 2024-12 [SPEC] |
-| 核心 promote 的 KHR 扩展数 | 11 项（含 sync2、dynamic rendering、maintenance4 等） | 11 项新增（含 maintenance6、push descriptor、dynamic rendering local read 等）[SPEC] |
-| mandatory feature 数 | 较少（dynamic state、descriptor indexing 等仍可选） | 大幅增加（sync2、dynamic rendering、push descriptor、scalar block layout、maintenance5/6 等 mandatory）[SPEC] |
+| 核心化能力 | 已包含 sync2、dynamic rendering、maintenance4 | 新增 16 项 KHR / EXT 扩展，见 §2 [SPEC] |
+| 必须支持的 feature | 包含 sync2、dynamic rendering 等 | 新增 pushDescriptor、scalarBlockLayout、maintenance5/6 等要求 [SPEC] |
 | maxFramebufferWidth/Height 下限 | 4096 | 7680 [SPEC] |
-| maxColorAttachments 下限 | 7 | 8 [SPEC] |
-| maxFramebufferLayers 下限 | 256 | 2048 [SPEC] |
+| maxColorAttachments 下限 | 4 | 8 [SPEC] |
+| maxFramebufferLayers 下限 | 256 | 256 [SPEC] |
 | maxBoundDescriptorSets 下限 | 4 | 7 [SPEC] |
 | maxPushConstantsSize 下限 | 128 | 256 [SPEC] |
 | Push Descriptor | 可选（`VK_KHR_push_descriptor`） | mandatory，min 32 [SPEC] |
-| Dynamic Rendering Local Read | 不存在 | mandatory [SPEC] |
-| Scalar Block Layout | 可选（`VK_KHR_scalar_block_layout`） | mandatory [SPEC] |
-| Pipeline Create Flags | 32-bit | 64-bit（`VkPipelineCreateFlags2CreateInfo`，来自 maintenance6）[SPEC] |
-| Android 平台要求 | Android 14 起新设备 Vulkan 1.3 要求 | Android 16 起新设备开始支持 Vulkan 1.4（详见 §6）[ANDROID] |
-| 典型驱动覆盖 | 主流桌面 + Android 主流设备成熟 | 桌面较快跟进，Android 移动端 2025-2026 逐步覆盖 [ANDROID][VENDOR] |
+| Dynamic Rendering Local Read | 可通过 KHR 扩展使用 | 基础 local read 必须支持，depth/stencil / MSAA 查 properties [SPEC] |
+| Scalar Block Layout | 1.2 已核心化，核心支持可选；扩展名为 `VK_EXT_scalar_block_layout` | 必须支持 [SPEC] |
+| Pipeline Create Flags | 核心为 32-bit，可用 maintenance5 扩展路径 | 核心包含 64-bit flags，来自 maintenance5 [SPEC] |
+| Android 可用性 | 按设备实际能力选择 | 按设备实际能力选择，见 §6 [ANDROID] |
 
 工程结论：1.4 不是颠覆性升级，而是 1.3 时代“事实标准”特性的正式 mandatory 化。从 1.3 升级到 1.4 的工作量主要在 feature negotiation 简化与 limit 假设更新，而非 API 重写。[GUIDE][ENGINE]
 
 ---
 
-## 6. Android 支持时间线
+## 6. Android 能力边界
 
 ### 6.1 平台层 [ANDROID]
 
 ```text
-- Android 14（2023 发布）：要求新设备支持 Vulkan 1.3（针对特定硬件档位）。
-- Android 15（2024 发布）：扩大 Vulkan 1.3 覆盖范围。
-- Android 16（2025 发布）：平台开始支持 Vulkan 1.4。
-  注意：平台支持 != 所有 Android 16 设备都升级到 1.4 驱动。
-  Android 16 提供了 1.4 的 CTS / 平台 API 路径，
-  但具体是否为 1.4 取决于 SoC 厂商驱动是否完成适配。
+- Android 系统版本、NDK 头文件版本与设备驱动暴露的 Vulkan 能力分别核对。
+- 不按 Android 大版本直接推断所有设备的 Vulkan API 版本。
+- 发行要求涉及 Android CDD / CTS 时，必须查询目标版本对应的官方条款。
 ```
 
-### 6.2 厂商驱动跟进 [VENDOR][ANDROID]
+### 6.2 设备与驱动 [VENDOR][ANDROID]
 
 ```text
-- Imagination（PowerVR）：基于 Rogue / DXT 架构的新驱动逐步支持 1.4。
-- Qualcomm（Adreno）：Adreno 7.x / 8.x 系列驱动从 2025 起逐步支持 1.4。
-- Arm（Mali）：Valhall / 5th Gen 架构驱动从 2025-2026 逐步跟进。
-- 三星 Xclipse（AMD 定制 GPU）：依 AMD 桌面驱动进度跟进。
+- 记录 GPU、driverVersion、apiVersion、所需 extension / feature / properties。
+- 同一 SoC 的设备与 OTA 驱动可能不同，不使用未核实的厂商支持时间线作为能力依据。
 ```
 
 厂商驱动具体可用性必须运行时查询，不能按 SoC 型号硬编码判断。[VENDOR][ANDROID]
+
+平台依据：[Android Vulkan Getting Started](https://developer.android.com/ndk/guides/graphics/getting-started)。
 
 ### 6.3 运行时查询 [SPEC]
 
@@ -246,18 +239,20 @@ Vulkan 1.4 把若干 `VkPhysicalDeviceLimits` 字段的最低要求值上调。1
 VkPhysicalDeviceProperties props;
 vkGetPhysicalDeviceProperties(physicalDevice, &props);
 
-if (props.apiVersion >= VK_VERSION_1_4) {
+if (props.apiVersion >= VK_API_VERSION_1_4) {
     // 1.4 路径：mandatory feature 保证被支持（vkGetPhysicalDeviceFeatures2 返回 VK_TRUE），
     //          但仍需在 VkDeviceCreateInfo.pNext 中显式启用对应字段：
-    //          - Vulkan 1.3 promote（sync2 / dynamicRendering / scalarBlockLayout 等）
+    //          - Vulkan 1.2 promote：scalarBlockLayout → VkPhysicalDeviceVulkan12Features；
+    //          - Vulkan 1.3 promote（sync2 / dynamicRendering）
     //            → VkPhysicalDeviceVulkan13Features 对应字段；
     //          - Vulkan 1.4 promote（push descriptor / dynamic rendering local read /
     //            maintenance5 / maintenance6 等）
     //            → VkPhysicalDeviceVulkan14Features 对应字段。
     //          注意 sync2 是 1.3 promote，字段在 Vulkan13Features，不在 Vulkan14Features。
     //          省略启用会导致调用相关 API 时 validation error 或 undefined behavior。[SPEC]
-} else if (props.apiVersion >= VK_VERSION_1_3) {
-    // 1.3 路径：仍需查询 VkPhysicalDeviceVulkan13Features 中的 sync2 / dynamicRendering。
+} else if (props.apiVersion >= VK_API_VERSION_1_3) {
+    // 1.3 路径：sync2 / dynamicRendering 已必须支持，但仍需显式启用。
+    // scalarBlockLayout 的核心支持仍可选，按需查询并启用。
 } else {
     // 1.2 及以下：扩展路径 + 完整 feature 查询。
 }
@@ -266,8 +261,8 @@ if (props.apiVersion >= VK_VERSION_1_4) {
 注意：
 
 ```text
-1. apiVersion 是驱动支持的最高 API 版本，与 instance 创建时传入的版本无关。
-   instance 版本只决定可用的入口函数集合。[SPEC]
+1. 上述仅为设备能力分支；创建 instance 前还需协商应用请求版本与 loader 版本，
+   核心路径匹配应用版本、设备版本与可用入口，不能仅凭设备版本调用更高版本 API。[SPEC]
 2. Android 上同一设备的 apiVersion 可能随 OTA 驱动更新而提升，
    不要在 APK 里硬编码 1.4 / 1.3 分支，必须每次启动时查询。[ANDROID]
 3. 即使 apiVersion >= 1.4，仍应优先走 validation layer 验证 1.4 行为，
@@ -281,8 +276,8 @@ if (props.apiVersion >= VK_VERSION_1_4) {
 ### 7.1 何时迁移到 1.4 基线 [GUIDE][ENGINE]
 
 ```text
-- 目标设备以桌面 GPU + 2025 年后的 Android 高端机为主：可立即以 1.4 为目标基线。
-- 目标设备仍包含 Android 14 / 15 中低端机：保留 1.3 fallback，1.4 作为优化路径。
+- 目标设备清单已验证满足 1.4 及所需能力：可将 1.4 作为项目基线。
+- 目标清单仍包含较低版本设备：保留相应核心或扩展路径，不以年份和档位代替查询。
 - 项目当前以 1.3 + 大量 KHR 扩展启用：迁移成本低，主要是清理冗余的 feature 查询。
 ```
 
@@ -291,13 +286,13 @@ if (props.apiVersion >= VK_VERSION_1_4) {
 ```text
 1. 升级 Vulkan Headers / Loader 到 1.4（含 VK_VERSION_1_4 宏）。
 2. 升级 Validation Layer 到匹配版本，避免误报。
-3. 在 device selection 阶段加入 apiVersion >= VK_VERSION_1_4 分支。
+3. 在 device selection 阶段加入 apiVersion >= VK_API_VERSION_1_4 分支，并匹配应用版本。
 4. 在 1.4 分支内：
    a. 移除 VK_KHR_push_descriptor / VK_KHR_dynamic_rendering_local_read /
-      VK_KHR_scalar_block_layout / VK_KHR_maintenance6 等扩展名。
+      VK_EXT_scalar_block_layout / VK_KHR_maintenance6 等不再需要的扩展名。
    b. 移除对应 feature 的查询代码（仍可保留一次 sanity assert 确认驱动合规）。
       注意：mandatory 不等于不需启用 — 仍需在 VkDeviceCreateInfo.pNext 中通过
-      VkPhysicalDeviceVulkan14Features 显式启用对应字段。[SPEC]
+      对应版本的 feature struct 显式启用字段，不能全部写进 Vulkan14Features。[SPEC]
    c. 用 VkPipelineCreateFlags2CreateInfo 替换旧 pipeline flags（可选）。
    d. 引擎层 renderer 把 G-Buffer 读取从传统 input attachment 迁移到 local read
       （仍使用 subpassInput / subpassLoad，但无需 VkRenderPass / VkFramebuffer）。
@@ -309,7 +304,7 @@ if (props.apiVersion >= VK_VERSION_1_4) {
       切勿把 1.2/1.3 promote 字段写入 Vulkan14Features —— 该结构体中不存在这些字段。[SPEC]
 5. 更新 limit 假设：maxFramebufferWidth/Height 可直接假设 >= 7680，
    maxColorAttachments >= 8，maxBoundDescriptorSets >= 7，maxPushConstantsSize >= 256。
-6. 移除 sync2 / dynamic rendering 的 fallback 路径（仅在 1.4 分支内）。
+6. 1.3+ 核心路径显式启用 sync2 / dynamic rendering 后，可移除该分支内的旧 API fallback。
 ```
 
 ### 7.3 不要做的事 [HEUR][ENGINE]
@@ -317,8 +312,8 @@ if (props.apiVersion >= VK_VERSION_1_4) {
 ```text
 - 不要在 1.4 分支内完全删除 feature 查询代码，保留一份 minimal assert 用作驱动合规性检查。
 - 不要把 7680 framebuffer 当成日常 RT，移动端 tile memory 与带宽仍是真实约束。
-- 不要假设所有 1.4 设备都把 maintenance6 的 partial push descriptor update 实现得很好，
-  上线前用 RenderDoc / AGI 抓帧验证。[TOOL]
+- 不要把 maintenance6 的扩展绑定接口视为同步替代，
+  上线前仍需检查 descriptor 有效性、资源生命周期与目标设备输出。[TOOL]
 - 不要立刻全面切换 push descriptor 替代传统 descriptor pool，
   建议先在 per-draw 小数据量场景试点，确认性能与正确性后再扩展。[GUIDE]
 ```
@@ -339,7 +334,11 @@ if (props.apiVersion >= VK_VERSION_1_4) {
 
 ## 8. 相关文件
 
-- `synchronization_lifecycle.md` — Synchronization2 fallback 与 1.4 简化路径。
+- [Vulkan 1.4 核心化清单与差异](https://docs.vulkan.org/refpages/latest/refpages/source/VK_VERSION_1_4.html)
+- [API 版本数值宏](https://docs.vulkan.org/refpages/latest/refpages/source/VK_API_VERSION_1_4.html)
+- [Vulkan12Features](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceVulkan12Features.html) / [Vulkan13Features](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceVulkan13Features.html) / [Vulkan14Features](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceVulkan14Features.html)
+
+- `synchronization_lifecycle.md` — Synchronization2 fallback 与 1.3+ 核心路径。
 - `modern_patterns.md` — bindless / timeline semaphore / dynamic state 等 1.3+ 模式。
 - `frame_lifecycle.md` — frames-in-flight 与 1.4 limit 提升后的资源管理。
 - `../03_api_manual/05_descriptor/push_descriptor.md` — push descriptor API 细节。

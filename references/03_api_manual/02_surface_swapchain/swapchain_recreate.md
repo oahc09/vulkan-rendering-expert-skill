@@ -25,7 +25,7 @@ Swapchain recreate 是在 surface 尺寸、方向或可用性发生变化时，�
 ```text
 Surface 尺寸 / 方向变化 或 VK_ERROR_OUT_OF_DATE_KHR
 → 停止提交新帧
-→ 等待 GPU idle / in-flight 完成
+→ 等待引用旧渲染资源的 GPU 提交完成，单独追踪旧 present 资源退役
 → 销毁尺寸相关资源（image view / framebuffer / depth / offscreen / descriptor）
 → vkCreateSwapchainKHR(oldSwapchain = 旧 swapchain)
 → 获取新 swapchain images
@@ -42,7 +42,7 @@ Surface 尺寸 / 方向变化 或 VK_ERROR_OUT_OF_DATE_KHR
 
 ### 下游影响
 
-- 所有 swapchain-size 资源必须重建：image view、framebuffer、depth/stencil image、offscreen render target、per-frame uniform buffer 等。
+- 重建或调整依赖实际变化的资源：swapchain image view、framebuffer、尺寸相关 depth/offscreen image；普通 per-frame uniform buffer 无需因 resize 重新分配，只需更新受影响数据。[ENGINE]
 - 引用这些资源的 descriptor set 必须更新。
 - viewport / scissor / dynamic rendering 尺寸必须刷新。
 
@@ -63,16 +63,16 @@ Surface 尺寸 / 方向变化 或 VK_ERROR_OUT_OF_DATE_KHR
 | API | 作用 |
 |---|---|
 | `vkCreateSwapchainKHR` | 创建新 swapchain，传入 `oldSwapchain` 让旧 swapchain 退休。[SPEC] |
-| `vkDestroySwapchainKHR` | 销毁 swapchain；若旧 swapchain 已退休且 GPU 用完，可安全销毁。[SPEC] |
-| `vkDeviceWaitIdle` | 等待所有 queue 完成，常用于 recreate 前同步。[SPEC] |
-| `vkQueueWaitIdle` | 等待单个 queue 完成，可作为更轻量的替代。[SPEC] |
+| `vkDestroySwapchainKHR` | 销毁前确认所有使用已结束；retired 状态本身不代表可释放。[SPEC] |
+| `vkDeviceWaitIdle` | 等待设备 queue 提交完成，不能单独证明无扩展 present 资源可释放。[SPEC][GUIDE] |
+| `vkQueueWaitIdle` | 等待指定 queue 提交完成，同样不能代替 present 资源完成追踪。[SPEC][GUIDE] |
 | `vkGetSwapchainImagesKHR` | 获取新 swapchain 的 image handle。[SPEC] |
 
 ### 相关扩展 / 版本
 
 - `VK_KHR_swapchain`：基础 recreate 支持。
-- `VK_EXT_swapchain_maintenance1`：允许 retired swapchain 延迟销毁，减少卡顿。
-- Android 可用性：全部可用。[ANDROID]
+- `VK_EXT_swapchain_maintenance1`（或已支持的 KHR 同名后继）：提供 present fence 等能力；查询扩展与对应 feature 并启用后才能使用，不是退休状态自动释放机制。[SPEC]
+- Android 必须查询目标设备对所需扩展和 feature 的支持，不假设全部可用。[ANDROID]
 
 ---
 
@@ -87,8 +87,10 @@ Surface 尺寸 / 方向变化 或 VK_ERROR_OUT_OF_DATE_KHR
 
 步骤:
 1. 设置 recreate 标志，暂停下一帧渲染。
-2. 等待当前 frame 的 fence signal（或 vkDeviceWaitIdle）。
-3. 调用 vkQueueWaitIdle(presentQueue) 确保 present 完成。
+2. 等待所有引用待销毁渲染资源的提交完成（相关 fence 或 vkDeviceWaitIdle），不是只等当前 frame。
+3. 已启用 swapchain_maintenance1 时，等待相关 present fence 后释放对应 present semaphore。
+   无扩展时按官方 swapchain_recreation 样例维护旧 swapchain / present 资源退役；
+   WaitIdle 是常见兼容做法，但不能作为严格的 presentation 资源释放证明。
 4. 销毁依赖旧 swapchain image 的 framebuffer / image view。
 5. 销毁依赖尺寸的 depth image / offscreen image / render target。
 6. vkCreateSwapchainKHR(..., oldSwapchain = oldSwapchain, ...)。
@@ -96,8 +98,11 @@ Surface 尺寸 / 方向变化 或 VK_ERROR_OUT_OF_DATE_KHR
 8. 为新 images 创建 image view。
 9. 重建 framebuffer / depth / offscreen。
 10. 更新 descriptor set 中引用尺寸相关 image 的条目。
-11. 重置 recreate 标志，恢复渲染。
+11. 新 swapchain 按 image 数量建立 render-finished semaphore 数组；旧数组随旧 present 资源退役。
+12. 确认旧 swapchain 所有使用结束后销毁；重置 recreate 标志，恢复渲染。
 ```
+
+`VK_SUBOPTIMAL_KHR` 的 acquire 已取得 image 并安排信号，可以完成本帧 submit / present 后重建；`VK_ERROR_OUT_OF_DATE_KHR` 未取得 image，不得继续 submit，也不得 reset 本轮尚未提交的 frame fence。acquire 的 `VK_TIMEOUT` / `VK_NOT_READY` 跳过本轮；Surface / device lost 进入对应恢复路径。[SPEC][ENGINE]
 
 ---
 
@@ -105,7 +110,7 @@ Surface 尺寸 / 方向变化 或 VK_ERROR_OUT_OF_DATE_KHR
 
 | 字段 / 参数 | 专家关注点 | 常见错误 |
 |---|---|---|
-| `oldSwapchain` | 传入旧 swapchain 可实现 images 无缝继承，避免黑屏 / flicker。[SPEC] | 传 `VK_NULL_HANDLE`，resize 时旧 image 立即释放，可能闪黑。[HEUR] |
+| `oldSwapchain` | 同一有效 Surface 上替换 swapchain 时传入旧 handle；调用后旧 swapchain 进入 retired，即使创建失败也不能继续从它 acquire。[SPEC] | 误以为 image 内容自动继承，或把 retired 当作所有工作已完成。[ENGINE] |
 | `imageExtent` | 必须重新查询 surface capabilities 后使用最新 `currentExtent`。[SPEC] | 仍用旧 extent，导致创建失败或画面拉伸。[TOOL] |
 | `preTransform` | Android rotation 后应重新对齐 `currentTransform`。[ANDROID] | 仍用旧 transform，导致 compositor 额外旋转。[TOOL] |
 | `minImageCount` | 可能随 surface 变化，应重新查询。[SPEC] | 假设不变，新设备或模式下可能失败。[TOOL] |
@@ -132,7 +137,7 @@ Surface 尺寸 / 方向变化 或 VK_ERROR_OUT_OF_DATE_KHR
 
 - [ ] 是否按“framebuffer → image view → depth / offscreen → swapchain”顺序销毁？
 - [ ] descriptor 是否已更新为新 image view / buffer？
-- [ ] 旧 swapchain 是否在 GPU idle 后销毁？[SPEC]
+- [ ] 旧 swapchain 和旧 present semaphore 是否分别确认所有相关使用结束后销毁？[SPEC]
 
 ---
 
@@ -153,8 +158,7 @@ Surface 尺寸 / 方向变化 或 VK_ERROR_OUT_OF_DATE_KHR
 
 ### Validation Layer
 
-- `VUID-vkCreateSwapchainKHR-surface-01270`：surface 仍被旧 swapchain 使用。
-- `VUID-vkDestroySwapchainKHR-swapchain-01282`：swapchain 仍被 command buffer 引用。
+- 创建/销毁错误按实际 VUID 核对 [vkCreateSwapchainKHR](https://docs.vulkan.org/refpages/latest/refpages/source/vkCreateSwapchainKHR.html) / [vkDestroySwapchainKHR](https://docs.vulkan.org/refpages/latest/refpages/source/vkDestroySwapchainKHR.html)，不把 surface 或 in-flight 错误归到未经核实的编号。
 - `VK_ERROR_OUT_OF_DATE_KHR` / `VK_SUBOPTIMAL_KHR` 提示 recreate 触发点。[TOOL]
 
 ### RenderDoc / AGI
@@ -185,13 +189,13 @@ Surface 尺寸 / 方向变化 或 VK_ERROR_OUT_OF_DATE_KHR
 
 ### 销毁时机
 
-- 旧 swapchain 应在 GPU idle 或所有 in-flight present 完成后销毁。[SPEC]
-- 依赖旧 swapchain image 的 image view / framebuffer 必须在新 swapchain 使用前销毁。[SPEC]
+- 旧 swapchain 销毁前须确认 GPU 提交和 presentation 对相关资源的使用已结束；单独的 submit fence / WaitIdle 不是 present 资源完成证明。[SPEC][GUIDE]
+- 旧 image view / framebuffer 在引用它们的提交完成后销毁，不要求一定先于新 swapchain 使用；同步正确时可让新旧资源短暂并存。[SPEC][ENGINE]
 
 ### in-flight 风险
 
 - retired swapchain 的 image 仍可能被 pending command buffer 引用，销毁前必须确保 GPU 完成。[SPEC]
-- frame-in-flight 的 fence 必须全部 signal 后才能安全释放旧资源。[ENGINE]
+- 所有引用旧渲染资源的 frame fence 完成仅覆盖提交侧，present 资源还需独立追踪。[ENGINE]
 
 ---
 
@@ -199,12 +203,12 @@ Surface 尺寸 / 方向变化 或 VK_ERROR_OUT_OF_DATE_KHR
 
 ### CPU-GPU 同步
 
-- recreate 前通常使用 `vkDeviceWaitIdle` 或等待所有 frame fence。[SPEC]
-- 若使用 `vkQueueWaitIdle`，需确保覆盖 graphics 和 present queue。[SPEC]
+- recreate 前等待所有引用待释放渲染资源的提交；可选相关 fence / timeline value 或 WaitIdle。[SPEC]
+- present fence 的含义是相关 presentation 资源可安全释放，不等同于该帧已被物理屏幕显示。[SPEC]
 
 ### GPU-GPU 同步
 
-- 旧 swapchain 的 present 可能仍在进行，新 swapchain 的 acquire 不应与旧 swapchain 的 present 重叠。[SPEC]
+- 新旧 swapchain 的工作可以重叠，但必须分开维护资源与退役条件，不复用仍被旧 present 使用的 semaphore。[SPEC][ENGINE]
 - 新 swapchain 的 acquire semaphore 必须配对新 swapchain 的 submit。[ENGINE]
 
 ### 资源访问同步
@@ -228,25 +232,25 @@ Surface 尺寸 / 方向变化 或 VK_ERROR_OUT_OF_DATE_KHR
 
 ### CPU 侧
 
-- `vkDeviceWaitIdle` 会阻塞 CPU，可能导致卡顿；可考虑 per-frame fence 等待替代。[ENGINE]
+- `vkDeviceWaitIdle` 会阻塞 CPU；可用相关提交 fence / timeline value 缩小等待范围，present 资源仍需单独追踪。[ENGINE]
 - 频繁 resize（如用户拖拽窗口）应 debounce recreate，避免每帧重建。[ENGINE]
 
 ### GPU 侧
 
 - 旧 swapchain 退休期间，driver 可能同时维护两套 image，短暂增加内存占用。[HEUR]
-- `VK_EXT_swapchain_maintenance1` 可让 retired swapchain 延迟销毁，减少 stall。[GUIDE]
+- swapchain_maintenance1 的 present fence 使 presentation 资源回收有明确完成点，可配合延迟销毁减少 stall。[GUIDE]
 
 ### 移动端
 
 - Android rotation 时，重建 depth / offscreen 资源是主要开销；应尽量复用 allocator / memory pool。[ENGINE]
-- 移动端 recreate 时避免 `vkDeviceWaitIdle`，优先使用 per-frame fence 等待。[ENGINE]
+- 移动端按已测瓶颈选择等待策略；优化前先保证提交与 present 资源的退役条件完整。[ENGINE]
 
 ---
 
 ## 13. 专家经验
 
 **经验**：
-把 swapchain recreate 封装为一个独立阶段，与正常 frame loop 互斥。recreate 期间禁止任何 command buffer 录制、submit 和 present，直到所有旧资源释放完毕。
+简单 renderer 可把 recreate 封装为与正常 frame loop 互斥的阶段；使用延迟退役的 renderer 可在切换到新资源后继续渲染，但旧 present 资源必须保留到安全回收点。不要把简单实现策略标成 Vulkan 限制。
 
 **适用条件**：
 存在 resize / rotation / surface 重建的 Android 或桌面应用，使用传统 per-frame resource 管理。
@@ -280,3 +284,5 @@ Surface 尺寸 / 方向变化 或 VK_ERROR_OUT_OF_DATE_KHR
 3. Android 设备在 `onPause` / `onResume` / rotation 时对 `ANativeWindow` 和 swapchain 的生命周期差异。
 4. 多 queue / 多 surface 场景下的 recreate 同步策略。
 5. `VkSurfaceCapabilitiesKHR` 中 `currentExtent` 为 0 或 `0xFFFFFFFF` 时的精确处理。
+
+依据：[Swapchain Semaphore Reuse](https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html)、[官方 Swapchain Recreation 样例](https://docs.vulkan.org/samples/latest/samples/api/swapchain_recreation/README.html)。

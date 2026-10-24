@@ -10,7 +10,7 @@
 | 常用 API | `vkCreateSemaphore` / `vkGetSemaphoreCounterValue` / `vkWaitSemaphores` / `vkSignalSemaphore` / `vkQueueSubmit2` |
 | 适用平台 | 通用 |
 | 来源等级 | `[SPEC] [TOOL] [ENGINE]` |
-| 适用 Vulkan 版本 | `VK_KHR_timeline_semaphore` / Vulkan 1.2 core / Vulkan 1.4 promote 为 mandatory feature（仍需通过 `VkPhysicalDeviceVulkan12Features.timelineSemaphore` 显式启用） |
+| 适用 Vulkan 版本 | `VK_KHR_timeline_semaphore` / Vulkan 1.2 core 且必须支持（仍需通过 `VkPhysicalDeviceVulkan12Features.timelineSemaphore` 显式启用） |
 
 ---
 
@@ -34,7 +34,7 @@ VkDevice（启用 timelineSemaphore feature）
 ### 上游依赖
 
 - 已启用 `timelineSemaphore` feature（`VkPhysicalDeviceTimelineSemaphoreFeatures` 或 `VkPhysicalDeviceVulkan12Features.timelineSemaphore`）。[SPEC]
-- Vulkan 1.4 起 timeline semaphore promote 为 mandatory feature（保证被支持），但 **仍需在 `VkDeviceCreateInfo.pNext` 中通过 `VkPhysicalDeviceVulkan12Features.timelineSemaphore = VK_TRUE`（或独立结构 `VkPhysicalDeviceTimelineSemaphoreFeatures.timelineSemaphore`）显式启用** 后才能使用相关 API。`timelineSemaphore` 是 Vulkan 1.2 promote，字段位于 `VkPhysicalDeviceVulkan12Features`，**不在 `VkPhysicalDeviceVulkan14Features`**。[SPEC]
+- Vulkan 1.2 起已核心化且必须支持，但 **仍需在 `VkDeviceCreateInfo.pNext` 中通过 `VkPhysicalDeviceVulkan12Features.timelineSemaphore = VK_TRUE`（或独立 feature 结构）显式启用**；字段不在 Vulkan14Features。依据：[Feature Requirements](https://docs.vulkan.org/spec/latest/chapters/features.html#features-requirements)。[SPEC]
 - Android 平台需运行时确认 `vkGetPhysicalDeviceFeatures2` 返回 `timelineSemaphore == VK_TRUE`；旧 Mali/Adreno 驱动可能仅 Vulkan 1.1 而不支持 timeline semaphore。[ANDROID]
 
 ### 下游影响
@@ -71,7 +71,7 @@ VkDevice（启用 timelineSemaphore feature）
 
 - `VK_KHR_timeline_semaphore`（Vulkan 1.1 + extension）。[SPEC]
 - Vulkan 1.2 起 timeline semaphore 进入 core，仍需通过 `VkPhysicalDeviceVulkan12Features::timelineSemaphore` 查询并启用。[SPEC]
-- Vulkan 1.4 起 timeline semaphore promote 为 mandatory feature（保证被支持），但仍需通过 `VkPhysicalDeviceVulkan12Features.timelineSemaphore`（1.2 promote，**不在 Vulkan14Features**）显式启用。[SPEC]
+- Vulkan 1.3 / 1.4 继承 1.2 的必须支持要求，字段仍通过 Vulkan12Features 启用；WSI acquire / present 必须使用 binary semaphore。[SPEC]
 - 与 `VK_KHR_synchronization2` 联合使用以获得 `VkSemaphoreSubmitInfo` 这一更直观的 value 嵌入路径。[SPEC]
 
 ---
@@ -321,7 +321,7 @@ vkQueueSubmit2(queue, 1, &submit, fence_optional);
 1. `VkSemaphoreTypeCreateInfo` 在 `pNext` 链中与 `VkExternalSemaphoreTypeCreateInfo`、`VkExportMetalObjectCreateInfoEXT` 等扩展结构体的共存规则。[SPEC]
 2. `vkQueueSubmit2` 中混合使用 binary semaphore（无 value）与 timeline semaphore（有 value）时 `VkSemaphoreSubmitInfo` 的字段语义。[SPEC]
 3. `vkWaitSemaphores` 的 `VkSemaphoreWaitInfo.flags` 中 `VK_SEMAPHORE_WAIT_ANY_BIT` 在不同驱动上的支持差异（Android 旧驱动可能不支持 wait-any）。[SPEC][ANDROID]
-4. Vulkan 1.4 将 timeline semaphore 提升为 mandatory feature 后，是否有 VUID 行为变化或更严格的 monotonic 校验；以及 `VkPhysicalDeviceVulkan12Features.timelineSemaphore`（1.2 promote）的查询路径在 1.4 设备上的最佳实践。[SPEC]
+4. 所用 SDK / Validation Layer 对跨 queue signal 顺序与 timeline value 的实际校验覆盖，以及 Vulkan12Features 的启用路径；不要误认为 timeline 到 1.4 才必须支持。[SPEC]
 5. Timeline semaphore 与 `VK_KHR_external_semaphore` / `VK_KHR_external_semaphore_fd` 跨进程传递的 counter 语义和同步点。[SPEC]
 6. Android 上 timeline semaphore 在 present 后 counter 是否被驱动隐式推进的实现差异。[ANDROID]
 7. `vkSignalSemaphore` 在 GPU 已 pending signal 但未完成时的精确语义（是否允许 host 提前推进）。[SPEC]

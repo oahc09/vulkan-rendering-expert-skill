@@ -250,7 +250,7 @@ vkQueueSubmit2(queue, 1, &submitInfo, inFlightFence);
 ## 13. 专家经验
 
 **经验**：
-标准双缓冲 / 三缓冲 frame loop 中，每帧使用独立的 imageAvailableSemaphore、renderFinishedSemaphore 和 inFlightFence。不要把同一 semaphore / fence 用于重叠的多帧。
+标准 frame loop 中，imageAvailableSemaphore 与 inFlightFence 按 frame slot 管理，renderFinishedSemaphore 按 swapchain image 管理。submit fence 不证明 present 已消费 renderFinishedSemaphore；不可在旧使用仍 pending 时重新 signal。依据：[Swapchain Semaphore Reuse](https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html)。
 
 **适用条件**：
 常规 Android / 桌面渲染，存在多 frame-in-flight。

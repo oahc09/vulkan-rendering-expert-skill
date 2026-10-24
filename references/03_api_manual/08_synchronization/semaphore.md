@@ -147,10 +147,9 @@
 
 ### Validation Layer
 
-- `VUID-vkQueueSubmit-pWaitSemaphores-00068`：wait semaphore 必须已被 signal 或处于 pending signal 状态。
-- `VUID-vkQueuePresentKHR-pWaitSemaphores-03267`：present 等待的 semaphore 必须有效。
-- `VUID-vkAcquireNextImageKHR-semaphore-01782`：acquire semaphore 必须 unsignaled。
-- Timeline semaphore 相关 VUID：`VUID-VkSemaphoreTypeCreateInfo-semaphoreType-03279` 等。
+- `VUID-vkAcquireNextImageKHR-semaphore-01286`：acquire semaphore 必须 unsignaled。
+- `VUID-vkAcquireNextImageKHR-semaphore-01779`：acquire semaphore 不得有未完成的 signal / wait 操作。
+- 其他错误按实际 Validation 消息回查 [vkQueueSubmit](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueSubmit.html)、[vkQueuePresentKHR](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueuePresentKHR.html)、[VkSemaphoreTypeCreateInfo](https://docs.vulkan.org/refpages/latest/refpages/source/VkSemaphoreTypeCreateInfo.html)，不要用未经核对的 VUID 概括多种错误。
 
 ### RenderDoc / AGI
 
@@ -183,6 +182,7 @@
 ### in-flight 风险
 
 - Binary semaphore 被 submit 引用后，在对应 signal 完成且被消费前不能复用或销毁。[SPEC]
+- present 等待的 binary semaphore 不能仅凭 submit fence 完成就再次 signal。常用方案按 swapchain image 分配，由 acquire 的 imageIndex 索引；再次 acquire 同一 image 并等待 acquire 同步后，才保证此前 present 已不再使用对应 semaphore。[SPEC][GUIDE]
 - Timeline semaphore 的 value 被 wait 引用后，在 wait 完成前不能 reset 或销毁。[SPEC]
 
 ---
@@ -200,13 +200,13 @@
 
 ### 资源访问同步
 
-- Semaphore 保证执行顺序，但不保证 memory availability / visibility；跨 queue 资源访问仍需正确的 pipeline stage mask 和 access mask（或在 synchronization2 中使用 `VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT` 等语义）。[SPEC]
+- Semaphore 的 signal / wait 在各自同步范围内建立执行与内存依赖；不是“只保证执行顺序”。跨 queue 仍需选对 stage，并用 barrier 完成必要的 image layout transition 与 exclusive queue-family ownership transfer。依据：[Synchronization Examples](https://docs.vulkan.org/guide/latest/synchronization_examples.html)。[SPEC]
 
 ---
 
 ## 11. Android 注意点
 
-- Android 上 swapchain acquire / present 的 semaphore 使用与 desktop 一致，但需特别处理 `VK_SUBOPTIMAL_KHR` / `VK_ERROR_OUT_OF_DATE_KHR` 后的 semaphore 池重建。[ANDROID]
+- Android 上同样区分 acquire 的 SUBOPTIMAL（已取得 image 并安排信号）与 OUT_OF_DATE（未取得 image）；不因 unsignaled 就重建 semaphore。旧 present semaphore 随旧 swapchain 的 presentation 使用结束后退役。[ANDROID][SPEC]
 - 部分 Android 设备对 timeline semaphore 支持情况需运行时查询；旧 Mali/Adreno 驱动可能仅支持 Vulkan 1.1 而不支持 1.2。[ANDROID]
 - AGI 在 Android 上可捕获 timeline semaphore 的跨帧依赖，是诊断卡顿的有力工具。[TOOL]
 
@@ -216,7 +216,7 @@
 
 ### CPU 侧
 
-- 每帧创建/销毁 binary semaphore 开销明显；应使用 per-frame 复用池。[ENGINE]
+- 避免每帧创建/销毁 binary semaphore；acquire 按 frame slot 复用，present wait 按 swapchain image 复用，或使用有明确完成证明的池。依据：[Swapchain Semaphore Reuse](https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html)。[ENGINE]
 - Timeline semaphore 可减少 semaphore 对象数量，但 CPU 端 wait 仍可能阻塞渲染线程。[ENGINE]
 
 ### GPU 侧

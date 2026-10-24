@@ -52,3 +52,9 @@ vulkan-rendering-expert-skill/
 8. API 事实、性能建议、Android 平台细节必须遵守 `01_source_map_and_api_manual_strategy` 的可信等级规则。
 9. 输出必须有验证闭环。
 10. 不确定时不编造，应提示回查 Spec / Reference Page / Android 官方文档 / 工具证据。
+
+## 仓库验证
+
+在仓库根目录运行 `node scripts/check-skill.mjs`。需要核对既有发布渠道的文件预算时，使用 `node scripts/check-skill.mjs --max-files 200`。检查器只依赖 Node.js 内置模块和 Git，包含已跟踪文件及未被忽略的新文件，不读取本地 reports / tests 等被忽略目录，也不写文件。
+
+它检查 UTF-8、代码围栏、普通 Markdown 本地文件链接、SKILL 入口路径和模块文件数；不代替完整 YAML schema 校验、Markdown 锚点检查、官方 API 核对、模型行为评估或 Vulkan 运行验收。行为评估的输入与判据见 [integration_test_plan.md](integration_test_plan.md)，执行证据见 [behavior_evaluation.md](behavior_evaluation.md)。

@@ -101,11 +101,11 @@ metadata:
 3. 最高风险的同步、生命周期、descriptor、layout、pipeline、command buffer 或 Android lifecycle 检查点。
 4. 最小验证步骤，例如 Validation Layer、RenderDoc、AGI、logcat、trace、counter、断言或定向代码检查。
 5. 必要的实现建议、修改点或代码级注意事项。
-6. Verification Gate 验证状态（G1-G6 各标注已验证 / 未验证 / 不适用）。
+6. 按任务适用范围说明验证状态；实际实现、修复或性能改善结论列出 G1-G6 状态，纯知识问答不展开完整关卡表。
 
 架构设计任务的回答必须先给决策链（需求 → 约束 → Candidate → Trade-off → Decision），再给实现建议；每个决策必须包含适用边界与重新评估条件。
 
-最终结论（已完成 / 已解决 / 根因已修复 / 性能已优化）给出前，必须按 `references/00_expert_entry/verification_gate.md` 过 G1-G6 关卡。修复类结论必须区分 Workaround（临时绕过）、Minimal Fix（根因修复）和 Structural Fix（结构性修复）。
+宣称实际实现、修复或性能改善已完成前，必须按 `references/00_expert_entry/verification_gate.md` 检查 G1-G6；受影响但未执行的关卡标为未验证，不得宣布运行时验收完成。纯知识问答引用规范与适用边界；设计审查给出可行性依据和待执行验证计划，不以缺少抓帧否定规范结论，也不把方案当成运行结果。修复类结论必须区分 Workaround（临时绕过）、Minimal Fix（根因修复）和 Structural Fix（结构性修复）。
 
 ## 准确性要求
 

@@ -382,7 +382,7 @@ sampler.md
 - `VkSemaphore`
 - `VkShaderModule`
 
-```md
+````md
 # API Card: <Name>
 
 ## 1. 定位
@@ -436,4 +436,4 @@ sampler.md
 - 完整标签定义参见 `01_source_map_and_api_manual_strategy/source_tags.md`。
 - 常用标签：`[SPEC] [REGISTRY] [REF] [GUIDE] [SAMPLE] [ANDROID] [AGI] [VENDOR] [TOOL] [ENGINE] [CASE] [HEUR]`
 - 硬规则必须至少满足 `[SPEC]` / `[REGISTRY]` / `[REF]` / 平台限定的 `[ANDROID]` 之一。
-```
+````

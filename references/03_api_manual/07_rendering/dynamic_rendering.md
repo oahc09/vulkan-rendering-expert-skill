@@ -287,8 +287,8 @@ Step 4: 同步
 
 ### 与 Vulkan 1.3 的兼容性
 
-- 1.3 设备仍需查询并启用 `VK_KHR_dynamic_rendering` feature；如需 local read，还需查询并启用 `VK_KHR_dynamic_rendering_local_read` 扩展。[SPEC]
-- 1.4 设备保证 dynamic rendering 与基础 local read 可用，但 **mandatory feature 仍需通过 `VkPhysicalDeviceVulkan14Features` 显式启用**；depth/stencil / MSAA local read 仍受 properties 限制。[SPEC]
+- dynamicRendering 在 1.3 已必须支持，仍需通过 `VkPhysicalDeviceVulkan13Features.dynamicRendering` 显式启用；1.3 上的 local read 使用已查询支持并启用的 KHR 扩展与对应 feature。[SPEC]
+- 1.4 保证基础 local read 支持，通过 `VkPhysicalDeviceVulkan14Features.dynamicRenderingLocalRead` 显式启用；dynamicRendering 仍在 Vulkan13Features 中启用。depth/stencil / MSAA local read 继续受 properties 限制。依据：[Vulkan 1.4](https://docs.vulkan.org/refpages/latest/refpages/source/VK_VERSION_1_4.html)、[Feature Requirements](https://docs.vulkan.org/spec/latest/chapters/features.html#features-requirements)。[SPEC]
 - 旧代码无需修改即可在 1.4 上运行。[GUIDE]
 
 ---

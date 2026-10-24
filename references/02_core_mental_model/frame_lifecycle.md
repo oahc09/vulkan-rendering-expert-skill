@@ -10,9 +10,9 @@ Vulkan 一帧不是简单的 draw，而是 CPU、GPU、Present Engine 之间的�
 Frame Begin
 → Wait In-flight Fence
 → Acquire Swapchain Image
-→ Reset Fence
 → Reset / Allocate Command Buffer
 → Record Command Buffer
+→ Reset Fence（acquire / 录制成功，确定会 submit）
 → Submit To Queue
 → GPU Execute
 → Signal Semaphore / Fence
@@ -25,12 +25,12 @@ Frame Begin
 ```text
 1. 等待当前 frame 的 in-flight fence。
 2. vkAcquireNextImageKHR 获取 swapchain image index。
-3. 处理 VK_ERROR_OUT_OF_DATE_KHR / VK_SUBOPTIMAL_KHR。
+3. OUT_OF_DATE 返回并重建；TIMEOUT / NOT_READY 跳过；SUCCESS / SUBOPTIMAL 继续，后者标记稍后重建。
 3b. 处理 VK_ERROR_SURFACE_LOST_KHR — Surface 已失效，需等待 Surface 重建后再恢复渲染。
-4. reset fence。
-5. reset command buffer。
-6. record command buffer。
-7. vkQueueSubmit。
+4. reset command buffer。
+5. record command buffer；成功 acquire 后若中途退出，必须处理 image 与 acquire 信号。
+6. 确定提交后 reset fence。
+7. vkQueueSubmit 并检查返回值；失败进入恢复，不继续普通 present / fence wait。
 8. vkQueuePresentKHR。
 ```
 
@@ -67,16 +67,19 @@ FrameResource[0]
   - CommandBuffer
   - Fence
   - ImageAvailableSemaphore
-  - RenderFinishedSemaphore
   - Uniform Ring Slice
 
 FrameResource[1]
   - CommandBuffer
   - Fence
   - ImageAvailableSemaphore
-  - RenderFinishedSemaphore
   - Uniform Ring Slice
+
+SwapchainImageResource[imageIndex]
+  - RenderFinishedSemaphore（binary，submit signal → present wait）
 ```
+
+`imageAvailableSemaphore` 按 frame slot 复用；`renderFinishedSemaphore` 按 swapchain image 复用。再次 acquire 同一 image 并等待 acquire 同步后，才能重新 signal 对应 present semaphore；submit fence 不保证此前 present 已消费该 semaphore。依据：[Swapchain Semaphore Reuse](https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html)。[SPEC][GUIDE]
 
 原则：
 
