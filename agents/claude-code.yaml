@@ -1,3 +1,5 @@
+# Illustrative integration configuration, not a verified Claude Code loader schema.
+# No repository host runtime parses this file; SKILL.md is the authoritative entry.
 interface:
   display_name: "Vulkan 渲染专家"
   short_description: "面向真实 Vulkan 渲染工程的调试、优化与验证技能"
@@ -9,12 +11,12 @@ skill:
   references: "../references"
 
 startup:
+  # hard_rules.md is read in full; the routing fragment includes its entire section.
+  # Hosts without section reads may read the target file in full, never skip rules.
   required_files:
-    - "../references/00_expert_entry/role.md"
+    - "../SKILL.md"
     - "../references/00_expert_entry/hard_rules.md"
-    - "../references/00_expert_entry/task_classifier.md"
-    - "../references/00_expert_entry/response_formats.md"
-    - "../references/00_expert_entry/accuracy_check.md"
+    - "../references/07_integration_pack/task_routing_rules.md#routing-entry"
   debug_files:
     - "../references/00_expert_entry/debug_priority.md"
   performance_files:

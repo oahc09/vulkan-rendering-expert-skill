@@ -1,0 +1,2 @@
+# Release-time tooling only; excluded from the Agensi knowledge ZIP.
+PyYAML==6.0.3

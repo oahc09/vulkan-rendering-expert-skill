@@ -1,8 +1,8 @@
 # Vulkan Rendering Expert Skill
 
-English | [中文](README.md)
+English | [中文](https://github.com/oahc09/vulkan-rendering-expert-skill/blob/main/README.md)
 
-![Vulkan Rendering Expert Skill banner](assets/vulkan-rendering-expert-banner.png)
+![Vulkan Rendering Expert Skill banner](https://raw.githubusercontent.com/oahc09/vulkan-rendering-expert-skill/main/assets/vulkan-rendering-expert-banner.png)
 
 This is a Vulkan rendering engineering expert skill package. It is not a Vulkan beginner tutorial, but a runtime knowledge base prepared for real rendering engineering tasks: when handling Vulkan design, implementation, debugging, optimization, and verification problems, it organizes judgments, citation rules, API details, debugging paths, and regression verification along engineering pipelines.
 
