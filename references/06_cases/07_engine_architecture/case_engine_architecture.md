@@ -1649,3 +1649,58 @@ async compute 不是默认优化，是条件优化；收益被物理封顶，成
 ### 12. 关联工作流
 
 [移动端神经路径](../../05_workflows/02_render_pass_effects/mobile_neural_graphics.md#neural-fallback-decisions)；按实际项目再选择相关帧资源与呈现回归。
+
+<a id="shader-streaming-generation"></a>
+## Case: 热更新与流式取消迟到污染新场景
+
+### 0. Metadata
+
+来源等级：[ENGINE] 设计案例；非历史Live答案、非用户事故实测。
+
+### 1. 现象
+
+场景A的异步shader或纹理上传在切换B后完成；此为架构设计案例，不是实际事故取证。
+
+### 2. 初始上下文
+
+目标版本/设备features、scene seed、shader/资源generation与queue关系均需实际记录。
+
+### 3. 初始误判
+
+编译成功不等于接口兼容；任务取消不代表已提交GPU引用可立即释放。
+
+### 4. 排查过程
+
+建立Engine/Device/material/residency generation与CPU/GPU完成图，核对interface/key、旧descriptor引用和峰值预算。
+
+### 5. 根因候选
+
+只在调用点、数据与时序证据吻合后确认；不凭症状自动判驱动缺陷。
+
+### 6. 关键证据
+
+读取路径/版本/hash、资源范围/owner/completion和原始失败日志；实验fixture与生产代码证据分开。
+
+### 7. 修复方案
+
+Minimal Fix在发布处拒绝obsolete代际，保留旧完整资源；Structural Fix有界scheduler、版本发布与最后消费者退休。
+
+### 8. 验证方式
+
+注入compile失败、接口变化、部分分配失败、提交前后取消、双Engine共享与Device teardown；Host合同测试不能替代真GPU图像。
+
+### 9. 可复用经验
+
+能力查询、结果正确性、性能收益是三个不同结论。
+
+### 10. 适用条件
+
+已有Vulkan渲染器的Shader/资源/GPU-driven增量实现。
+
+### 11. 不适用情况
+
+不要求引入完整新RHI，不借设计案例声称Live或移动端验收通过。
+
+### 12. 关联工作流
+
+[权威合同](../../05_workflows/06_pipeline_descriptor/shader_binding_workflow.md#shader-hot-reload)。

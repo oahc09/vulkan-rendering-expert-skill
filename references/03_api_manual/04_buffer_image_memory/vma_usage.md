@@ -105,8 +105,9 @@ VkInstance / VkPhysicalDevice / VkDevice
 4. CPU 写入（如 uniform / staging）:
    vmaMapMemory(allocator, allocation, &pData)
    memcpy(pData, ...)
+   vmaFlushAllocation(allocator, allocation, offset, size)（non-coherent，仍保持 mapped）
    vmaUnmapMemory(allocator, allocation)
-   （non-coherent CPU 写后显式 vmaFlushAllocation；GPU 写完成、CPU 读前显式 vmaInvalidateAllocation；unmap 不自动完成）
+   （GPU→CPU 另走：GPU 写入与 host 访问依赖 → 等完成 → map/invalidate → CPU read；unmap 不自动维护缓存）
 5. GPU 使用: vkCmdBindVertexBuffers / vkCmdBindDescriptorSets / shader 访问
 6. 销毁: vmaDestroyBuffer(allocator, buffer, allocation)
          vmaDestroyImage (allocator, image, allocation)

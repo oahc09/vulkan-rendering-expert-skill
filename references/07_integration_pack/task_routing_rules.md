@@ -270,6 +270,8 @@
 | 每Surface HDR feature / metadata / compositeAlpha | `../03_api_manual/02_surface_swapchain/swapchain.md#android-color-presentation` |
 | tone mapping owner / 半透明黑边 / 输出转换 | `../05_workflows/02_render_pass_effects/add_postprocess_pass.md#color-output-workflow` |
 
+| specialization / 变体爆炸 | `../03_api_manual/06_pipeline/specialization_constants.md#variant-cost-boundary` |
+| Pipeline Binary条件路径 | `../03_api_manual/06_pipeline/pipeline_cache.md#pipeline-binary-path` |
 | Shader manifest / SPIR-V / reflection / FP16 | `../03_api_manual/06_pipeline/shader_module.md#shader-artifact-contract` |
 | Shader ABI / dynamic UBO / 热重载 | `../05_workflows/06_pipeline_descriptor/shader_binding_workflow.md#shader-interface-validation` |
 | 热重载代际 / 旧pipeline退休 | `../05_workflows/06_pipeline_descriptor/shader_binding_workflow.md#shader-hot-reload` |

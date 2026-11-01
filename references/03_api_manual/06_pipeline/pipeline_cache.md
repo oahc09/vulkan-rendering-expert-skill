@@ -266,6 +266,6 @@ VkPipelineCacheCreateInfo（可含初始 blob 数据）
 
 区分引擎 key、vkGetPipelineKeyKHR 的 pipeline key、每个 binary key 与 global key。`pPipelineCreateInfo=NULL` 查询的 global key 变化意味着旧 binary 数据不能用于新 Device 的 vkCreatePipelineBinariesKHR。一个 pipeline 可对应多个 binary，保存完整数量、keys、字节及校验，不混用 VkPipelineCache blob。[SPEC]
 
-取得数据：按扩展约束用 CAPTURE_DATA 创建 pipeline，再 vkCreatePipelineBinariesKHR / vkGetPipelineBinaryDataKHR；归还捕获存储用 vkReleaseCapturedPipelineDataKHR。消费时恢复 binary handles，以 VkPipelineBinaryInfoKHR 链接 create-info，保持与捕获 pipeline 一致的所需状态。create-info 链接 VkPipelineBinaryInfoKHR 或设置 VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR 时不能使用 VkPipelineCache，传 VK_NULL_HANDLE；binaryCount 与 CAPTURE_DATA 的组合另按 VU 核对，不能无条件同时塞入所有缓存机制。失败清理部分 handles 并显式回退，不能把 VkResult 成功等同于图像正确。[SPEC]
+取得数据：按扩展约束用 CAPTURE_DATA 创建 pipeline，再 vkCreatePipelineBinariesKHR / vkGetPipelineBinaryDataKHR；归还捕获存储用 vkReleaseCapturedPipelineDataKHR。消费时恢复 binary handles，以 VkPipelineBinaryInfoKHR 链接 create-info，保持与捕获 pipeline 一致的所需状态。create-info 链接的 VkPipelineBinaryInfoKHR 的 binaryCount 非零时，或设置 VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR 时，不能使用 VkPipelineCache，传 VK_NULL_HANDLE；仅链入 binaryCount=0 本身不触发前一限制，仍须满足其他有效用法。binaryCount 与 CAPTURE_DATA 的组合另按 VU 核对，不能无条件同时塞入所有缓存机制。失败清理部分 handles 并显式回退，不能把 VkResult 成功等同于图像正确。[SPEC]
 
 固定来源：[Vulkan-Docs v1.4.328 pipelines：cache flags/merge、binaries](https://github.com/KhronosGroup/Vulkan-Docs/blob/d38733398a4bec673bd5d24c904d4739a45f020d/chapters/pipelines.adoc)。2026-11-01 source-read；原生 Binary/GPL 未在此卡执行。

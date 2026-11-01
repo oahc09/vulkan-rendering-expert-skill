@@ -63,8 +63,8 @@ VkPhysicalDeviceFeatures2（meshShader / taskShader feature 查询）
 ### 相关扩展 / 版本
 
 - `VK_EXT_mesh_shader`（跨厂商）；`VK_NV_mesh_shader`（NVIDIA 早期）。[REGISTRY]
-- Vulkan 1.1+ 且依赖 `VK_KHR_spirv_1_4`（promoted 后随环境解析）。[SPEC]
-- Android 是否可用：需查询设备能力；当前主流移动 GPU 支持不普遍，**必须运行时查询 feature 后再启用**。`[ANDROID]`
+- 依赖 `VK_KHR_spirv_1_4` 或 Vulkan 1.2，按目标设备启用链解析。[SPEC]
+- Android 是否可用：需查询设备能力；**必须运行时查询 feature 后再启用**。`[ANDROID]`
 
 ---
 
@@ -76,7 +76,7 @@ VkPhysicalDeviceFeatures2（meshShader / taskShader feature 查询）
 → 编译 task/mesh SPIR-V（SPV_VERSION 1.4+）
 → 创建 pipeline：task(可选) + mesh + fragment，不填 vertex stage
 → meshlet 化网格资产（顶点/索引重排为 meshlet，常 64 顶点/124 三角形量级 [HEUR]）
-→ vkCmdDrawMeshTasksEXT（taskCount = meshlet 分组数，即 EXT 的 groupCountX/Y/Z draw 参数）
+→ vkCmdDrawMeshTasksEXT（groupCountX/Y/Z 按实际 task 或 mesh shader 映射与设备 limits 计算，不固定等于 meshlet 数）
 → mesh shader 内输出最终三角形
 ```
 

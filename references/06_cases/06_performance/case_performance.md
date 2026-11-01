@@ -977,3 +977,58 @@ Pipeline cache：必须持久化、随包发布、版本化失效。
 
 
 ---
+
+<a id="gpu-driven-fair-baseline"></a>
+## Case: GPU-driven变慢不等于实现无价值
+
+### 0. Metadata
+
+来源等级：[ENGINE] 设计案例；非历史Live答案、非用户事故实测。
+
+### 1. 现象
+
+CPU单物体draw与GPU compact相比很快，但合理CPU instancing反而更快；此为受控设计案例，没有虚构帧率或设备。
+
+### 2. 初始上下文
+
+目标版本/设备features、scene seed、shader/资源generation与queue关系均需实际记录。
+
+### 3. 初始误判
+
+不能把不公平CPU基线当收益，也不能只测cull dispatch不计reset/HiZ/compact/barrier/draw。
+
+### 4. 排查过程
+
+保持材质/LOD/分辨率/可见集，比较CPU合批、固定槽、Count，逐开LOD/HiZ，多规模多可见率。
+
+### 5. 根因候选
+
+只在调用点、数据与时序证据吻合后确认；不凭症状自动判驱动缺陷。
+
+### 6. 关键证据
+
+读取路径/版本/hash、资源范围/owner/completion和原始失败日志；实验fixture与生产代码证据分开。
+
+### 7. 修复方案
+
+保留更快的合法路径与可切换策略；取消通用async百分比阈值，按全帧、热状态与内存实测选择。
+
+### 8. 验证方式
+
+报告CPU/GPU分项与全帧、readback/validation开销、误差；软件GPU只作集成证据，Android性能待真机。
+
+### 9. 可复用经验
+
+能力查询、结果正确性、性能收益是三个不同结论。
+
+### 10. 适用条件
+
+已有Vulkan渲染器的Shader/资源/GPU-driven增量实现。
+
+### 11. 不适用情况
+
+不要求引入完整新RHI，不借设计案例声称Live或移动端验收通过。
+
+### 12. 关联工作流
+
+[权威合同](../../05_workflows/07_optimization/optimize_frame_time.md#scaled-rendering-ab)。

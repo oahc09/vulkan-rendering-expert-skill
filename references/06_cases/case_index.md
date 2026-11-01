@@ -69,3 +69,9 @@
 移动SDK/框架迁移的固定版本案例见 [契约边界](07_engine_architecture/case_engine_architecture.md#mobile-sdk-framework-contracts)，不是本地构建/设备验收。
 
 Android系统渲染设计案例（非真机事故报告）：[多输出代际](04_swapchain_android/case_swapchain_android.md#multi-output-generation-case)、[媒体早归还](03_sync_layout/case_sync_layout.md#android-media-early-return)、[颜色/alpha](01_black_screen/case_black_screen.md#android-alpha-color-case)。
+
+## v1.0.13 规模化设计案例（非事故实测）
+
+- [GPU命令正确但独立count未同步](03_sync_layout/case_sync_layout.md#gpu-command-count-visibility)
+- [GPU-driven变慢不等于实现无价值](06_performance/case_performance.md#gpu-driven-fair-baseline)
+- [热更新与流式取消迟到污染新场景](07_engine_architecture/case_engine_architecture.md#shader-streaming-generation)
