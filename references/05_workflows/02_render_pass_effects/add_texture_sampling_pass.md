@@ -7,6 +7,7 @@
 - 已有 mesh / scene 渲染 pass，需要为材质新增 texture 采样（albedo / diffuse / normal / roughness / metallic / AO 等）。
 - 需要完整走通 sampler、image view、descriptor set、shader 采样、layout transition、生命周期管理。
 - 新增带贴图的 object / material pass，或将纯色材质替换为纹理材质。
+- Camera/MediaCodec 外部输入使用 §8 的媒体分支，不套用 staging upload 主流程。
 
 ### 不适用
 
@@ -118,7 +119,7 @@ CPU Pixel Data
 
 - 常规材质优先使用 `COMBINED_IMAGE_SAMPLER`，移动端驱动优化路径更成熟 [ANDROID]。
 - 若同一张 texture 在不同 draw 中需要不同采样方式（如 nearest vs linear），使用分离 `SAMPLED_IMAGE + SAMPLER` 可减少 sampler 数量 [HEUR]。
-- Descriptor 中 `imageLayout` 必须为 `VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL`（graphics 采样）或 `VK_IMAGE_LAYOUT_GENERAL`（compute 采样） [SPEC]。
+- Descriptor 中 `imageLayout` 必须合法且与实际访问一致；graphics 与 compute 的 sampled read 均可采用满足条件的只读 layout 或 `GENERAL`，不是按 shader 阶段硬分 [SPEC]。
 - Normal map 建议使用 `VK_FORMAT_R8G8B8A8_UNORM` 或 `VK_FORMAT_R16G16_SFLOAT`；移动端优先压缩格式 [ANDROID]。
 
 ---
@@ -185,6 +186,25 @@ CPU Pixel Data
 16. **接入销毁路径**：按 `image view → image → memory → sampler` 顺序销毁；sampler 若为全局复用则按全局生命周期管理 [ENGINE]。
 
 ---
+
+
+<a id="android-media-sampling"></a>
+### Android producer → sampling → release 分支
+
+本分支使用应用拥有的输出、合法 Camera/decoder 输入、既有 allocator/descriptor/提交退休系统，默认 Java + JNI + C++17；不新建通用媒体引擎。先读[AHB 帧权威合同](../../03_api_manual/04_buffer_image_memory/external_resource_interop.md#android-media-frame-contract)和[YCbCr descriptor 前提](../../03_api_manual/05_descriptor/sampled_image_descriptor.md#android-media-ycbcr)，本节只安排实现顺序。[ENGINE]
+
+1. **分离 producer adapter**：Camera 核授权、stream/session 组合；MediaCodec 核 codec Surface 输出和格式变化。按目标 API/NDK 配置 AImageReader 的 format/usage/尺寸/maxImages；API 26+ 异步 AHB 路径有 gate，不能因有 Surface 就认定支持。受保护内容无 CPU 读回退路；默认测试自制色条/非私密短片。
+2. **获取并建 lease**：检查 acquire 返回值后才记录 sourceFrameId、timestamp/timebase、generation、crop/方向/镜像、颜色元数据、AImage/AHB、FD owner。latest 为实时丢旧策略且需 ≥2 获取余量；next 为有界顺序策略；MAX_IMAGES_ACQUIRED 停接入/释放已完成 lease，不无限扩容。
+3. **准备导入与采样对象**：按 AHB 查询 ordinary format/externalFormat 分支、dedicated allocation、usage/features；缓存以 source generation 和有效 buffer 身份/格式为键。额外 AHB acquire 配对 release、buffer-removed listener 触发退休；AHB 活着不等于当前帧仍归应用。遵守 immutable conversion 与 descriptor 预算，不把未知 Camera 数据当 RGBA。
+4. **等待输入并 acquire**：非负 acquire sync FD 按能力导入 binary temporary semaphore；成功才转交 owner，失败保持 FD 归应用并停止消费者。无导入支持可在 worker 等待 FD 成功再关闭；-1 表示无需等待。Camera/decoder FOREIGN ownership 与访问 barrier 单独建立，不使用 `UNDEFINED` 丢弃要保留的 producer 数据。仅在真正 ready 后采样。
+5. **登记所有 consumers 后提交**：A/B 输出各自记录 generation、queue/submission/completion。单次 acquire 后用合法 Vulkan 依赖扇出，不能两次 wait 同一 binary payload；pending descriptor 不覆写。取消未提交 consumer 与等待已提交 consumer 完成是不同动作。
+6. **采样与颜色处理**：crop/旋转/镜像驱动 UV，YCbCr 参数来自实际属性和可信元数据；输出工作空间/编码按颜色合同另行处理。Shader sampled read layout 不等于颜色转换。先用确定性图样检查，再加真实 producer。
+7. **join 后归还**：覆盖所有 consumers 和 FOREIGN release barrier，再导出合法 SYNC_FD 交 `AImage_deleteAsync`；此函数返回 void，AImage 随即不可再使用，已转交 FD 不再 close。无 export 支持时 host 等所有实际 GPU completion 成功后 `AImage_delete`，性能代价显式记录。普通 VkFence handle 不能直接传 releaseFenceFd。
+8. **失败回收**：acquire/import/submit/export 每步分别检查，未接管 FD 由唯一 owner 关闭；部分提交成功就保留 lease，未满足依赖不提交消费者。未消费帧亦不能忽略尚 pending 的 acquire fence。等待超时/device lost 不当完成；停止新输入并按有效完成链恢复，不假造 signal 或重复 delete。
+9. **重建/结束**：输入中断、camera 切换、decoder resolution/format change、EOS、pause/resume 停新任务与回调，退休旧 generation 的 lease/cache 后切换。旧 reader 不能在 GPU 仍借帧时先销毁；一个输出停用不撤销另一输出的消费。禁止旧 timestamp/descriptor 回调污染新源。
+10. **分层验收**：静态 fixture 检查状态和 FD owner；设备端分别测 camera/视频、单/双消费者、导入/导出失败、慢输出、格式改变及恢复。记录 timestamp/generation、队列占用和 FD/AHB/Vulkan 内存收敛；无设备标 NOT RUN，不以一次画面对或 Validation clean 代替持续链路验收。
+
+相机只在授权前台和系统允许的场景启用；不承诺后台壁纸采集、不绕过保护内容、不上传私有帧。性能回退可阻塞工作线程，但不要在持共享 queue 锁时等待依赖该锁才能提交的另一消费者。[ENGINE]
 
 ## 9. Android 注意点
 

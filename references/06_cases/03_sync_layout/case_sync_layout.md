@@ -759,3 +759,85 @@ Layout transition 不是“可选优化”，而是 image 跨用途使用的必�
 
 
 ---
+
+
+<a id="android-media-early-return"></a>
+## Case: Android Media Frame Returned Before All Consumers Complete
+
+### 0. Metadata
+
+| 字段 | 内容 |
+|---|---|
+| 模块 | `06_cases` |
+| 类型 | Android / AHB / source-frame lease / 双消费者同步 |
+| 平台 | Android；已核实支持的 Camera/decoder adapter |
+| 严重程度 | P0 |
+| 来源等级 | `[ENGINE] [SPEC] [ANDROID]`；设计反例，非真机事故复盘 |
+| 关联模块 | API Manual / Workflow / Debug Playbook |
+
+### 1. 现象
+
+设计场景：A/B 输出共读一帧，A 较快；A 完成后立即归还 AImage，B 可能读到被 producer 改写的下一帧。候选症状是撕裂、时间跳变或闪烁；这里没有声称已在设备复现。
+
+### 2. 初始上下文
+
+已取得 AHB 引用并缓存 VkImage；A/B 属同 device 的不同提交，reader maxImages 有限。开发者把引用存活误当成帧内容不变。
+
+### 3. 初始误判
+
+“AHardwareBuffer_acquire 后内存不释放，所以 delete AImage 安全”；或“把 maxImages 增大就修好了”。两者都不能证明 B 结束前 producer 不复用。
+
+### 4. 排查路径
+
+关联 sourceFrameId/timestamp/sourceGeneration、A/B submission/completion、AImage 归还与 FD owner。区分 acquire readiness、内存引用、lease 和 presentation；只有真正读输入的 consumers 才决定输入归还，不机械绑定屏幕 present。
+
+### 5. 关键证据
+
+需要从代码/实际日志证明 `return(frame N)` 发生在 `complete(B,N)` 前；单独 A fence signaled 或 AHB refcount 非零不足以反证。Validation 不覆盖全部 BufferQueue 协议，不能假定必报 VUID。此处无实际 GPU 抓帧/日志。
+
+### 6. 根因
+
+归还条件仅覆盖 A，没有覆盖所有已提交 consumers；AHB 内存引用错误替代生产者帧 lease 与完成同步。
+
+### 7. 修复方案
+
+#### Workaround（临时绕过，现象消失 ≠ 根因修复）
+
+可暂停 B 验证竞争假设；减少 consumer 不证明双输出已修复。
+
+#### Minimal Fix（针对根因的最小修复）
+
+保留 AImage，等待 A/B 的实际 GPU completion 和 release ownership 完成后归还；同步 FD 路径必须由统一 join 覆盖全部消费者，不能只导出 A 信号。无外部 semaphore 能力则用可证明完成的 worker 等待回退。
+
+#### Structural Fix（结构性 / 防复发修复）
+
+有界 frame lease 记录 consumers 与 generation；未提交可取消，已提交只能完成后退出。一个 binary acquire wait 后合法扇出，不重复 wait；导入失败保留 FD owner，export 失败不传 VkFence 假句柄。reader 重建先排空 lease，buffer removed 只退休缓存，不立即 free 在途对象。
+
+### 8. 修复后验证
+
+- [ ] 正例：A/B 都完成才 return；反例：仅 A 完成必须拒绝 return。
+- [ ] 单消费者、不同 queue、慢 B、B 销毁前后、旧 generation 回调分别覆盖。
+- [ ] maxImages 耗尽走背压；latest margin 不足不虚称已丢旧帧。
+- [ ] acquire/import/export 失败不 double-close、不早归还、不永久等待缺失信号。
+- [ ] 非私密连续输入下检查 timestamp、FD/内存/lease 收敛；设备未执行则 NOT RUN。
+
+### 9. 经验抽象
+
+AHB refcount 保持 allocation，不授予无限帧读取权。完成计数必须由 GPU 证据驱动，而非 CPU “draw 已调用”。
+
+### 10. 预防规则
+
+归还权集中在 lease owner；所有 consumers 提交前登记；pointer 复用不等于同 generation；失败、正常结束与 reader 销毁共用同一退休合同。
+
+### 11. 关联 API 卡片
+
+- [AHB 帧合同](../../03_api_manual/04_buffer_image_memory/external_resource_interop.md#android-media-frame-contract)
+- [YCbCr sampling](../../03_api_manual/05_descriptor/sampled_image_descriptor.md#android-media-ycbcr)
+
+### 12. 关联 Debug Playbook
+
+- [同步/布局诊断](../../04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md)
+
+### 13. 关联 Workflow
+
+- [媒体输入采样与回交](../../05_workflows/02_render_pass_effects/add_texture_sampling_pass.md#android-media-sampling)

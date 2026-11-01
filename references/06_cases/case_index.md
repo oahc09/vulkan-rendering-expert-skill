@@ -10,7 +10,7 @@
 
 | 合并文件 | 包含 case 数 | 典型现象关键词 |
 |---|---|---|
-| `01_black_screen/case_black_screen.md` | 4 | black-screen, image-layout, no-submit, viewport, depth, cull |
+| `01_black_screen/case_black_screen.md` | 5 | black-screen, image-layout, no-submit, viewport, depth, cull |
 
 ---
 
@@ -26,7 +26,7 @@
 
 | 合并文件 | 包含 case 数 | 典型现象关键词 |
 |---|---|---|
-| `03_sync_layout/case_sync_layout.md` | 4 | compute-barrier, transfer-transition, frame-resource, command-buffer-reset |
+| `03_sync_layout/case_sync_layout.md` | 5 | compute-barrier, transfer-transition, frame-resource, command-buffer-reset |
 
 ---
 
@@ -34,7 +34,7 @@
 
 | 合并文件 | 包含 case 数 | 典型现象关键词 |
 |---|---|---|
-| `04_swapchain_android/case_swapchain_android.md` | 4 | android, rotation, surface, pause-resume, extent-zero, present-crash |
+| `04_swapchain_android/case_swapchain_android.md` | 5 | android, rotation, surface, pause-resume, extent-zero, present-crash |
 
 ---
 
@@ -67,3 +67,5 @@
 - `case_tags.md`：案例通用标签与关键词释义。
 
 移动SDK/框架迁移的固定版本案例见 [契约边界](07_engine_architecture/case_engine_architecture.md#mobile-sdk-framework-contracts)，不是本地构建/设备验收。
+
+Android系统渲染设计案例（非真机事故报告）：[多输出代际](04_swapchain_android/case_swapchain_android.md#multi-output-generation-case)、[媒体早归还](03_sync_layout/case_sync_layout.md#android-media-early-return)、[颜色/alpha](01_black_screen/case_black_screen.md#android-alpha-color-case)。

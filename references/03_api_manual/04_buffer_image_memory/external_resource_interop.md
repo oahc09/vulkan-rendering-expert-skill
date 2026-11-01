@@ -118,6 +118,43 @@ Validation 检查实际启用配置及 Vulkan 路径，不覆盖全部外部 API
 
 Surface 暂停不代表外部 queue 已空。resize/rotation 后给资源新 generation，停止旧消费者，排空两端使用后退休旧尺寸资源；extent 为 0 时暂停展示，仍完成必要清理。外部资源与 swapchain image 不等价，不能随便导出 swapchain allocation。[ENGINE]
 
+
+<a id="android-media-frame-contract"></a>
+### Android 媒体帧：内存引用、帧租约与回交合同
+
+本节是 Camera / MediaCodec → AImageReader → AImage/AHB → Vulkan 的权威寿命段；不沿用上面的 OpenCL opaque-FD 图像示例。AHB 与异步 acquire/delete 在本路径使用 API 26+ 接口，仍需检查目标 NDK/API、扩展和 producer 支持；API 34+ 是验收建议，不是全技能最低版本。[ANDROID][ENGINE]
+
+| 合同 | 实施前必须确认 |
+|---|---|
+| Producer 能力 | Camera 按设备 stream configuration、session 组合和授权选择输出；MediaCodec 按 codec、尺寸、Surface 输出/格式变化核验。两条 adapter 分开，不假设一个 reader format/usage 配置适合两者。受保护输入另查受保护全链能力，不走 CPU 读回。 |
+| 帧身份 | sourceFrameId、timestamp 及其时间基准、sourceGeneration、实际尺寸/format、crop、方向/镜像、颜色 primaries/transfer/range；不要把 reader 的配置尺寸当每帧全部元数据。 |
+| 内存对象 | AImage lease、额外 AHB 引用、导入 VkDeviceMemory/VkImage、view、conversion、descriptor 分别记录 owner 和退休条件。 |
+| 同步 | acquire FD readiness、FOREIGN ownership、实际 shader 访问、所有消费者完成、release FD 或已完成证明；内存导入成功不证明 producer 写入完成。 |
+| 压力 | maxImages、已获取 lease 数、待提交/在途数量有界；规定 latest 丢旧帧或 next 顺序消费，不能无限增加 buffer 掩盖慢消费者。 |
+
+**AHB 导入 gate。** 启用 `VK_ANDROID_external_memory_android_hardware_buffer` 及依赖（包括 `VK_EXT_queue_family_foreign`），检查实际 usage/importability；`vkGetAndroidHardwareBufferPropertiesANDROID` 查询 allocationSize、memoryTypeBits，并链 format properties。图像导入使用 `VkImportAndroidHardwareBufferInfoANDROID` 与指向对应 image 的 `VkMemoryDedicatedAllocateInfo`；allocationSize/内存类型来自该 AHB 查询，不能 width×height 猜大小或当普通 suballocation。创建 image 的外部内存类型、尺寸/layers/usage 与 AHB 一致；普通 VkFormat 与 `VkExternalFormatANDROID` 路径分开。外部格式值只取实际查询，不能拼 RGBA；[YCbCr 采样合同](../05_descriptor/sampled_image_descriptor.md#android-media-ycbcr)负责 view/sampler/descriptor。[SPEC]
+
+**引用不是 lease。** `AImage_getHardwareBuffer` 不自动增加引用；若跨 AImage/reader 寿命保留 handle，应用须 `AHardwareBuffer_acquire` 并配对 release，按 NDK 要求注册 buffer-removed listener。Vulkan 成功导入 memory 会自持一份 AHB 引用，失败不会持有；该引用也不阻止 BufferQueue 在归还帧后重新写这块内存。不可因“AHB 还活着”提前 `AImage_delete`。Listener 只使缓存退休，不可直接释放 GPU 仍用的 view/memory。[ANDROID][SPEC]
+
+| 交接点 | FD / lease owner 与成功条件 | 失败或取消 |
+|---|---|---|
+| `AImageReader_acquireNextImageAsync` / `AImageReader_acquireLatestImageAsync` | 成功才接收 AImage 与 acquire FD；FD=-1 表示无需等待；非负 FD 归应用管理，尚不能访问像素 | NO_BUFFER_AVAILABLE 是正常无帧；MAX_IMAGES_ACQUIRED 触发背压；不读取失败调用的未定义输出 |
+| acquire FD → Vulkan | 查询 SYNC_FD import 能力；binary temporary import，目标 semaphore 无 pending queue command；成功后 Vulkan 接管 FD，应用不得再 close/使用 | 导入失败 FD 仍归应用；停止消费者。可在 worker 等待该 sync FD 真正完成再关闭，不能把等待超时/错误当 ready |
+| FOREIGN → Vulkan → FOREIGN | Camera/decoder AHB 按 foreign 设备共享规则做 acquire/release ownership；访问 layout、subresource、stage/access 随实际 consumer；同步载荷不替代 barrier | 部分 submit 成功就保留 lease 和全部在途资源；不因后一步失败回滚成“无人使用” |
+| GPU → release FD | 合法 SYNC_FD export 的 binary semaphore 信号必须覆盖所有消费者与归还前 release barrier；导出成功的新 FD 暂归应用 | 导出/submit 失败不制造假 FD、不等待永远不会 signal 的链；保留 lease，按已提交 completion 恢复 |
+| `AImage_deleteAsync(image, releaseFenceFd)` | 有效 image/reader 生命周期内，交给 reader 一个覆盖全部使用的 release sync FD；将 FD 标记已转交，不再 close；函数返回后不能访问 AImage | 此 API 返回 void，不存在“返回错误后重试 delete 同一 image”分支。提前取消/尚未交出时只清理仍归应用的 FD；reader 销毁须先协调 lease，而非依赖无效 image 调用补救 |
+| 已完成回退 | 无外部 semaphore 支持时，可在非 UI worker 等 acquire sync FD 成功，完成 ownership/采样/归还 barrier 后，host 等所有 GPU consumers 成功，再 `AImage_delete`（或已完成条件下 deleteAsync 的 -1） | CPU 等待牺牲并行/延迟；等待失败/device lost 不等于已完成，停止新任务并按故障协议退休。普通 `VkFence` handle 不是 Android sync FD |
+
+这里的非负 FD（含 0）均按有效句柄处理，-1 只在对应 API 约定中表示无需等待，不直接 close。未消费帧若 acquire 仍 pending，要先完成等待或合法把其依赖作为归还 fence，不能以 -1 假装已就绪。NDK 正常有效路径接管 release FD；源码内部异常分支不构成应用重复关闭/重试同一 AImage 的授权。[ANDROID][SPEC][ENGINE]
+
+**多消费者与 generation。** 用有界 frame lease/消费者集合记录已加入的 A/B 输出；提交前加入，提交失败撤销未提交消费者，已提交项只在实际 completion 后完成。可以 host 等全部结束再归还，或用有证明的 GPU join 产生统一 release fence。一个 binary acquire semaphore 不能被 A/B 独立重复 wait；先单次 acquire 再在 Vulkan 内用合法依赖扇出。同 device 不同 queue 仍要同步，独立 device 须分别查询/import/sync 合同，不共享普通 VkImage handle。不能 A 完成便归还 B 正在采样的帧。[ENGINE][SPEC]
+
+latest 策略要给丢帧保留至少两个 image 的获取余量：`maxImages - currentAcquiredImages >= 2`；否则不能保证丢旧帧，达到上限会停滞。慢输出可在加入 lease 前跳过旧帧，已提交使用不能“丢引用即取消”。reader/source 重建、camera 切换、decoder format change/EOS、pause/resume 先停接入与回调，退休旧 generation 的全部 lease/cache，再切换；裸 AHB 指针不作永久缓存键。停止一个输出不代表输入 lease 其他消费者已完成。[ANDROID][ENGINE]
+
+相机只在授权且系统允许的前台路径测试，不承诺后台壁纸采集；默认自制色条/非私密短片，日志仅记录上述元数据，不记录私人图像，不绕过 DRM/保护标记。验证需记录连续帧 timestamp/generation、队列占用、FD/内存收敛与双消费者归还时序；静态 fixture 或 Validation clean 均不是 Camera/codec 真机兼容证明。[ENGINE]
+
+来源：[NDK Media](https://developer.android.com/ndk/reference/group/media)、[固定 NdkImage.h](https://android.googlesource.com/platform/frameworks/av/+/754a4310b132681592fa9ed8d449b9953795056b/media/ndk/include/media/NdkImage.h)、[AHB memory import](https://docs.vulkan.org/refpages/latest/refpages/source/VkImportAndroidHardwareBufferInfoANDROID.html)、[allocation 约束](https://docs.vulkan.org/refpages/latest/refpages/source/VkMemoryAllocateInfo.html)、[AHB FOREIGN 规则](https://docs.vulkan.org/spec/latest/chapters/memory.html#memory-external-android-hardware-buffer)。
+
 ## 12. 性能注意点
 
 避免 CPU staging 仅减少一类复制；ownership、cache、格式转换、queue 交接与带宽仍有成本。分别测 CPU/GPU 时间、端到端延迟、内存峰值与持续热状态；无可靠 counter 不声明节省带宽。没有既有 OpenCL 算法或互操作能力时，先评估现有 Vulkan Compute，不新增必需 OpenCL 依赖。[ENGINE]

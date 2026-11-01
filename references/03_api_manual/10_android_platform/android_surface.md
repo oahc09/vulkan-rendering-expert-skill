@@ -34,7 +34,7 @@ ANativeWindow / Surface（Java/Kotlin 层或 Native 层）
 ### 上游依赖
 
 - 已启用 `VK_KHR_android_surface` instance extension。[SPEC]
-- 持有有效的 `ANativeWindow*` 指针，通常来自 `SurfaceView`、`TextureView` 或 `AHardwareBuffer` 等窗口句柄。[ANDROID]
+- 持有有效的 `ANativeWindow*` 指针，通常由有效的 Java `Surface` 转换得到；`AHardwareBuffer` 是缓冲区内存，不是可直接转换成窗口的句柄。[ANDROID]
 
 ### 下游影响
 
@@ -111,7 +111,7 @@ ANativeWindow / Surface（Java/Kotlin 层或 Native 层）
 ### 销毁阶段
 
 - [ ] 是否先销毁 swapchain 再销毁 surface？
-- [ ] 是否等待 GPU 完成 present？
+- [ ] 是否分别证明submission完成与WSI present资源退役？
 
 ---
 
@@ -161,7 +161,7 @@ ANativeWindow / Surface（Java/Kotlin 层或 Native 层）
 
 ### in-flight 风险
 
-- `ANativeWindow` 被释放或 surface 被销毁后，不能再进行 acquire/present；需等待 fence 确保 GPU 完成。[ANDROID]
+- `ANativeWindow` 被释放或 surface 被销毁后，不能再进行 acquire/present；submit fence只证明相关提交完成，present等待信号量/旧swapchain另需WSI退休证明。[ANDROID]
 
 ---
 
@@ -182,6 +182,16 @@ ANativeWindow / Surface（Java/Kotlin 层或 Native 层）
 ---
 
 ## 11. Android 注意点
+
+<a id="surface-host-boundaries"></a>
+### 每实例有效访问与能力
+
+前提：有效Surface、已启用instance扩展/依赖、合法window引用。每个输出分别调用 `vkGetPhysicalDeviceSurfaceSupportKHR` 核队列呈现支持，并查询capabilities/formats/present modes；不能用第一个Surface的结果代替第二个。Wallpaper多个Engine是允许的，不代表固定同时两个或固定回调次序。[SPEC][ANDROID]
+
+`surfaceDestroyed` 返回前render线程已停止触碰该Surface。post事件不等于停止；window引用也不是有效访问许可。process/device/instance/output生命周期分开，shared queue host操作按规范同步；Surface丢失与DEVICE_LOST恢复范围不同。[ANDROID][SPEC]
+
+[桥接宿主权限](../../05_workflows/04_android_integration/integrate_surfaceview_anativewindow.md#android-host-contract)与[生命周期状态权威段](../../05_workflows/04_android_integration/handle_android_lifecycle.md#multi-surface-lifecycle)包含ack/代际与退休协议；勿在本卡复制一套不同的处理顺序。
+
 
 - `SurfaceView` 与 `TextureView` 的生命周期不同：`SurfaceView` 的 surface 在后台可独立存在，`TextureView` 受 view 树影响更大。[ANDROID]
 - 横竖屏切换或分屏时，surface size 会变化，必须处理 `VK_ERROR_OUT_OF_DATE_KHR` 并 recreate swapchain。[ANDROID]
@@ -211,7 +221,7 @@ ANativeWindow / Surface（Java/Kotlin 层或 Native 层）
 ## 13. 专家经验
 
 **经验**：
-把 `VkSurfaceKHR` 与 `ANativeWindow` 的生命周期绑定管理：谁持有 `ANativeWindow`，谁就负责在销毁 surface 后释放它。不要在 Java 层 surface 还未创建完成时从 native 层急创 Vulkan surface。对 `SurfaceView`，建议在 `surfaceCreated` 中创建、在 `surfaceDestroyed` 中等待 GPU 空闲后再销毁。
+把 `VkSurfaceKHR` 与 `ANativeWindow` 的生命周期绑定管理：谁持有 `ANativeWindow`，谁就负责在销毁 surface 后释放它。不要在 Java 层 surface 还未创建完成时从 native 层急创 Vulkan surface。对 `SurfaceView`，创建/停用遵守回调有效时段；销毁回调返回前必须确认停止访问，GPU/WSI资源随后按各自合法完成证据退休，不能把idle当统一证明。
 
 **适用条件**：
 所有 Android Vulkan 应用。
@@ -237,7 +247,7 @@ Headless Vulkan（如离屏 compute）不需要 surface。
 ## 15. 需要回查官方文档的情况
 
 1. 不同 Android 版本对 `VK_KHR_android_surface` 的支持差异。
-2. `TextureView` / `SurfaceView` / `AHardwareBuffer` 各自获取 `ANativeWindow` 的具体方式。
+2. `TextureView` / `SurfaceView` 的有效 Surface 到 ANativeWindow 桥接；AHB另走外部内存导入，不能当窗口。
 3. 分屏、折叠屏、自由窗口模式下的 surface size 变化规则。
 4. 特定 OEM 对 surface format 与 present mode 的限制。
 5. `vkQueuePresentKHR` 在 surface 被销毁时的行为。

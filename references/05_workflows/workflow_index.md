@@ -102,3 +102,6 @@
 | OpenGL 迁移到 Vulkan | `08_migration/port_opengl_to_vulkan.md` |
 | Shadertoy 迁移到 Vulkan | `08_migration/port_shadertoy_to_vulkan.md` |
 | GLSL 效果迁移到 Android Vulkan | `08_migration/port_glsl_effect_to_vulkan_android.md` |
+
+
+v1.0.12仅按章节扩展既有Android Surface、媒体采样与颜色输出内容，API/Workflow文件数不变；新主题按唯一任务路由中的显式锚点读取，未命中不预载。

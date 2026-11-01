@@ -22,21 +22,16 @@
 
 ## 1. 任务目标
 
-建立 Android lifecycle 与 Vulkan 对象生命周期的映射，确保：
+建立每输出的有效访问、停止确认和退休协议：
 
 ```text
-onSurfaceCreated
-→ ANativeWindow acquire → VkSurfaceKHR create → Swapchain create → Render loop start
-
-onPause
-→ Stop render thread → Wait in-flight frames → Release swapchain-dependent resources
-
-onResume
-→ Recreate swapchain if needed → Resume render thread
-
-onSurfaceDestroyed
-→ Wait GPU idle → Destroy swapchain → Destroy surface → Release ANativeWindow
+surfaceCreated → 获取 window 引用 → 逐 Surface 查询 → swapchain → render
+pause/hidden → 只停止对应输出无必要的新工作（不等于 Surface 已销毁）
+surfaceDestroyed → 关闭该 generation 入口 → render 线程停止访问确认 → 回调返回
+旧 Vulkan 资源 → submission 完成 + WSI 退役证据 → 安全销毁/释放
 ```
+
+后两条不能混同。停止访问确认不能靠“只 post 一个 destroy 事件”；后台资源退休也不能继续访问已经失效的 Android Surface。
 
 ---
 
@@ -45,7 +40,7 @@ onSurfaceDestroyed
 需要确认：
 
 - Android 版本、设备 GPU（Adreno / Mali / PowerVR）。
-- 是否使用 native Activity 或 Java/Kotlin Activity + `SurfaceView` / `TextureView` / `SurfaceHolder`。
+- 是否使用 NativeActivity 或 Java/JNI Activity + `SurfaceView` / `TextureView` / `SurfaceHolder`。
 - render thread 模型：单 render thread、render thread + worker threads、专用 compute thread。
 - 是否使用多 buffering（双缓冲 / 三缓冲）以及 frame-in-flight 数量。
 - 是否已有 swapchain recreate 处理（如 `VK_ERROR_OUT_OF_DATE_KHR` / `VK_SUBOPTIMAL_KHR`）。
@@ -55,8 +50,8 @@ onSurfaceDestroyed
 
 ## 3. 前置检查
 
-- [ ] Validation Layer 可用。
-- [ ] RenderDoc / AGI 可抓帧。
+- [ ] 已记录Validation Layer可用性与实际覆盖；不可用不冒称clean。
+- [ ] 已记录RenderDoc / AGI可用性；抓不到时用合法日志/最小复现并标覆盖缺口。
 - [ ] 已能在正常启动路径创建 swapchain 并呈现多帧。
 - [ ] 已能在 `VK_ERROR_OUT_OF_DATE_KHR` 时手动 recreate swapchain。
 - [ ] 已跟踪每帧的 fence 与 in-flight command buffer。
@@ -68,24 +63,13 @@ onSurfaceDestroyed
 ## 4. Vulkan 对象链路
 
 ```text
-Android Activity
-→ SurfaceHolder.Callback
-→ ANativeWindow (Java Surface → native window)
-→ vkCreateAndroidSurfaceKHR
-→ VkSurfaceKHR
-→ vkCreateSwapchainKHR
-→ VkSwapchainImageKHR[]
-→ Frame-in-flight Resources:
-    VkCommandBuffer[]
-    VkFence[]
-    VkSemaphore[] (acquire / render complete)
-→ vkQueuePresentKHR
-→ onSurfaceDestroyed
-→ vkDeviceWaitIdle
-→ vkDestroySwapchainKHR
-→ vkDestroySurfaceKHR
-→ ANativeWindow_release
+Process → DeviceContext（共享策略先确认）→ RenderInstance / Engine
+→ OutputId + surfaceGeneration → ANativeWindow → VkSurfaceKHR → VkSwapchainKHR
+→ VkImage[] + per-image present wait semaphore
+→ per-output frame slot（command buffer / submit fence / acquire semaphore）
 ```
+
+真实 swapchain image 类型是 `VkImage`；DeviceContext/OutputId 是工程概念。所有权表见 [多实例模型](../../02_core_mental_model/android_surface_swapchain_lifecycle.md#multi-instance-ownership)。
 
 ---
 
@@ -93,21 +77,14 @@ Android Activity
 
 | 资源 | 类型 | Usage | 生命周期 | 是否随 swapchain 重建 |
 |---|---|---|---|---|
-| ANativeWindow | `ANativeWindow*` | Android Surface 的 native 句柄 | surface 回调期间 | 是（surface 重建时） |
-| surface | `VkSurfaceKHR` | Vulkan surface | surface 存在期间 | 是 |
-| swapchain | `VkSwapchainKHR` | 呈现图像 | surface 有效期间 | 是 |
-| swapchain image | `VkImage` | 由 swapchain 持有 | swapchain 生命周期 | 是 |
-| command buffer | `VkCommandBuffer` | 每帧录制 | frame-in-flight | 否（pool 通常保留） |
-| fence | `VkFence` | 帧完成信号 | frame-in-flight | 否 |
-| semaphore | `VkSemaphore` | acquire / render complete | frame-in-flight | 否 |
-| depth image | `VkImage` | depth attachment | swapchain extent 绑定 | 是 |
-| per-frame SSBO / UBO | `VkBuffer` | 每帧数据 | frame-in-flight | 否（尺寸不变时） |
+| window / surface | `ANativeWindow*` / `VkSurfaceKHR` | 平台输出桥 | 该输出的 Surface generation | Surface更换时 |
+| swapchain / views | `VkSwapchainKHR` / `VkImageView` | 呈现 | 该代 GPU + WSI 退休 | 是 |
+| frame slot | command buffer / `VkFence` / acquire `VkSemaphore` | submission | 该输出自己的已完成 slot | 确认未使用才复用 |
+| present wait | `VkSemaphore` | present等待 | 该输出 swapchain image 的 WSI使用 | 需独立退役证据 |
+| depth / offscreen | `VkImage` | 附件 | extent/format/generation及GPU完成 | 按实际依赖 |
+| cache / allocator | device所属对象 | 共享资源 | 所有消费者释放后 | 不因A局部关闭销毁 |
 
-设计说明：
-
-- `ANativeWindow` 在 `onSurfaceCreated` 时 acquire，在 `onSurfaceDestroyed` 时 release；release 前必须确保不再使用关联的 `VkSurfaceKHR` [ANDROID]。
-- `VkSurfaceKHR` 与 `VkSwapchainKHR` 随 surface 重建而销毁重建；frame-in-flight 的 fence/semaphore 通常可复用，但需等待全部完成 [SPEC]。
-- depth image、swapchain-dependent frame buffer 等应在 swapchain recreate 时重建 [ENGINE]。
+`ANativeWindow_fromSurface` 取得的引用最终匹配 release；保留引用不会延长宿主允许访问 Surface 的时段。关闭某实例不自动销毁 shared device。[ANDROID][ENGINE]
 
 ---
 
@@ -129,103 +106,81 @@ Android Activity
 
 ## 7. 同步与 Layout 设计
 
-| Producer | Resource | Barrier / Layout | Consumer |
-|---|---|---|---|
-| acquire semaphore | swapchain image | `VK_IMAGE_LAYOUT_UNDEFINED` → `COLOR_ATTACHMENT_OPTIMAL` | render pass color attachment write |
-| render pass color write | swapchain image | `COLOR_ATTACHMENT_WRITE` → `COLOR_ATTACHMENT_WRITE`；`COLOR_ATTACHMENT_OPTIMAL` → `PRESENT_SRC_KHR` | present engine |
-| onPause signal | frame fence | `vkWaitForFences` 等待 in-flight frame | 安全销毁 swapchain-dependent 资源 |
-| onSurfaceDestroyed | all GPU work | `vkDeviceWaitIdle` | 安全 destroy surface / swapchain |
+| 事件/资源 | 必须区分的完成条件 |
+|---|---|
+| acquire 成功 / SUBOPTIMAL | 已取得image和信号，必须进入明确消费/收尾路径，不能直接丢弃 |
+| acquire OUT_OF_DATE / TIMEOUT / NOT_READY | 没有本次成功acquire，在此前frame fence等待已成功且尚未reset的前提下保留其signaled状态，不盲目reset |
+| frame slot 复用 | 检查 `vkWaitForFences` 的返回值；timeout/device lost不能当成功 |
+| command buffer 引用的旧 image/view | 相关 submission 确实完成后才销毁 |
+| present wait semaphore / swapchain退休 | submit fence不等于present完成，按维护扩展present fence或适用WSI退役协议 |
+| host destroy 回调 | render线程停止访问旧Surface的ack必须在返回前完成 |
 
-必须说明：
-
-- `vkAcquireNextImageKHR` 返回的 semaphore 必须在同一帧的 submit 中等待 [SPEC]。
-- present 前必须将 swapchain image transition 到 `VK_IMAGE_LAYOUT_PRESENT_SRC_KHR` [SPEC]。
-- `onPause` 时应停止提交新帧，等待所有 in-flight fence 完成，再释放 swapchain-dependent 资源 [ANDROID]。
-- `onSurfaceDestroyed` 前必须调用 `vkDeviceWaitIdle`，确保 GPU 不再访问 surface / swapchain image [SPEC]。
-- 不要在 `vkDeviceWaitIdle` 期间持有 Android UI 线程锁，避免 ANR [ANDROID]。
+遵循 [setup_frame_loop](../01_renderer_setup/setup_frame_loop.md) 的成功录制后、确定即将submit才reset fence规则，以及 [semaphore](../../03_api_manual/08_synchronization/semaphore.md) 的present重用规则。
+`vkDeviceWaitIdle(device)` 无timeout参数；它等待该device队列工作，不是默认局部关闭策略，也不单独证明presentation资源退休。必要时用可超时的fence等待并保留未完成对象；绝不能编造wait-idle超时返回分支。[SPEC]
 
 ---
 
 ## 8. 实现步骤
 
-1. **建立 lifecycle 桥接**：
-   - Java/Kotlin `SurfaceHolder.Callback` 中转发 `surfaceCreated` / `surfaceChanged` / `surfaceDestroyed` 到 native 层。
-   - Activity `onPause` / `onResume` 同步转发到 native render thread 状态机 [ANDROID]。
-2. **onSurfaceCreated**：
-   - 从 `Surface` 获取 `ANativeWindow`（`ANativeWindow_fromSurface`），保存句柄。
-   - 调用 `vkCreateAndroidSurfaceKHR` 创建 `VkSurfaceKHR` [SPEC]。
-   - 查询 surface capabilities，创建 `VkSwapchainKHR` [SPEC]。
-   - 创建 / 重建 depth image、framebuffer、swapchain-dependent descriptor [ENGINE]。
-3. **启动 / 恢复 render thread**：
-   - 设置 `renderingAllowed = true`，唤醒 render loop [ENGINE]。
-4. **正常渲染帧**：
-   - acquire image → 录制 command buffer → submit（等待 acquire semaphore，signal render complete semaphore）→ present [SPEC]。
-5. **处理 out-of-date / suboptimal**：
-   - `vkAcquireNextImageKHR` 或 `vkQueuePresentKHR` 返回 `VK_ERROR_OUT_OF_DATE_KHR` / `VK_SUBOPTIMAL_KHR` 时，停止当前帧，等待 GPU idle，recreate swapchain [SPEC]。
-6. **onPause**：
-   - 设置 `renderingAllowed = false`，通知 render thread 停止新帧提交 [ENGINE]。
-   - render thread 等待所有 in-flight fence（`vkWaitForFences` with timeout）完成 [SPEC]。
-   - 释放 swapchain-dependent 资源（depth image、framebuffer）；保留 device、pipeline、descriptor layout、fence/semaphore pool [ENGINE]。
-7. **onResume**：
-   - 若 surface 仍存在且 swapchain 有效，直接恢复 render thread [ENGINE]。
-   - 若 surface 已变化（如先 `surfaceDestroyed` 再 `surfaceCreated`），等待新的 `onSurfaceCreated` 后再创建 swapchain [ANDROID]。
-8. **onSurfaceDestroyed**：
-   - 设置 `renderingAllowed = false`。
-   - 调用 `vkDeviceWaitIdle` 等待 GPU 完成所有工作 [SPEC]。
-   - 调用 `vkDestroySwapchainKHR` 销毁旧 swapchain（可传 oldSwapchain 给新 swapchain 加速，但 surface 已销毁时不行）[SPEC]。
-   - 调用 `vkDestroySurfaceKHR` 销毁 surface [SPEC]。
-   - 调用 `ANativeWindow_release` 释放 `ANativeWindow` [ANDROID]。
-9. **rotation / resize**：
-   - 通常触发 `surfaceDestroyed` → `surfaceCreated` → `surfaceChanged`；按上述路径重建。
-   - 新 swapchain extent 为 0 时（某些 Android 版本在 transition 期间），暂停渲染直到非 0 [ANDROID]。
-10. **错误处理**：
-    - `vkDeviceWaitIdle` 超时：记录日志，避免强制销毁，必要时调用 `ANativeActivity_finish` [ANDROID]。
-    - `DEVICE_LOST`：按 `../../04_debug_playbooks/02_crash_hang/device_lost.md` 处理。
-11. **接入销毁路径**：
-    - Activity `onDestroy` 时确保 `onSurfaceDestroyed` 已处理；再销毁 device、instance [ENGINE]。
+<a id="multi-surface-lifecycle"></a>
+### 每输出事件/状态合同（独立读取入口）
+
+前提：已建立 process/device/engine/output/frame/image/source-frame owner 图；仅访问有效宿主Surface。每个事件携带 outputId、generation、sequence；销毁确认与GPU/WSI退休是两种独立完成证据。[ENGINE]
+
+| 输入事件 | 前置/动作 | 新状态或确认 |
+|---|---|---|
+| create(g) | 注册新代；取window引用；逐Surface查present/caps/format/transform | Ready(g)，非零extent且visible/host允许/device健康才运行 |
+| resize(g) | 仅匹配当前代；停止该输出新使用；旧代依赖进入退休表 | 重查capabilities，重建所需附件/descriptor，不改B状态 |
+| destroy(g) | 原子关闭该代调度入口；排空/取消未开始的访问；等待已进入的Surface操作退出 | render ack: 不再触碰该Surface，回调才能返回；未退休对象仍被追踪 |
+| 旧resize/destroy/completion(g-old) | 不改变新代对象；completion只结算其原代记录 | stale事件被丢弃或用于旧代回收，不能释放新代view |
+| hidden / pause | 更新该实例对应状态，不推断Surface销毁 | 停止无必要提交；B与共享资源保持 |
+| resume / visible | 核对Surface仍有效/非零extent与device状态 | 条件齐全才恢复 |
+| SURFACE_LOST / OUT_OF_DATE | 只标受影响输出失效；成功acquire须另走收尾 | 合法时局部重建，不重置共享device |
+| DEVICE_LOST | 冻结同device所有输出和输入消费者；记录未完成工作 | device级诊断/恢复，不能承诺B继续正常 |
+
+1. Java `SurfaceHolder.Callback` 或 Wallpaper Engine 对等回调向JNI传 outputId/generation；不假定 Activity 与 Wallpaper 回调相同。
+2. 建立锁序：UI等停止ack时释放worker需要的锁；render不等待UI回调才能发ack；不能在持queue锁时阻塞等需要该queue的线程。ack须覆盖正在进行的surface访问退出，不只是收到事件。
+3. 有界acquire等待与生命周期可中断调度避免停止线程长期卡在新帧入口；若停止无法完成，报告错误，不虚报ack然后继续访问旧Surface。UI预算/ANR风险须测量，不以超时后强制销毁掩盖。
+4. 正常帧按原frame-loop协议处理wait/acquire/record/reset/submit/present及各返回值。SUBOPTIMAL并非未取得image；提交失败后已reset fence不能再次无条件等待。
+5. 旧代GPU对象保留到submission完成；present等待/旧swapchain按明确WSI维护能力或既有退役协议处理。新代不可沿用仍被使用的旧present semaphore。
+6. Surface销毁后不能为回收旧代再发起旧Surface acquire/present；设计必须在有效期建立可用退役证据，无法证实时保持未验证/待恢复，不把device idle当万能替代。
+7. shared device仅在最后消费者/实例退出且合法完成后销毁；发生device lost按设备级恢复。局部resize不销毁shared allocator/cache。
+8. 每条日志只记身份/代际/返回值/完成序号，不保存私人画面；对照100次局部重建、1000帧双消费者、15分钟建议smoke预算，实际运行前固定次数与设备。
 
 ---
 
 ## 9. Android 注意点
 
-- `ANativeWindow` 必须在 Java `Surface` 有效期间持有；`Surface` 销毁后再使用 `ANativeWindow` 是未定义行为 [ANDROID]。
-- `onSurfaceDestroyed` 可能在 `onPause` 之后或之前触发，需用状态机管理：只要 surface 不存在或 rendering 未允许，就不提交 [ANDROID]。
-- 某些设备在切后台后会销毁 surface，但不会立即触发 `onDestroy`；此时应释放 swapchain 但保留其他资源以加速恢复 [ANDROID]。
-- `vkQueuePresentKHR` 在 surface 已销毁后调用会触发 `VK_ERROR_SURFACE_LOST_KHR` 或 `DEVICE_LOST`；必须在提交前检查 surface 状态 [ANDROID]。
-- rotation 时 `preTransform` 应匹配 `VkSurfaceCapabilitiesKHR::currentTransform`，避免 GPU 额外旋转开销 [ANDROID]。
-- extent 为 0 的处理：在 `surfaceChanged` 收到 0x0 时暂停渲染，收到非 0 后再创建 swapchain [ANDROID]。
-- 不要在 UI 线程调用 `vkDeviceWaitIdle` 或 `vkQueuePresentKHR`；所有 Vulkan submit 应在 render thread 执行 [ANDROID]。
-- 多窗口 / 分屏模式下 surface size 可能频繁变化，需支持快速 swapchain recreate [ANDROID]。
-- 建议在 Java/Kotlin 层记录每个 lifecycle 回调的时间戳与 surface 尺寸，便于与 native 层日志对齐排错 [GUIDE]。
+- Surface有效访问时段由宿主回调合同确定；引用计数不是继续呈现的授权。
+- rotation可能只changed，也可能destroy/create，不规定固定回调顺序。
+- `visible`、`hostPaused`、`surfaceValid`、`deviceHealthy`分别维护；零extent不创建swapchain。
+- queue host并发按规范外部同步（除非明确启用适用的内部同步能力）；单提交线程是可选工程策略，不是规范强制。
+- AppWidget/RemoteViews不承诺任意SurfaceView；应用内与Wallpaper/OEM宿主分开验证。无隐藏API/root/后台相机默认路径。
 
 ---
 
 ## 10. 验证方式
 
-- [ ] Validation Layer clean：无 swapchain / surface / semaphore 相关错误 [TOOL]。
-- [ ] RenderDoc / AGI：可 capture pause / resume / rotation 后的帧 [TOOL]。
-- [ ] 截图 / 数值验证：lifecycle 切换后渲染结果正确，无黑屏、拉伸、闪屏。
-- [ ] logcat（Android）：`adb logcat -s vulkan` 无 `VUID-vkAcquireNextImageKHR-*`、`VUID-vkQueuePresentKHR-*`、`VUID-vkDestroySurfaceKHR-*` 等错误；可输出 lifecycle 状态日志。
-- [ ] 性能指标：
-  - pause / resume 耗时在可接受范围（通常 < 100 ms，高端机 < 50 ms）；
-  - rotation 后 frame time 恢复稳定；
-  - 无 redundant swapchain recreate [TOOL]。
-- [ ] resize / pause / resume / rotation 后渲染正常。
-- [ ] 多帧运行稳定，无 `DEVICE_LOST`。
+- [ ] Validation与日志（可用时）绑定最终代码/设备/驱动；clean不等于完整正确。
+- [ ] A关闭/重建时B仍提交，shared allocator/device未误销毁。
+- [ ] 旧generation resize/destroy/completion不改变新代状态。
+- [ ] destroy回调返回后无任何旧Surface访问；无UI/render互等。
+- [ ] frame fence与present semaphore各自有完成证据；acquire/record/submit失败收尾覆盖。
+- [ ] 同device DEVICE_LOST冻结所有使用者；Surface丢失仅局部恢复。
+- [ ] 固定预算测延迟、队列占用、FD/内存收敛，不预设100ms/50ms保证。
+- [ ] 无授权设备时隔离状态fixture只记Static PASS，Device保持NOT RUN。
 
 ---
 
 ## 11. 常见失败模式
 
-1. **surface 已销毁仍 present**：导致 `VK_ERROR_SURFACE_LOST_KHR` 或 `DEVICE_LOST` [ANDROID]。
-2. **`ANativeWindow_release` 后仍使用 surface**：`VkSurfaceKHR` 底层引用已释放，后续 Vulkan 调用崩溃 [ANDROID]。
-3. **onPause 未等待 in-flight frame**：destroy swapchain 时 fence 未 signaled，触发 validation error 或 crash [SPEC]。
-4. **`vkDeviceWaitIdle` 阻塞 UI 线程**：导致 ANR [ANDROID]。
-5. **swapchain recreate 时 extent 为 0**：`vkCreateSwapchainKHR` 失败或创建 0x0 swapchain [ANDROID]。
-6. **rotation 未更新 preTransform**：GPU 额外旋转，frame time 增加 [ANDROID]。
-7. **fence / semaphore 复用未等待**：in-flight frame 未完成就 reset fence 或 reuse semaphore，导致 hazard [SPEC]。
-8. **depth image 未随 swapchain 重建**：新 extent 下 depth attachment 尺寸错误，validation error [SPEC]。
-9. **compute queue 在 surface destroy 后仍提交**：compute 命令虽不使用 swapchain image，但若与 graphics 同 queue，仍可能因 surface lost 导致 device lost [ANDROID]。
+1. 一个全局currentSurface或frameIndex导致多实例互相覆盖。
+2. 只post destroy就返回，render线程仍访问失效Surface。
+3. ack等待持有worker需要的锁，形成UI/render死锁。
+4. 旧代完成回调释放新代view，或在B仍使用时销毁shared device。
+5. 把frame fence当present退休证据，或将未消费acquire信号直接复用。
+6. 编造 `vkDeviceWaitIdle` timeout 分支，超时后强制释放pending资源。
+7. 把共享queue的正常compute与Surface故障直接推导为device lost；须依据实际错误与资源链。
 
 ---
 
@@ -265,3 +220,6 @@ Android Activity
 - `adb logcat` 中 lifecycle 与 Vulkan 的交错日志。
 - swapchain recreate 代码与 `vkCreateSwapchainKHR` 参数。
 - frame-in-flight 数量、fence/semaphore 管理代码。
+
+
+来源（2026-11-01核对）：[Surface回调](https://developer.android.com/reference/android/view/SurfaceHolder.Callback)、[Wallpaper多Engine](https://developer.android.com/reference/android/service/wallpaper/WallpaperService)、[WaitIdle签名](https://docs.vulkan.org/refpages/latest/refpages/source/vkDeviceWaitIdle.html)、[WSI退休](https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html)。

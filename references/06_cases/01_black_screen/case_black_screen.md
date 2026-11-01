@@ -743,3 +743,13 @@ resize 后是否更新
 
 
 ---
+
+
+<a id="android-alpha-color-case"></a>
+## Case: Transparent Edge Darkening（设计诊断案例，非真机结果）
+
+半透明红边不是“黑屏=曝光不足”：输入线性RGB=(1,0,0), alpha=0.5，premultiplied存储为(0.5,0,0)。若shader再乘alpha变为(0.25,0,0)，在黑背景source-over只剩一半预期红值。先固定输入/工作/输出空间，复核是否重复premultiply、blend factors、supportedCompositeAlpha与宿主实际透明链，再查编码/颜色元数据。不能用OPAQUE或加曝光掩盖根因。
+
+正变体：已premultiplied不再乘；反变体：straight输入必须按其选择的blend合同转换/使用。P3只证明色域意图，FP16只证明存储，HDR须逐Surface能力和完整输出编码链。相同色条离屏数值通过不等于Android合成或面板色准通过；无设备为NOT RUN。
+
+权威：[颜色合同](../../02_core_mental_model/render_target_model.md#color-output-contract)、[输出工作流](../../05_workflows/02_render_pass_effects/add_postprocess_pass.md#color-output-workflow)。

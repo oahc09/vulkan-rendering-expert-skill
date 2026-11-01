@@ -98,3 +98,30 @@ Offscreen Color Image
 Dynamic Rendering 简化了 RenderPass / Framebuffer，但没有取消 Render Target 心智模型。
 任何 pass 都必须明确：写入哪个 image，以什么 layout 写，后续谁读，如何同步。
 ```
+
+
+<a id="color-output-contract"></a>
+## Android 输入—工作—输出颜色合同（C3权威）
+
+前提：输入来源和目标Surface已识别；资源同步/ownership另有完成证据。本节不把VkImageLayout当颜色编码，也不由FP16/10-bit推断屏幕HDR。[ENGINE]
+
+| 合同字段 | 输入 | 工作空间 | 输出/合成 |
+|---|---|---|---|
+| primaries / 白点 | producer/container可信元数据，未知则显式假设 | 明确所选线性RGB基色，必要时矩阵转换 | 每Surface支持的色域；Display P3是色域，不等于HDR |
+| transfer | sRGB/PQ/HLG等实际编码，不从扩展名猜 | 解码到目标工作语义；YCbCr转RGB不自动线性化 | 明确编码一次，shader与sRGB attachment固定功能不能重复 |
+| range / bit depth | full/limited、量化精度单列 | 运算/中间附件精度与裁剪范围 | 10-bit/FP16只描述存储，不保证系统或面板HDR |
+| alpha mode | opaque/straight/premultiplied | 规定在何空间合成；只在需要时乘一次alpha | pipeline blend、compositeAlpha与宿主合同一致 |
+| 参考白 / 亮度 | 未知时记录假设与来源 | 单位/曝光约定明确 | tone mapping责任方、目标headroom和实际显示条件 |
+
+完整链：输入编码/原色/范围 → YCbCr/RGB与transfer/primaries处理 → 工作精度/blend → 指定tone-mapping owner → 输出编码 → 逐Surface VkFormat/VkColorSpaceKHR → Android compositor/display。Image barrier只改变访问和同步，不执行这条颜色链。[SPEC][ENGINE]
+
+| tone-mapping owner | 应用职责 | 防重复/验证 |
+|---|---|---|
+| 应用输出SDR | 将高动态输入映射至声明SDR编码/参考白 | 不再把已映射数值标成PQ/HLG让下游重复解释 |
+| 标准HDR输出 | 生成与实际支持的HDR pair一致的像素/必要metadata | 系统/显示如何映射需路径证据，不能假定完全不处理 |
+| 平台媒体/直接buffer路径 | 按该路径dataspace/metadata合同供给内容 | 不把该路径颜色接口套到WSI内部BufferQueue |
+
+Media3 `1.12.0-alpha01`（2026-10-21）加入Display P3标识与映射，只是Alpha元数据能力，不是通用Vulkan导入/HDR完成证明。研究日期2026-11-01，该页面还列更晚alpha02；不以页面顶部更新时间替代事件日期，不强制引入Media3。[ANDROID]
+
+数值测试先固定色条/灰阶/透明边缘的源数值、工作空间与容差，再跑离屏检查；不能看结果后改阈值。屏幕合成另测，截图/回读不证明面板绝对亮度、系统tone mapping或色准。无HDR设备/校准时仅报告实际覆盖和未验证项。
+来源：[Media3 release](https://developer.android.com/jetpack/androidx/releases/media3#1.12.0-alpha01)、[compositeAlpha](https://docs.vulkan.org/refpages/latest/refpages/source/VkCompositeAlphaFlagBitsKHR.html)、[HDR metadata](https://docs.vulkan.org/refpages/latest/refpages/source/VK_GOOGLE_hdr_smpte_st_209450_metadata.html)。

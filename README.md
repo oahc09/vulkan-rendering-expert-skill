@@ -108,3 +108,8 @@ git clone https://github.com/oahc09/vulkan-rendering-expert-skill ~/.claude/skil
 - **直接提问（推荐）**：无需先读任何文件，技能按症状/意图自动路由到对应 playbook、workflow 或案例。
 - **看知识地图**：读 `references/README.md` 和 `references/MODULE_SUMMARY.md`，了解 8 个模块的分工与规模。
 - **深入学习**：按模块编号 `00` → `07` 顺序阅读；调试优先读 `04_debug_playbooks/`，实现优先读 `05_workflows/`，架构优先读 `02_core_mental_model/engine_architecture.md`；真实仓库分析优先读 `05_workflows/01_renderer_setup/project_diagnosis.md`。
+
+
+## v1.0.12 — Android System Rendering
+
+v1.0.12 增量覆盖Android多Engine/多Surface、Camera/MediaCodec→AHB帧lease与同步、颜色/HDR/透明合成。运行时知识净增0，保留200文件预算与原启动。配对tests仓新增12系统题，总40；隔离状态/数学fixture只证明Static契约，真实Live、宿主和Device需另验。
