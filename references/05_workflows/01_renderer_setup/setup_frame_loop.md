@@ -24,8 +24,8 @@
 ```text
 Wait Fence
 → Acquire Swapchain Image
-→ Reset Fence
-→ Reset / Record CommandBuffer
+→ Reset / Record CommandBuffer（成功后确认会提交）
+→ Reset Fence（紧邻 submit）
 → Queue Submit
 → Present
 ```
@@ -115,10 +115,11 @@ Frame loop 本身不直接设计 pipeline / descriptor。
 
 ---
 
-## 8. 实现步骤
+<a id="frame-loop-contract"></a>
+## 8. 实现步骤（帧循环权威契约）
 
 1. 创建 per-frame acquire semaphore / fence；按 swapchain image 数量创建 renderFinishedSemaphore。
-2. 每帧 wait 当前 frame fence。
+2. 每帧 wait 当前 frame fence 并检查返回值；仅成功后复用该 frame slot。
 3. 调用 `vkAcquireNextImageKHR`。
 4. OUT_OF_DATE 标记重建并返回；TIMEOUT / NOT_READY 跳过本轮；SUCCESS / SUBOPTIMAL 继续，后者标记稍后重建。Surface / device lost 走恢复路径。
 5. reset command buffer。
@@ -129,6 +130,22 @@ Frame loop 本身不直接设计 pipeline / descriptor。
 10. present 等待 renderFinishedSemaphore[imageIndex]。
 11. 处理 `VK_SUBOPTIMAL_KHR` / `VK_ERROR_OUT_OF_DATE_KHR`。
 12. frame index 递增。
+
+### 提前退出与失败分支
+
+| 分支 | 必须保持的状态 |
+|---|---|
+| wait fence 返回 TIMEOUT 或错误 | 不复用 command buffer / frame resource，不进入 acquire / reset / submit；超时可重试，device lost 进入恢复 |
+| acquire 返回 OUT_OF_DATE / TIMEOUT / NOT_READY | 不 reset frame fence，不使用无效 imageIndex；分别重建或跳过 |
+| acquire 返回 SUCCESS / SUBOPTIMAL | image 已取得；SUBOPTIMAL 不是“未取得 image”，正常处理本次提交/呈现后安排重建 |
+| acquire 成功后录制失败或主动跳过 | 不 reset frame fence；不能直接复用仍有待消费信号的 acquire semaphore 或遗弃 acquired image。进入显式恢复：按规范完成信号消费与 image 处理；不具备恢复协议时停止普通帧循环 |
+| reset fence 失败 | 不提交；检查错误并进入恢复，不能假设 fence 状态已更新 |
+| submit 失败 | 不 present，不回到普通等待已 reset fence 的路径；单独处理 device lost / 恢复并重建受影响状态，不能假设 fence 将来会 signal |
+
+帧循环摘要、API 卡片和独立段落读取均以本节为准；不是可以忽略调用返回值的可直接复制代码。
+非 pending 的 unsignaled fence 也允许 reset；这里把 reset 延迟到 submit 前，是避免失败路径死锁的工程策略，
+不是规范要求 fence 必须先 signal。present 资源的退役另见
+[Swapchain 重建](../../03_api_manual/02_surface_swapchain/swapchain_recreate.md)，不能用本帧 submit fence 代替。
 
 ---
 

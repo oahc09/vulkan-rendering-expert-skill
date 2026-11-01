@@ -49,6 +49,12 @@ This skill requires output to always provide actionable Vulkan paths rather than
 4. Give the minimal verification approach, e.g. Validation Layer, RenderDoc, AGI, logcat, traces, counters, or targeted asserts.
 5. Explicitly require looking up the Vulkan Spec, Registry, official samples, or platform docs when API details are uncertain.
 
+## v1.0.10: Consistency and Release Verification (2026-11-01)
+
+Aligns frame-loop summaries, failure paths and synchronization API cards while preserving the eight modules and minimal startup contract. Historical behavior answers are archived in the tests repository with a byte hash. Release checks use the actual whitelist manifest and an explicit candidate SHA, not the entire Git tree count.
+
+This is a documentation/static-correctness candidate. Real 16-case Live runs, host discovery/loading and token reduction remain unverified; historical PASS or mocks are not acceptance evidence.
+
 ## v1.0.9: Lightweight Entry (2026-10-17)
 
 Startup reads all 19 hard rules and only the routing-entry section of the single routing authority, then the matching sections. Templates, accuracy rules and retrieval protocols load when needed; G1-G6 verification remains mandatory before completion claims. All 8 modules, triggers, host configuration, Evidence Map and Architecture Map requirements remain intact.

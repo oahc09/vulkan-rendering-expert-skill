@@ -58,7 +58,7 @@ Command Buffer 录制完成
 |---|---|
 | `vkCreateFence` | 创建 fence，可指定初始状态为 signaled。[SPEC] |
 | `vkDestroyFence` | 销毁 fence；必须确保 GPU 不再使用且未被等待。[SPEC] |
-| `vkResetFences` | 批量将 fence 置为 unsignaled；必须在 CPU 确认已 signal 后执行。[SPEC] |
+| `vkResetFences` | 批量置为 unsignaled；不得关联尚未完成的 queue command。非 pending 的 unsignaled fence 也允许 reset。[SPEC] |
 | `vkWaitForFences` | CPU 阻塞等待一个或多个 fence 变为 signaled，可设超时。[SPEC] |
 | `vkGetFenceStatus` | 非阻塞查询 fence 状态。[SPEC] |
 
