@@ -1,6 +1,6 @@
 # Cases: Swapchain / Android
 
-> 合并自 4 个原 case 文件。关键词: android, rotation, surface, pause-resume, extent-zero
+> 合并自 4 个原 case 文件；另有1个系统渲染设计案例。关键词: android, rotation, surface, pause-resume, extent-zero
 
 ---
 
@@ -733,3 +733,18 @@ Surface / ANativeWindow 生命周期和 render thread 状态机是同等重要�
 
 
 ---
+
+
+<a id="multi-output-generation-case"></a>
+## Case: Preview Closure Invalidates Another Output（设计案例，非真机事故报告）
+
+### 现象与输入
+A是预览、B是实际输出，共享device；A关闭后B黑屏，旧A resize回调晚于新代create。没有源码/日志时这是待验证假设，不能声称已定位。
+
+### 错误路径与最小方案
+检查是否用全局currentSurface/frameIndex、A退出销毁shared allocator/device，或旧generation回调释放新view。先建owner图与事件日志，再仅停用A旧代并确认不再访问；B状态不变。旧代completion只结算旧代，资源按submission与WSI分别退休。真实DEVICE_LOST则冻结同device全部输出，不能伪装局部重建。
+
+### 正反验证
+相同generation事件应生效，旧generation不得改变新代；共享device故障覆盖A/B，独立device保持分别诊断。100次局部重建是建议smoke，不是已跑。日志记录engineId/outputId/generation/frameIndex/imageIndex/返回值，不含私人图像；无设备保持Device NOT RUN。
+
+权威：[owner图](../../02_core_mental_model/android_surface_swapchain_lifecycle.md#multi-instance-ownership)、[状态协议](../../05_workflows/04_android_integration/handle_android_lifecycle.md#multi-surface-lifecycle)。

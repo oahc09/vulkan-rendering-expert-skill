@@ -122,11 +122,11 @@ UI Thread Surface Event
 5. 创建 swapchain。
 6. 启动或恢复 render thread。
 7. `surfaceChanged` 时触发 swapchain recreate。
-8. `surfaceDestroyed` 时停止 render thread。
-9. 等待 GPU in-flight work。
+8. `surfaceDestroyed` 对指定output/generation关闭入口，等待render线程停止访问确认后才返回；只投递事件不够。
+9. 独立记录GPU submission完成与present退役证据，不能仅由frame fence或idle推断全部退休。
 10. 销毁 surface-dependent resources。
 11. release `ANativeWindow`。
-12. pause/resume 与 surface 状态机合并处理。
+12. pause/resume、可见性、Surface有效性和device健康分别记录，由组合条件控制该输出。
 
 ---
 
@@ -191,3 +191,21 @@ NoSurface
 - `../../04_debug_playbooks/05_android_specific/android_surface_lifecycle.md`
 - `../../04_debug_playbooks/02_crash_hang/swapchain_recreate_crash.md`
 - `../../04_debug_playbooks/01_visual_issues/black_screen.md`
+
+
+<a id="android-host-contract"></a>
+## Android 宿主桥接合同
+
+前提：只使用应用拥有或公开平台正常授予的Surface；Java/JNI/C++17为参考，不强制Kotlin依赖。每个宿主实例分配稳定engineId/outputId，Surface每次替换递增generation。Java Surface传JNI后 `ANativeWindow_fromSurface` 所得引用最终匹配release；window引用不能延长Surface有效访问时段。[ANDROID][ENGINE]
+
+| 宿主 | 入口/边界 | 验证条件 |
+|---|---|---|
+| 前台Activity的两个SurfaceView | 两套Callback/output状态，资源可按owner共享 | A局部销毁B继续；两Surface能力分别查询 |
+| WallpaperService.Engine | preview与真实壁纸可同时多个Engine | 以真实回调与isPreview等公开信息识别；不硬编码实例数/锁屏OEM顺序 |
+| AppWidget/RemoteViews | 受支持的远程视图集合，不是任意native view容器 | 不承诺直接嵌SurfaceView；可选合法静态内容/跳转应用内宿主 |
+| OEM/系统专有宿主 | 不属于普通应用默认权限 | 单列公开协议/权限与实测，未验证不能宣称支持 |
+
+Surface销毁回调等待“对应代线程已停止访问”的确认；不要持有render需获取的锁，也不要让render等待UI才能ack。后续资源退休不再访问失效Surface；完整状态机只在[生命周期权威段](handle_android_lifecycle.md#multi-surface-lifecycle)维护。
+
+摄像头仅在明确授权且系统允许的前台测试路径；Wallpaper测试默认色条/非私密本地输入，不默认后台相机可用。无需root、隐藏API、接管其他应用Surface或绕过保护内容。
+来源：[Callback](https://developer.android.com/reference/android/view/SurfaceHolder.Callback)、[WallpaperService](https://developer.android.com/reference/android/service/wallpaper/WallpaperService)、[RemoteViews](https://developer.android.com/reference/android/widget/RemoteViews)。
