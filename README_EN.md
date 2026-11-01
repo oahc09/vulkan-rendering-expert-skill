@@ -49,6 +49,12 @@ This skill requires output to always provide actionable Vulkan paths rather than
 4. Give the minimal verification approach, e.g. Validation Layer, RenderDoc, AGI, logcat, traces, counters, or targeted asserts.
 5. Explicitly require looking up the Vulkan Spec, Registry, official samples, or platform docs when API details are uncertain.
 
+## v1.0.11: Mobile Vulkan Evolution (2026-11-01)
+
+Adds mobile profiling and sustained-performance contracts, resource-level GPU fault evidence, tile-aware rendering and external-resource interoperability, and optional neural graphics integration decisions. Capability checks and standard fallbacks remain mandatory; no required framework migration or blanket increase of the minimum device API.
+
+Twelve new mobile scenarios are separate from the existing sixteen and the frozen twelve-case token target. Documentation/static checks are not Live-model, actual-host or native-device acceptance; unexecuted gates remain unverified.
+
 ## v1.0.10: Consistency and Release Verification (2026-11-01)
 
 Aligns frame-loop summaries, failure paths and synchronization API cards while preserving the eight modules and minimal startup contract. Historical behavior answers are archived in the tests repository with a byte hash. Release checks use the actual whitelist manifest and an explicit candidate SHA, not the entire Git tree count.

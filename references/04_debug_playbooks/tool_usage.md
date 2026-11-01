@@ -127,3 +127,32 @@ Validation clean 只说明当前配置、版本与执行路径没有报告已覆
 SDK 工具变化单独记录：[LunarG release notes](https://vulkan.lunarg.com/doc/view/latest/windows/release_notes.html) 宣布 1.4.363 引入 vkprofiles，并计划下一 SDK 移除 gen_profiles；不能把计划写成已发生。迁移前核对本地帮助、安装版本和官方命令语法，不猜 CLI 替换。
 
 参考：[VVL GPU-AV](https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/main/docs/gpu_validation.md)、[同步验证](https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/main/docs/syncval_usage.md)。
+
+
+<a id="mobile-profiler-contract"></a>
+## 6. 移动端采集入口与证据能力（2026-11-01）
+
+先记录设备/OS/GPU/driver、API与启用features、工具精确版本/channel、应用构建SHA、授权/权限、
+选中场景与导出格式。下表是选择协议，不是全部设备支持表。[ANDROID][TOOL]
+
+| 工具/入口 | 可取得的证据（须实际确认） | 不能由入口存在推导 |
+|---|---|---|
+| Android CLI 1.1.16717390（2026-10）`android profiler systemtrace` | 已授权连接目标上的系统时序/调度 trace；参数以安装版本帮助为准 | 不自动取得 GPU bandwidth counter、逐 draw 资源或源码根因 |
+| 同版本 `android profiler heapdump capture`；`android profiler session list/status/terminate` | JVM heap dump 与采集 session 管理；按用途选择，不混作 GPU 显存分析 | JVM heap 不能证明全部 native/GPU 内存；不能编造 CLI flag |
+| APA System Profiler / Frame Profiler | 分别确认系统trace分析和具体frame资源/调用分析能力、stable/beta/canary版本 | 系统trace可读不等于frame replay、扩展解码或全部counter可用 |
+| 既有 AGI / RenderDoc | 对实际支持的设备/API路径做最小capture/replay，再依赖相应事件/资源视图 | build成功、工具连接成功、同品牌其他设备成功均非本设备通过 |
+| 无可用 profiler | 已有 logcat、CPU单调时钟、支持的GPU timestamp/query、提交ID和最小复现 | 没有counter不等于没有带宽问题；仅列待测假设，不填虚构数据 |
+
+最小证据链：症状/设备状态 → trace时间段 → process/thread/frame → queue submission / resource ID →
+源码路径/函数 → 最小改动 → 同条件 A/B。GPU counter 必须保留实际名称、单位、采样范围与可用性；
+未采集时标“未取得”，不能把 system trace 推断包装成测量。[ENGINE]
+
+默认只使用已授权本地设备与本地日志；云设备付费、账号登录和私有 trace 上传需要另行授权。
+采集开销与正常性能分别报告。持续性能和生成帧口径见
+[持续性能](../05_workflows/07_optimization/optimize_frame_time.md#sustained-mobile-performance)，
+fault记录见 [资源级取证](02_crash_hang/device_lost.md#mobile-fault-evidence)。
+
+来源：[CLI 10月release](https://developer.android.com/tools/agents/android-cli/release-notes)、
+[2026-10-28 工具介绍](https://developer.android.com/blog/posts/android-dev-summit-26-developer-tools-performance)、
+[APA release notes](https://developer.android.com/android-performance-analyzer/release-notes)。
+上述为文档核验，不表示本环境安装或运行了这些工具。

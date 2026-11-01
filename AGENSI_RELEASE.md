@@ -25,7 +25,7 @@ v1.0.10 保留其与 v1.0.9 一致的最小启动契约，未改其他宿主配�
 | 字段 | 手填建议 |
 | --- | --- |
 | Title | Vulkan Rendering Expert Skill |
-| version | 1.0.10（必须与本次候选 `metadata.version` 相同） |
+| version | 1.0.11（必须与本次候选 `metadata.version` 相同） |
 | summary | Engineering-focused Vulkan guidance for rendering architecture, debugging, synchronization, Android integration, performance optimization, and source-level verification. |
 | tags | vulkan, rendering, android, graphics-engine, debugging, performance, synchronization |
 | use_cases | Diagnose black screens and validation errors; reason about synchronization and resource lifetimes; investigate Android surface/swapchain issues; assess performance bottlenecks; compare rendering architecture options. |
@@ -40,10 +40,10 @@ v1.0.10 保留其与 v1.0.9 一致的最小启动契约，未改其他宿主配�
 依据 [Agensi packaging 文档](https://www.agensi.io/docs/packaging)（2026-10-30 核验）：
 
 - **网站上传**：最多 1,000 文件、50 MB。白名单包 `SKILL.md`、`LICENSE`、
-  `README_EN.md`、`references/**` 为当前基线的 **196 文件**，文件数可行；仍须检查生成包实际大小及平台结果。
+  `README_EN.md`、`references/**` v1.0.10 基线为 **196 文件**，v1.0.11 最多4份新增后预算 **200 文件**，文件数可行；仍须检查生成包实际大小及平台结果。
 - **Agent 上传**：最多 100 文件、5 MB。196 文件包超过数量限制，**不能使用该渠道**，即使大小低于 5 MB。
 - **交付给 Agent**：1 个 `SKILL.md` 加最多 200 个附加文本文件，合计最多 600 万字符。
-  上述包有 195 个附加文件；仍须由打包报告确认实际字符数。上传限制与交付限制不是一回事。
+  v1.0.10有195个、v1.0.11预算199个附加文件；仍须由打包报告确认实际字符数。上传限制与交付限制不是一回事。
 - `.git`、`agents/`、`assets/`、`scripts/`、本清单与测试不能进入白名单包。
   本地自检依赖完整 checkout，不应作为买家 Agent 的运行时功能。
 
@@ -80,7 +80,7 @@ git status --short
 git rev-parse HEAD
 # 输出目录须已存在、位于 checkout 外；文件名不得已存在。
 python scripts/agensi_audit_and_pack.py . \
-  --out /absolute/path/outside-checkout/vulkan-rendering-expert-skill-1.0.10-agensi-free.zip
+  --out /absolute/path/outside-checkout/vulkan-rendering-expert-skill-1.0.11-agensi-free.zip
 ```
 
 把示例输出路径替换为自己的仓库外目录。保留 JSON 报告用于关联 commit、包内容和 SHA-256；
@@ -128,3 +128,16 @@ python scripts/agensi_audit_and_pack.py . \
 [9fbc2a782ee3f8a4db64e7d991e23da75e893f44](https://github.com/KhronosGroup/Vulkan-Headers/tree/9fbc2a782ee3f8a4db64e7d991e23da75e893f44)。
 对应官方参考页核对 fence reset、queue submit、Submit2 scope、acquire 与 feature enable。
 本轮没有安装或运行 Vulkan SDK / GPU renderer，SDK/runtime 版本及硬件测试不声明已验证。
+
+
+## v1.0.11 移动扩展候选边界
+
+基于已接受的v1.0.10源码：skill main `349dc35bd769ca6174afa5714450a4aa9f4cecf8`，
+tests main `75630ee590f30e05011512720ac2348b8adc832f`。仅4份新的运行时知识文件；实际白名单包不超过200，
+不按Git源码总数删文件。保留MIT、原启动/宿主配置、dirty拒绝与确定性ZIP检查。
+
+新增12移动题与历史16题均注册，但与原12题30% token基线分别统计。
+Static/Snapshot/Live/Device/真实宿主独立报告；无授权provider wrapper或目标手机时保持未验证，
+不把CI、源码阅读、桌面仿真或文档完成当作Adreno/Mali/神经原生路径通过。
+第三方SDK代码、文档和模型许可证分开记录，不打包权重或整份受限文档。
+来源清单、设备矩阵、逐项需求映射与最终SHA/hash均在配对tests仓；本任务只交Draft PR，不自动发布/合并。

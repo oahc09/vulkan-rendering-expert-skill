@@ -49,7 +49,7 @@ CPU Record + Submit
 ## 3. 前置检查
 
 - [ ] Validation Layer clean（优化前确保无错误）。
-- [ ] AGI / RenderDoc / Nsight / PIX 至少一种可用。
+- [ ] 已确定可用的 profiler / trace / timestamp / 日志；能力缺失明确标注，不编造 counter。
 - [ ] 已记录基线 frame time、CPU time、GPU time、present time。
 - [ ] 已确认 bottleneck 在 CPU 还是 GPU。
 - [ ] 已确认 swapchain 当前 present mode（FIFO / MAILBOX / IMMEDIATE）。
@@ -154,7 +154,7 @@ Pipeline 状态：
 2. **定位瓶颈**：
    - 若 CPU record 长 → 优化 draw call 数量、command buffer 录制效率；
    - 若 GPU active 长 → 优化 shader、bandwidth、overdraw；
-   - 若 CPU 等待 GPU fence 长 → GPU bound，优化 GPU；
+   - 若 CPU 等待 GPU fence 长 → 检查 GPU工作、提交时序与呈现节奏，不能单凭等待归因 GPU bound；
    - 若 GPU 等待 CPU submit → CPU bound，优化 record / submit [HEUR]。
 3. **减少 draw call**：
    - 静态 batching、dynamic batching、instancing（`vkCmdDrawIndexedIndirect` / `vkCmdDrawIndexedIndirectCount`）[HEUR]；
@@ -266,3 +266,29 @@ Pipeline 状态：
 - Render pass / subpass 结构。
 - 当前 batching / instancing 策略。
 - Android lifecycle 日志。
+
+
+<a id="sustained-mobile-performance"></a>
+## 15. 持续移动性能、热状态与帧节奏
+
+短测更快不等于持续体验改善。固定设备/driver、场景、分辨率、画质、刷新率、运行时长、供电与初始热状态，
+先区分 CPU调度、GPU工作、呈现等待与热降频，再决定 shader / pass / pacing / 动态质量改动。[ENGINE]
+
+| 指标 | 口径与边界 |
+|---|---|
+| 游戏逻辑帧 / 真实渲染帧 | 分别记录 CPU/GPU工作和输入采样；不能用插值帧补足逻辑更新率 |
+| 生成帧 / 最终呈现帧 | 单列生成比例、重复帧及missed-vsync；displayed FPS提高不能证明输入延迟、画质或功耗改善 |
+| 帧耗时 | 同条件报告 P50/P95/P99、CPU/GPU时间、首用卡顿和峰值内存；无timestamp能力标未知 |
+| 热状态与持续表现 | 可选15–20分钟负载，尊重系统热保护；预先规定过热/错误/用户中止条件，不绕开限温 |
+| 带宽/功耗/输入到显示延迟 | 仅报告可靠工具实际采集结果、单位与方法；不可从FPS猜测 |
+
+ADPF 是既有热状态/性能交互能力，Swappy 是既有帧节奏库，不是2026-10新发布特性。
+按目标支持和已有引擎接口评估，不强加依赖。指定唯一的 pacing / present owner：引擎、Swappy或SDK
+swapchain包装层谁负责等待/呈现须写清，不能未经验证叠加多个管理层。[ANDROID][ENGINE]
+
+A/B保持视觉标准与输入一致，分别记录工具开启的诊断运行和关闭高开销检测的性能运行。
+若插帧提高呈现FPS却增加交互延迟，应报告权衡并允许关闭插帧、保留真实渲染/传统缩放路径。
+工具不足时先给最小采集方案，不声称已经优化。
+
+来源：[ADPF](https://developer.android.com/games/optimize/adpf)、
+[Frame Pacing / Swappy](https://developer.android.com/games/sdk/frame-pacing)。

@@ -191,7 +191,7 @@
 <a id="route-third-party"></a>
 ## 11. 第三方库集成类
 
-首轮读取：先核对库与 Vulkan 版本，再按主类型选 workflow / API 卡；缺少专用 workflow 时使用相关 API 与 debug 检查项。
+首轮读取：先核对库与 Vulkan 版本，再按主类型选 workflow / API 卡；移动神经SDK、QHWI/Filament和跨API互操作命中时先查 #mobile-topics；缺少专用 workflow 时使用相关 API 与 debug 检查项。
 
 用户问：如何集成 ImGui / glfw / glm / tinygltf / stb / Assimp 等第三方库到 Vulkan 工程；ImGui + Vulkan backend 初始化、glTF 模型加载、PBR 渲染管线搭建。
 
@@ -251,3 +251,29 @@
 | 分析陌生 Vulkan 仓库 / 源码影响面 | `../05_workflows/01_renderer_setup/project_diagnosis.md` |
 | 架构选型 / 迁移决策 | `../02_core_mental_model/engine_architecture.md`（§10 决策框架） |
 | 查找相似案例 | `../06_cases/case_index.md` |
+| Android CLI / APA / GPU counter不可用 | `../04_debug_playbooks/tool_usage.md#mobile-profiler-contract` |
+| 持续掉帧 / 热状态 / 插帧FPS与延迟 | `../05_workflows/07_optimization/optimize_frame_time.md#sustained-mobile-performance` |
+| fault地址 / 绑定代际 / EXT与KHR诊断 | `../04_debug_playbooks/02_crash_hang/device_lost.md#mobile-fault-evidence` |
+| tile / local read / QCOM fast path | `../03_api_manual/07_rendering/mobile_tile_rendering.md#tile-capability-matrix` |
+| external memory / AHB / opaque FD / sync FD | `../03_api_manual/04_buffer_image_memory/external_resource_interop.md#interop-capability-contract` |
+| Vulkan/OpenCL 往返集成 | `../05_workflows/04_android_integration/vulkan_opencl_interop.md#interop-workflow` |
+| NSS / NFRU / 神经SDK多Engine | `../05_workflows/02_render_pass_effects/mobile_neural_graphics.md#neural-capability-contract` |
+| QHWI / Filament句柄材质 / SDK版本迁移 | `../06_cases/07_engine_architecture/case_engine_architecture.md#mobile-sdk-framework-contracts` |
+
+<a id="mobile-topics"></a>
+## 移动端主题（既有主类型的按需分支）
+
+不是新启动集合，也不改变模型/宿主路由或触发条件。先确定 debug / performance / API / implementation / architecture主类型，
+再从上表只读命中主题；真实项目仍叠加 #route-project，第三方库叠加 #route-third-party。
+
+- 性能采集：tool_usage 的 mobile-profiler-contract；已有trace再读 Android workflow 的 mobile-capture-loop。
+- 持续性能：optimize_frame_time 的 sustained-mobile-performance，区分真实/生成/呈现帧和热状态。
+- 故障诊断：device_lost 的 mobile-fault-evidence，先核对能力与证据，不排除未覆盖原因。
+- Tile选择：mobile_tile_rendering 的 tile-capability-matrix，算法依赖再读 tile-access-patterns。
+- 外部资源：external_resource_interop 的 interop-capability-contract；导入失败再读 interop-lifetime-contract，
+  实施时读 vulkan_opencl_interop 的 interop-workflow 与 interop-failure-recovery。
+- 神经集成：mobile_neural_graphics 的 neural-capability-contract，按输入/history、多Device或回退问题
+  再读 neural-input-history / neural-engine-lifetime / neural-fallback-decisions，不预加载全部SDK资料。
+- 框架迁移：case_engine_architecture 的 mobile-sdk-framework-contracts，不把上游README/CI当目标GPU实测。
+
+若宿主不支持段落读取，读目标全文并如实记录token；不要跳过硬规则，也不要为省token隐藏能力限制。

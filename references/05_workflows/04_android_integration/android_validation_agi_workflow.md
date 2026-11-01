@@ -56,8 +56,8 @@
 - [ ] `adb devices` 能识别设备。
 - [ ] 应用可正常启动并渲染（至少没有立即崩溃）。
 - [ ] 已下载与设备 / Android 版本匹配的 AGI 版本。
-- [ ] 已确认设备在 AGI 支持列表中（Adreno 5xx+、Mali-Gxx、部分 PowerVR）。
-- [ ] 应用 `AndroidManifest.xml` 未禁用 debuggable（AGI 通常需要 debuggable 或 root）。
+- [ ] 按所用 AGI/APA 版本实际核对设备、驱动和目标API路径，不按GPU品牌/系列名推断支持。
+- [ ] 按所选工具与采集类型核对应用 debuggable/profileable、驱动和权限；不把root作为全流程通用前提。
 - [ ] 已备份当前工程，避免调试配置污染发布包。
 
 ---
@@ -175,8 +175,8 @@ Android Application
 
 ## 9. Android 注意点
 
-- Validation Layer 在 Android 上的性能开销显著，低端机可能帧率下降 30%–50%；仅用于 debug / profile build [ANDROID]。
-- AGI 抓帧需要应用处于 debuggable 状态或设备已 root；发布版本无法直接 capture [ANDROID]。
+- Validation Layer 在 Android 上的性能开销显著，开销随设备/场景/配置变化，必须实测；仅用于 debug / profile build [ANDROID]。
+- 按所选工具版本核对 debuggable/profileable、驱动、设备与权限要求；不能仅凭release构建类型判断能否capture，也不默认要求root [ANDROID]。
 - 某些 OEM 驱动对 validation layer 支持不完整，可能漏报或误报；此时以 spec 行为与 RenderDoc / AGI 实际状态为准 [ANDROID]。
 - `ANativeWindow` / surface 生命周期影响 AGI capture：在 `surfaceDestroyed` 后立即抓帧会失败；应在 surface 稳定渲染期间 capture [ANDROID]。
 - rotation / resize 后 AGI 显示的 swapchain extent、render area、scissor 可能变化；分析时需确认当前帧的 surface transform [ANDROID]。
@@ -259,3 +259,21 @@ Android Application
 - 当前 `vkCreateInstance` 的 layer / extension 列表。
 - 触发问题的具体场景（启动、rotation、pause/resume、特定 draw）。
 - AGI capture 中可疑 draw/dispatch 的 barrier / descriptor / pipeline 截图。
+
+
+<a id="mobile-capture-loop"></a>
+## 15. 移动采集 → 源码定位 → 复测
+
+先读 [工具能力合同](../../04_debug_playbooks/tool_usage.md#mobile-profiler-contract)，保留本文件原 AGI 路径，
+按实际版本选择 Android CLI/APA 或 AGI/RenderDoc，不为新入口重写资源管理器。[ANDROID][ENGINE]
+
+1. 冻结应用构建、场景/分辨率/画质/刷新率、设备driver与工具版本；确认本地设备授权。
+2. 记录症状发生时间、process/thread及 frame/submit ID；先选 system trace 查调度、等待与呈现节奏，
+   需要具体 draw/dispatch/descriptor 再选支持的 frame capture。记录导出格式及工具开销。
+3. 只有拿到真实 counter 才分析对应带宽/功耗值；counter不可用时保留假设，使用可得 timestamp/logcat/复现。
+4. 将事件、资源generation与现有引擎文件/函数相连，产出 Evidence Map；无源码时不伪造代码定位。
+5. 一次改一个主要变量，对相同输入做画面/数值正确性、CPU/GPU时序与持续热状态复测。
+6. 报告 Static / Live模型 / Device 分层；工具命令可用不是设备性能通过，未运行平台不自动PASS。
+
+不执行付费云设备、账号登录、上传私有trace或GPU故障注入。采集失败保留原错误与工具版本，
+回退本地日志与最小复现，而非把“无法抓帧”当“没有问题”。

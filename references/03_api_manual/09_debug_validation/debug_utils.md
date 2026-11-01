@@ -259,3 +259,15 @@ vkCreateInstance 启用 VK_EXT_debug_utils
 3. 不同工具（RenderDoc / AGI / Nsight）对 label 嵌套深度与名称长度的支持差异。
 4. Best Practices layer 与 debug utils 的交互规则。
 5. 32-bit 平台上 `objectHandle` 的处理细节。
+
+
+<a id="address-binding-evidence"></a>
+## 16. 地址绑定事件与对象标签
+
+调试名称/label只辅助定位，不建立GPU同步。若运行时支持并启用地址绑定报告，
+将debug-utils回调中的对象与绑定/解绑范围关联到引擎resource ID、generation和submit记录；
+回调只拷贝必要数据并采用线程安全队列，不重入Vulkan或阻塞渲染线程。[SPEC][ENGINE]
+
+同一地址可被回收再用，标签不证明资源仍有效；fault地址也不唯一对应shader源码行。
+完整能力/EXT与KHR时机/失败边界见
+[移动fault取证](../../04_debug_playbooks/02_crash_hang/device_lost.md#mobile-fault-evidence)。
