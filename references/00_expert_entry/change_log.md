@@ -1,5 +1,15 @@
 # Change Log
 
+## v1.0.11 — Mobile Vulkan Evolution（2026-11-01）
+
+- 基于已合入的v1.0.10主仓349dc35b与tests75630ee5扩展移动端能力，不回退其安全打包、按段读取和历史隔离。
+- C1/C2：移动采集/持续性能与fault地址-资源代际取证，修正无证据根因排除。
+- C3/C4：tile-aware API卡、外部资源API卡与Vulkan/OpenCL往返工作流；支持/启用/owner/同步/失败回退分别说明。
+- C5：可选神经图形工作流与固定版本框架集成案例，区分native、仿真与传统fallback。
+- 保留八模块、最小启动、触发条件和G1–G6；最多4新知识文件，实际包预算200，来源与评估证据置tests仓。
+- 新12移动题单列，旧16场景保留；Live/Device/宿主及provider token未执行时保持BLOCKED或未验证，不声称全能力验收。
+
+
 ## 未发布修订（2026-10-24 至 2026-10-25）
 
 - 修正 API 版本数值宏、1.2 / 1.3 / 1.4 feature 必须支持起点与字段归属，以及 1.4 核心化扩展、limits、scalar layout 和 maintenance5/6 边界；为关键规则补充官方链接。

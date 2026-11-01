@@ -20,7 +20,7 @@
 
 ## 1. 现象
 
-- API 调用返回 `VK_ERROR_DEVICE_LOST`，后续该 logical device 上几乎所有操作都返回同样错误。
+- API 调用返回 `VK_ERROR_DEVICE_LOST`，停止该 logical device 的普通渲染；诊断和清理按各 API 的 device-lost 规则执行，不能声称所有 API 一律不可调用。
 - 窗口变黑，应用可能被系统终止。
 - Validation Layer 在 device lost 前可能已报告大量 hazard / layout / descriptor 错误。
 - RenderDoc 在特定命令后无法继续，提示 device lost。
@@ -46,14 +46,14 @@
 
 ## 3. 快速验证路径（证据驱动决策表）
 
-| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 剪枝（排除的假设） |
+| # | 检查（成本升序） | 结果 A → 下一步 | 结果 B → 下一步 | 证据边界（不是根因排除证明） |
 |---|---|---|---|---|
-| 1 | 驱动返回码：VK_ERROR_DEVICE_LOST 出现在 acquire / submit / present / waitIdle 哪一处 | submit 处 → 检查 2（定位该 command buffer）；present / acquire 处 → 检查 2（回溯最后一个 submit） | 无明确位置 → 检查 2 | — |
-| 2 | Validation / 日志：device lost 前的首个 VUID | SYNC-HAZARD → §5-4 / §5-5（跨 queue / layout）；pipeline、render pass VUID → §5-3；range / OOB VUID → §5-1 / §5-2 | clean → 检查 3 | clean 时排除 §2 的 P0 hazard / render pass 不匹配 / 越界假设 |
-| 3 | RenderDoc / AGI：触发命令的 pipeline render pass 匹配与 descriptor 范围 | 不匹配或越界 → §5-1 / §5-2 / §5-3 | 均正常 → 检查 4 | 正常时排除 §2 的 P0 render pass / pipeline 不匹配与 P0 越界假设 |
-| 4 | 强制 vkDeviceWaitIdle 后单帧单 submit | 不复现 → §5-6 / §5-7（descriptor 引用已销毁对象 / in-flight 资源回收过早，§2 的 P1 生命周期假设） | 仍复现 → 检查 5 | 不复现时排除 §2 的 P0 三类假设 |
+| 1 | 驱动返回码：VK_ERROR_DEVICE_LOST 出现在 acquire / submit / present / waitIdle 哪一处 | submit 处 → 检查 2（回溯相关提交区间，不等于定位唯一致错 command buffer）；present / acquire 处 → 检查 2（回溯最后一个 submit） | 无明确位置 → 检查 2 | — |
+| 2 | Validation / 日志：device lost 前的首个 VUID | SYNC-HAZARD → §5-4 / §5-5（跨 queue / layout）；pipeline、render pass VUID → §5-3；range / OOB VUID → §5-1 / §5-2 | clean → 检查 3 | Validation clean 不排除 OOB / hazard / use-after-free；记录层版本、GPU-AV/sync配置及执行覆盖 |
+| 3 | RenderDoc / AGI：触发命令的 pipeline render pass 匹配与 descriptor 范围 | 不匹配或越界 → §5-1 / §5-2 / §5-3 | 均正常 → 检查 4 | 仅约束已捕获事件；未捕获路径、shader动态索引与时序变化仍需核查 |
+| 4 | 强制 vkDeviceWaitIdle 后单帧单 submit | 不复现 → §5-6 / §5-7（descriptor 引用已销毁对象 / in-flight 资源回收过早，§2 的 P1 生命周期假设） | 仍复现 → 检查 5 | WaitIdle 改变重叠与时序，只增加同步/生命周期线索，不排除其余根因 |
 | 5 | 二分注释可疑 draw / dispatch / present | 收敛到最小触发集 → §5 对应根因 + §6 修复 | 无法收敛 → 检查 6 | — |
-| 6 | 另一设备 / 驱动版本复测 | 仅特定设备复现 → §2 的 P2 驱动 / watchdog 假设（§6：VK_EXT_device_fault 收集） | 多设备均复现 → §4 对象链路排查 | 多设备复现时排除 §2 的 P2 驱动 bug / watchdog 假设 |
+| 6 | 另一设备 / 驱动版本复测 | 仅特定设备复现 → §2 的 P2 驱动 / watchdog 假设（§6：VK_EXT_device_fault 收集） | 多设备均复现 → §4 对象链路排查 | 多设备复现仍不能排除共同驱动问题或 watchdog；单设备复现也不证明驱动有错 |
 
 ---
 
@@ -73,7 +73,7 @@ Logical Device
 
 逐项检查：
 
-- 触发 device lost 的 `vkQueueSubmit` / `vkQueuePresentKHR` 对应的 command buffer 内容。`[TOOL]`
+- 观察到 device lost 的 `vkQueueSubmit` / `vkQueuePresentKHR` 调用及相关提交区间的 command buffer 内容；异步返回点不是唯一致错点。`[TOOL]`
 - Pipeline 创建时使用的 render pass、subpass index 是否与 draw 时一致。`[SPEC]`
 - Shader 访问的 descriptor binding / set 是否与 `VkPipelineLayout` 兼容。`[SPEC]`
 - Buffer / image 是否仍在生命周期内，是否被提前 `vkDestroyBuffer` / `vkDestroyImage`。`[SPEC]`
@@ -99,7 +99,7 @@ Logical Device
 
 ### Workaround（临时绕过，现象消失 ≠ 根因修复）
 
-- device lost 无法就地绕过：只能重启进程 / 重建 device 恢复运行；根因未除则必然复发，恢复后必须继续定位。`[ENGINE]`
+- device lost 无法就地绕过：只能重启进程 / 重建 device 恢复运行；根因未除仍有复发风险，恢复后必须继续定位。`[ENGINE]`
 
 ### Minimal Fix（针对根因的最小修复）
 
@@ -129,7 +129,7 @@ Logical Device
 - [ ] 多 queue / 多线程恢复后不再 device lost。
 - [ ] resize / rotation / pause-resume 后不再 device lost。
 - [ ] 不同 GPU 厂商（NVIDIA / AMD / Intel / Adreno / Mali）均通过测试。
-- [ ] 如启用 `VK_EXT_device_fault`，确认无新增 fault 报告。
+- [ ] 正常运行观察返回码；EXT查询仅在device lost后按取证合同执行；正常态报告需另查KHR支持。无报告不等于正确性通过。
 
 ---
 
@@ -153,9 +153,9 @@ Logical Device
 ### Validation Layer
 
 - 关注 device lost 前最后一条 `SYNC-HAZARD-*` 报告及 VUID。`[TOOL]`
-- 关注 `VUID-vkCmdDraw-*-None-*`、index buffer 范围、`vertexInput` 相关错误。`[TOOL]`
-- 关注 `VUID-vkQueueSubmit-pCommandBuffers-00064`（command buffer 状态无效）。`[TOOL]`
-- 关注 `VUID-vkCmdBindPipeline-pipelineBindPoint-00779` 等 pipeline / render pass 兼容性错误。`[TOOL]`
+- 保存原始 VUID 与其层版本，按当前规范核对 index buffer 范围、vertex input、pipeline 兼容等实际报错，不拼接通配 VUID 当规范编号。`[TOOL]`
+- 核对 command buffer 状态及其提交/完成记录。`[TOOL]`
+- 按实际 pipeline / render pass 兼容性报错定位，而不是套未经核实的 VUID。`[TOOL]`
 - 关注 descriptor / image layout / buffer range 相关 VUID。`[TOOL]`
 
 ### RenderDoc
@@ -163,7 +163,7 @@ Logical Device
 - 查看触发 device lost 的 draw / dispatch 的 pipeline state 与 render pass 是否匹配。`[TOOL]`
 - 检查 descriptor 绑定的 buffer / image 是否有效，range 是否合理。`[TOOL]`
 - 检查 mesh 数据、index buffer、vertex buffer 是否越界。`[TOOL]`
-- 查看 event browser 中 device lost 发生的精确命令。`[TOOL]`
+- 若 capture 成功，查看最后可见事件与故障区间；异步返回点不一定是实际致错命令，工具也可能无法抓到故障。`[TOOL]`
 
 ### AGI / Android
 
@@ -184,7 +184,7 @@ Logical Device
 Android 上 device lost 常与 Surface / ANativeWindow / Swapchain 生命周期强相关，额外检查：
 
 1. **Surface 有效性前提**：确认 device lost 时 `ANativeWindow` 仍有效；`surfaceDestroyed` 后必须停止向该 window 提交命令。`[ANDROID]`
-2. **Swapchain 重建完整性**：`vkQueuePresentKHR` 返回 `SUBOPTIMAL` / `OUT_OF_DATE` 后，应等待 GPU idle、销毁旧 swapchain 和 framebuffer，再基于新 `ANativeWindow` 创建新 swapchain。`[SPEC]`
+2. **Swapchain 重建完整性**：区分 acquire / present 的 SUBOPTIMAL、OUT_OF_DATE 与真正的 DEVICE_LOST；先停止受影响提交，等待相关渲染资源完成并独立追踪 presentation 退役。WaitIdle 不单独证明旧 present semaphore 可释放；Surface 未变化不必新建 ANativeWindow。遵循 [重建契约](../../03_api_manual/02_surface_swapchain/swapchain_recreate.md#present-retirement-contract)。`[SPEC][ENGINE]`
 3. **in-flight 资源对齐**：pause / resume 或 rotation 时，确保所有引用旧 swapchain image 的 command buffer、semaphore、fence 已 retire，避免提交到已销毁 swapchain。`[ENGINE]`
 4. **深度 / offscreen image 重建**：rotation 后按新 extent 重建 depth attachment 和 offscreen image，并更新引用它们的 descriptor / framebuffer。`[ENGINE]`
 5. **present image 索引正确性**：`vkAcquireNextImageKHR` 返回的 image index 必须与 `vkQueuePresentKHR` 使用的一致，避免重复 present 或 present 未获取的 image。`[SPEC]`
@@ -215,3 +215,45 @@ Android 上 device lost 常与 Surface / ANativeWindow / Swapchain 生命周期�
    - `[ENGINE]` 若基于生命周期或 in-flight 管理推断。
    - `[HEUR]` 若尚未拿到工具证据，仅为可能性排序。
    - `[ANDROID]` 若涉及 Surface / ANativeWindow / Swapchain 生命周期。
+
+
+<a id="mobile-fault-evidence"></a>
+## 12. 移动 GPU fault：地址 → 资源代际 → 提交 → 源码
+
+本节是诊断取证合同，不是 GPU 故障注入教程。Arm 2026-10-05 的文章介绍 EXT fault 与地址绑定联合使用，
+不是这些扩展本月首次发布，也不保证所有 Mali 驱动支持。[VENDOR]
+
+### 初始化和路径选择
+
+| 路径 | 支持/启用与真实入口 | 调用时机与限制 |
+|---|---|---|
+| EXT fault | 枚举 `VK_EXT_device_fault`，查询 `VkPhysicalDeviceFaultFeaturesEXT` 并按需启用 `deviceFault` / `deviceFaultVendorBinary`，取得 `vkGetDeviceFaultInfoEXT` | device 已 lost 后查询；先取得 counts/大小，再分配输出并处理返回值；无 binary 数据不是无故障 |
+| KHR fault | 枚举 `VK_KHR_device_fault`，查询/启用 `VkPhysicalDeviceFaultFeaturesKHR`；可恢复 fault 的报告还依赖 `deviceFaultReportMasked` 等实际支持项 | `vkGetDeviceFaultReportsKHR` 可以在尚未 lost 时等待/轮询报告；处理 timeout、计数、INCOMPLETE，每份报告只返回一次。`vkGetDeviceFaultDebugInfoKHR` **只能在 device lost 后**取厂商 post-mortem 数据 |
+| 地址记录 | `VK_EXT_device_address_binding_report` + `VkPhysicalDeviceAddressBindingReportFeaturesEXT.reportAddressBinding`；通过 debug-utils 回调记录绑定/解绑 | 从资源创建前开始记录；历史缺失、地址复用、内部对象或别名都可能导致多候选，不能倒推唯一对象 |
+| 不支持 | 通用资源 ID / generation、提交标签、CPU日志、设备/driver信息和最小场景 | 保留未验证项；不为了诊断强制提高所有手机 API 最低版本 |
+
+KHR 不是把 EXT 函数改后缀：不存在应当照抄的 `vkGetDeviceFaultInfoKHR` 调用模板；这是错误反例，
+真实入口是表中的两个 KHR 函数。查询支持、创建 device 启用与取得函数入口分别验证。[SPEC]
+
+### 正常运行与故障记录
+
+1. 使用既有 allocator / debug-name / retirement 系统记录 `resource_id, generation, object_type,
+   allocation_id, base, size, bind/unbind, host_timestamp, queue_id, submit_id`，保留最近提交与源码函数的映射。
+   此为应用日志 schema，不是臆造的 Vulkan struct 字段。[ENGINE]
+2. 回调按线程安全策略拷贝必要数据；不要阻塞渲染或在回调重入 Vulkan。
+3. fault 时停止普通提交，保存原始返回码、诊断结果和最后提交日志；按选中扩展合法时机查询、再走设备恢复/销毁。
+4. 地址按范围和报告粒度匹配**当时**的 allocation/generation；同一地址先 unbind 后重用不得归到当前对象。
+   用绑定时间、提交引用与 descriptor / buffer offset 缩小候选，不能自动定位某行 shader。[ENGINE]
+5. 报告为空、捕获失败或 Validation clean 均不排除 OOB、use-after-free、hazard。
+   二分工作负载/跨设备复测是增加证据，不是按一次结果排除全部其他假设。
+6. 重复最小正确场景，核对恢复、资源退休、rotation/pause/resume；未运行的设备矩阵标未验证。
+   故意非法 GPU 访问仅在另行授权的隔离测试设备允许，默认不执行。[ENGINE]
+
+原始 fault/vendor dump 可能包含项目数据，按授权留本地并限制访问，不自动上传私有 trace。
+规范与方法（2026-11-01 source-read，未实机验证）：
+[Arm 诊断方法](https://developer.arm.com/community/arm-community-blogs/b/mobile-graphics-and-gaming-blog/posts/diagnosing-vk-error-device-lost-on-mali-gpus-with-vk-ext-device-fault)、
+[EXT 查询](https://docs.vulkan.org/refpages/latest/refpages/source/vkGetDeviceFaultInfoEXT.html)、
+[KHR 差异](https://docs.vulkan.org/refpages/latest/refpages/source/VK_KHR_device_fault.html)、
+[KHR reports](https://docs.vulkan.org/refpages/latest/refpages/source/vkGetDeviceFaultReportsKHR.html)、
+[KHR debug info](https://docs.vulkan.org/refpages/latest/refpages/source/vkGetDeviceFaultDebugInfoKHR.html)、
+[地址绑定 feature](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceAddressBindingReportFeaturesEXT.html)。

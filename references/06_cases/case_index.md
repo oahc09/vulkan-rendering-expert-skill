@@ -58,10 +58,12 @@
 
 | 合并文件 | 包含 case 数 | 典型现象关键词 |
 |---|---|---|
-| `07_engine_architecture/case_engine_architecture.md` | 8 | render-graph, per-frame, swapchain-dependent, pipeline-cache, bindless-migration, render-graph-adoption, lifetime-split, async-compute |
+| `07_engine_architecture/case_engine_architecture.md` | 9 | render-graph, per-frame, swapchain-dependent, pipeline-cache, bindless-migration, render-graph-adoption, lifetime-split, async-compute, Arm-NSS-NFRU, QHWI, Filament-instance-material |
 
 ---
 
 ## 8. 标签说明
 
 - `case_tags.md`：案例通用标签与关键词释义。
+
+移动SDK/框架迁移的固定版本案例见 [契约边界](07_engine_architecture/case_engine_architecture.md#mobile-sdk-framework-contracts)，不是本地构建/设备验收。

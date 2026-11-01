@@ -21,6 +21,7 @@
 
 | 任务 | Workflow |
 |---|---|
+| 可选移动神经超分 / 插帧 / 多Engine | `02_render_pass_effects/mobile_neural_graphics.md` |
 | 新增 fullscreen pass | `02_render_pass_effects/add_fullscreen_pass.md` |
 | 新增 offscreen render pass | `02_render_pass_effects/add_offscreen_render_pass.md` |
 | 新增 depth pass | `02_render_pass_effects/add_depth_pass.md` |
@@ -46,6 +47,7 @@
 
 | 任务 | Workflow |
 |---|---|
+| Vulkan/OpenCL 外部资源往返 | `04_android_integration/vulkan_opencl_interop.md` |
 | 接入 SurfaceView / ANativeWindow | `04_android_integration/integrate_surfaceview_anativewindow.md` |
 | 处理 Android 生命周期 | `04_android_integration/handle_android_lifecycle.md` |
 | 处理 swapchain recreate | `04_android_integration/handle_swapchain_recreate.md` |

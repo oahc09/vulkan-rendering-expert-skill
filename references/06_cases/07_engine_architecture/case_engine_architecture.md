@@ -1,6 +1,6 @@
 # Cases: Engine Architecture
 
-> 合并自 4 个原 case 文件，v1.0.6 追加 4 个架构迁移决策案例（共 8 个）。关键词: render-graph, per-frame, swapchain-dependent, pipeline-cache, bindless-migration, render-graph-adoption, lifetime-split, async-compute
+> 合并自 4 个原 case 文件，v1.0.6 追加 4 个架构迁移决策案例（8 个），v1.0.11 追加 1 个移动 SDK/框架合同案例（共 9 个）。关键词: render-graph, per-frame, swapchain-dependent, pipeline-cache, bindless-migration, render-graph-adoption, lifetime-split, async-compute
 
 ---
 
@@ -1579,3 +1579,73 @@ async compute 不是默认优化，是条件优化；收益被物理封顶，成
 
 
 ---
+
+---
+
+<a id="mobile-sdk-framework-contracts"></a>
+## Case: Mobile SDK and Framework Upgrade Contracts
+
+### 0. Metadata
+
+| 字段 | 内容 |
+|---|---|
+| 类型 | 移动端 SDK / 框架升级决策案例 |
+| 平台 | Android / Vulkan，按实际后端能力限定 |
+| 来源等级 | `[REF] [ENGINE]` |
+| 验证边界 | 2026-11-01 source-read；不是本仓已复现的 GPU 故障或性能结果 |
+
+### 1. 现象
+
+待分析场景：升级后跨帧对象句柄失效、旧材质包不兼容，或多 Engine 神经路径在 rotation/camera cut 后重影。以下是基于正式上游变更设计的决策案例，不伪称用户工程曾发生这些故障。
+
+### 2. 初始上下文
+
+先给 `[CODE]` Evidence Map：Engine/Device/context 关系、持久化句柄、模型和材质产物版本、帧历史和呈现 owner。上游固定版本不证明用户实际安装版本相同；读取构建锁定文件和实际运行日志。
+
+### 3. 初始误判
+
+“同一个 API 名称，所以 ABI 不变”；“多 context 就能多 Device”；“main 有新版本标题就是 release”；“上游 build CI 绿色就是手机 GPU 通过”；“画面不稳只能是神经模型问题”。这些均不能作为结论。
+
+### 4. 排查路径
+
+| 上游 / 固定来源 | 已核实变化或边界 | 最小项目检查与取舍 |
+|---|---|---|
+| Filament v1.79.0 / `a854ad6ac9045d211001ba597831ff878490a1de` | `TransformManager` 可在帧结束/跳帧以及组件结构变化时重排；跨帧缓存 `Instance` 不再成立 | 保留 `Entity`，在使用时重新取得 instance；审查跨帧缓存与异步任务，不仅替换动态库 |
+| Filament 同版本 | 发布记录含 material version 变化、Java 默认值/JNI 与 native 配置修订 | 固定匹配的运行库、Java bindings、matc 与材质包，重编受影响资源；验证实际配置传至 native，不能假设老产物兼容 |
+| Arm NG SDK v1.1.1 / `019e99a62ea3a331fe112516190d77befc779a53` | API/ABI 和 flag 语义变化；Vulkan 函数表为进程级状态，独立多 Device / loader 重建未保证 | 重编 SDK/custom backend/shader，审核数字 mask；共 Device 的多 context 仍隔离历史与线程；不支持的多 Device 方案回退 |
+| QHWI / `b12d782344643252ba38ee864f8bcb20cd8d6949` | 薄封装暴露可选能力和 Adreno 样例；README 明确 CI 只验证构建，不执行需 GPU 的测试 | 借鉴能力查询、标准与 fast-path 分支，不要求用 QHWI 替换 RHI；对 Mali 等目标保持标准实现，另做设备测试 |
+
+### 5. 关键证据
+
+- [Filament 正式 release](https://github.com/google/filament/releases/tag/v1.79.0) 发布于 2026-10-26T23:44:28Z；[固定 release notes](https://github.com/google/filament/blob/a854ad6ac9045d211001ba597831ff878490a1de/RELEASE_NOTES.md) 支持上述句柄/材质/Java-native 判断。[REF]
+- Arm release 发布于 2026-10-30T02:06:02Z；[固定兼容矩阵](https://github.com/arm/neural-graphics-sdk-for-game-engines/blob/019e99a62ea3a331fe112516190d77befc779a53/docs/compatibility_matrix.md) 与 [迁移说明](https://github.com/arm/neural-graphics-sdk-for-game-engines/blob/019e99a62ea3a331fe112516190d77befc779a53/docs/migration_note.md) 是版本边界。[REF]
+- [QHWI 固定 README](https://github.com/qualcomm/qhwi/blob/b12d782344643252ba38ee864f8bcb20cd8d6949/README.md) 是源码说明，不是本次 build/device-tested 证据。[REF]
+- main 中出现 v1.80 等标题只是一条观察线索；正式升级依据应为对应 release/tag 的实际记录，而不是默认分支标题或文件修改日期。
+
+### 6. 根因判断边界
+
+发布说明指出的是可能破坏项目假设的变化；只有调用点、资源版本、运行时序与故障相符才能定位用户根因。重影先核对 motion/depth/jitter、frame ID、尺寸与 history reset，同时检查多实例限制，不武断归因驱动或模型。
+
+### 7. 修复方案
+
+**Minimal Fix**：更新失效缓存/接口调用，匹配重编产物，保留原 Device/allocator/queue owner；不满足 SDK 多 Device 条件时停用该路径。**Structural Fix**：建立版本产物 manifest、代际句柄与历史状态合同；只在需要处暴露能力选项，不能借此重写整个 RHI。[ENGINE]
+
+### 8. 验证方式
+
+验证帧结束/skipFrame、create/destroy/setParent、旧包拒绝、Java/native 参数、resize/rotation/camera cut、多 Engine 和前后台。分别记录构建、静态分析、模型回答与真机结果；图像误差、pacing、真实/生成/呈现帧、延迟、内存及持续热状态单列。无设备不宣布修复通过。
+
+### 9. 可复用经验
+
+框架升级是对象/资源/版本合同迁移，不只是库版本号变化。厂商能力和算法 context 不应掩盖底层 Device 与进程级状态；独立上下文并不自动提供完整隔离。
+
+### 10. 适用条件
+
+已有移动渲染器的增量 SDK/框架升级评估，保留 Evidence/Architecture Map 和标准 fallback。
+
+### 11. 不适用情况
+
+不要求引入 Filament/QHWI，不分发第三方模型或文档，不凭本案例给所有手机设置更高最低 API 版本。
+
+### 12. 关联工作流
+
+[移动端神经路径](../../05_workflows/02_render_pass_effects/mobile_neural_graphics.md#neural-fallback-decisions)；按实际项目再选择相关帧资源与呈现回归。

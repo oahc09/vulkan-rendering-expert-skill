@@ -12,7 +12,7 @@
 ### 不适用
 
 - Vulkan 1.0 / 1.1 未启用 `VK_KHR_dynamic_rendering` 的设备。
-- 需要 `VkSubpassDependency` / `input attachment` 等 RenderPass 原生功能的复杂 deferred shading 管线（动态渲染需手动 barrier） [SPEC]。
+- 依赖复杂 subpass 语义且尚未核对 dynamic local read 支持的管线；不要直接迁移。Local read 可覆盖一部分 input-attachment 用途，不等于所有 subpass 功能 [SPEC]。
 - 外部引擎强制使用 RenderPass 封装。
 
 ---
@@ -41,7 +41,7 @@ Color / Depth Image Views
 
 - 平台：Android / Windows / Linux。
 - Vulkan 版本：1.3 原生，或 1.1/1.2 + `VK_KHR_dynamic_rendering`。
-- 是否已启用 `dynamicRendering` feature 与 `VK_KHR_dynamic_rendering` extension [SPEC]。
+- 是否已启用 `dynamicRendering` feature；低于匹配核心版本时才需要已支持的 `VK_KHR_dynamic_rendering` 扩展路径 [SPEC]。
 - 输出 color attachment 数量、format、image view。
 - 是否需要 depth / stencil attachment，及其 format、image view。
 - 每个 attachment 的 load / store op：`CLEAR` / `LOAD` / `DONT_CARE` / `STORE`。
@@ -53,7 +53,7 @@ Color / Depth Image Views
 
 ## 3. 前置检查
 
-- [ ] `VK_KHR_dynamic_rendering` 在 device extension 列表中，且 `VkPhysicalDeviceDynamicRenderingFeatures.dynamicRendering = VK_TRUE` [SPEC]。
+- [ ] 匹配 Vulkan 1.3 核心路径或已支持并启用 `VK_KHR_dynamic_rendering` 扩展路径；`dynamicRendering` feature 已显式启用，不要求核心路径仍枚举扩展名 [SPEC]。
 - [ ] 所有 color / depth attachment format 被 physical device 支持作为对应 attachment [SPEC]。
 - [ ] 当前 pipeline 创建路径支持通过 `VkPipelineRenderingCreateInfo` 指定 format [ENGINE]。
 - [ ] 已设计 command buffer 中的 barrier / layout transition 逻辑（dynamic rendering 不自动处理 subpass dependency） [SPEC]。
@@ -67,7 +67,7 @@ Color / Depth Image Views
 ```text
 VkPhysicalDevice
 → vkGetPhysicalDeviceFeatures2(VkPhysicalDeviceDynamicRenderingFeatures)
-→ VkDevice（启用 VK_KHR_dynamic_rendering 与 dynamicRendering feature）
+→ VkDevice（启用 dynamicRendering；扩展路径另启用已支持的扩展）
 
 Color Attachment Image(s)
 Depth Attachment Image（可选）
@@ -157,7 +157,7 @@ Per-frame command recording:
 ## 8. 实现步骤
 
 1. **启用扩展与 feature**：
-   - device extension 加入 `VK_KHR_dynamic_rendering` [SPEC]。
+   - 核心路径不强加扩展字符串；扩展路径确认枚举支持后加入 `VK_KHR_dynamic_rendering` [SPEC]。
    - `VkPhysicalDeviceDynamicRenderingFeatures.dynamicRendering = VK_TRUE`，挂入 `VkDeviceCreateInfo.pNext` [SPEC]。
 2. **创建 color / depth attachment image view**：与 RenderPass 路径相同，确保 usage 包含 `COLOR_ATTACHMENT` / `DEPTH_STENCIL_ATTACHMENT` [SPEC]。
 3. **配置 `VkPipelineRenderingCreateInfo`**：
@@ -213,7 +213,7 @@ Per-frame command recording:
 ## 11. 常见失败模式
 
 1. **Feature 未启用**：未在 device create info pNext 中启用 `dynamicRendering` feature [SPEC]。
-2. **Extension 未启用**：未启用 `VK_KHR_dynamic_rendering` device extension [SPEC]。
+2. **能力路径错误**：扩展路径缺必要扩展，或核心/扩展路径没有启用 dynamicRendering feature [SPEC]。
 3. **Pipeline format 不匹配**：`VkPipelineRenderingCreateInfo` 中 color/depth format 与实际 attachment 不一致 [SPEC]。
 4. **Image layout 不匹配**：`VkRenderingAttachmentInfo.imageLayout` 与当前 image layout 不一致 [SPEC]。
 5. **缺少 barrier**：dynamic rendering 不自动处理 layout transition，导致 image layout error [SPEC]。
@@ -268,3 +268,10 @@ Per-frame command recording:
 3. `VkRenderingAttachmentInfo` 中 `resolveMode` 与 `resolveImageLayout` 的精确规则。
 4. Dynamic Rendering 与 `VK_EXT_fragment_density_map`、`VK_EXT_multisampled_render_to_single_sampled` 等扩展的交互。
 5. 不同移动端 driver 对 dynamic rendering 的 tile memory 优化行为差异。
+
+<a id="dynamic-local-read-choice"></a>
+## 16. 移动端 Local Read 候选与回退
+
+按 [tile-capability-matrix](../../03_api_manual/07_rendering/mobile_tile_rendering.md#tile-capability-matrix) 查询 dynamicRenderingLocalRead、depth/stencil 与multisampled properties，配置附件location/input索引、layout及依赖。
+同像素附件依赖是候选；任意邻域blur不能无条件用input attachment替代。普通dynamic rendering不允许任意compute dispatch塞入rendering scope；厂商tile-shading特例独立核对。
+不支持时保留原RenderPass/subpass或sampled-image pass。以同场景图像误差/GPU时间/真实可用counter比较，而非先宣称减少带宽。[SPEC][ENGINE]

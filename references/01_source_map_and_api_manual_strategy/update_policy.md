@@ -49,7 +49,7 @@ Android 工具链变化
 ```md
 ## Deprecated：旧式同步 API 作为默认方案
 
-原因：项目默认 Vulkan 1.3+/1.4。1.4 设备无需运行时查询 synchronization2 / dynamic rendering / push descriptor feature，可优先考虑 Synchronization2。
+原因：项目默认 Vulkan 1.3+/1.4；匹配核心路径的 mandatory support 不等于自动启用。按实际 API版本、入口和device显式启用状态选择 Synchronization2，旧设备保留legacy路径。
 保留原因：旧设备或旧引擎仍可能使用 legacy synchronization。
 替代方案：新增 Synchronization2 API Card。
 ```
@@ -66,3 +66,34 @@ Android 工具链变化
 是否影响已有 playbook
 是否需要补测试任务
 ```
+
+
+<a id="monthly-mobile-source-policy"></a>
+## 月度移动端来源准入与复核
+
+来源窗口2026-10-01至10-31，核验2026-11-01；后续增量复用本合同，不新建新闻模块。
+每条维护记录保存在独立tests仓，不加入启动上下文：
+
+```text
+source_url / upstream_repo
+published_at / event_at / checked_at
+release_tag / commit / content_blob
+change_kind = release | spec_delta | tutorial | merged_change | proposal
+mobile_relevance / capability_requirements
+mapped_skill_path#section / affected_tests
+adoption = include | background | watch | exclude
+verification = source_read | build_tested | device_tested
+recheck_trigger
+```
+
+规范/官方release/固定源码优先；issue区分报告者假设、维护者确认和已合并修复。
+X演示只作发现入口，无可核验原始资料则watch。网页修改日期不等于功能首次发布，main release-notes标题不等于release。
+SDK/headers声明、驱动支持、device显式启用、路径运行和实测收益是五种不同证据。
+
+本轮新增知识按移动诊断、tile/interop、可选神经路径分别映射到现有文档。ADPF、Swappy、local read不是本月首发。
+`VK_ARM_cooperative_matrix_layouts`、`VK_GOOGLE_hdr_SMPTE_ST_2094_50_metadata`、`VK_KHR_maintenance12`
+本轮只列watch；无目标设备/案例不扩展为完整HDR或模型训练模块。
+来源规范冻结 [Vulkan-Docs b94f8bd](https://github.com/KhronosGroup/Vulkan-Docs/tree/b94f8bd2d004d2949469d8a5071ee10eb7d23566)
+及其中Registry；SDK/模型各自固定，不将该修订号当已安装SDK。
+复核触发：上游release、driver/device变更、接口/ABI或许可证变化、失效链接、能力回归。
+未build/device tested只能写source_read，不填性能百分比。

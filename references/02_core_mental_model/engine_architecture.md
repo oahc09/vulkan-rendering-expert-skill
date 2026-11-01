@@ -694,3 +694,17 @@ Vulkan Mapping：A → 状态写入 `VkGraphicsPipelineCreateInfo` 各状态结�
 3. 删除 fallback：另需最低支持设备/profile 策略确认、所有发布 cohort 覆盖、稳定观察期、遗留资产/shader 迁移完成、线上回退替代机制和责任人批准。扩展被标记 deprecated 不是删除旧后端的充分条件。
 
 三项分别记录决定、证据、未决风险、回滚方式和复核触发器。按 [项目能力矩阵](../05_workflows/01_renderer_setup/project_diagnosis.md) 协商能力；[buffer](../03_api_manual/05_descriptor/descriptor_buffer.md) 与 [heap](../03_api_manual/05_descriptor/descriptor_heap.md) 具有不同 ABI/绑定/同步约束，不能只换 API 名称。[ENGINE]
+
+
+<a id="mobile-optional-capabilities"></a>
+## 移动端可选能力的架构边界
+
+薄封装可暴露后端能力，但应把 supported / enabled / usable / measured 分开。标准实现始终是回退，
+不是看到新厂商扩展就整体迁移RHI。[ENGINE]
+
+- Tile优化由访问模式、format/sample和实际feature/properties决定；算法级邻域采样不能靠同像素local read自动替代。
+- 跨API资源沿用现有allocator/queue/retirement，分别管理内存owner、同步载荷和可见性，不以“共享FD”代替所有权协议。
+- SDK context独立不证明进程级函数表、多Engine或多VkDevice安全；固定SDK版本检查device重建/并发初始化约束。
+- 持续性能同时看画质、热状态、帧耗时与延迟；生成帧不是逻辑/真实渲染帧。[ENGINE]
+
+只读对应 [移动主题](../07_integration_pack/task_routing_rules.md#mobile-topics)，架构决定仍按既有D1–D6与Evidence Map输出。

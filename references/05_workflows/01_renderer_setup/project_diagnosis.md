@@ -272,3 +272,20 @@ Java/Kotlin Surface
 | validation / capture | 工具及配置 | 当前版本支持说明 | 最小运行与覆盖结果 | 无报告不是正确性证明 |
 
 诊断结论分别给出“可添加后端 / 可设为默认 / 可删除 fallback”的证据与阻塞项，不能合并为单一“迁移完成”。详见 [设备六层证据](../../03_api_manual/01_instance_device_queue/physical_device.md) 和 [架构门槛](../../02_core_mental_model/engine_architecture.md)。[ENGINE]
+
+
+<a id="mobile-capability-map"></a>
+## 移动能力矩阵（命中任务才读取）
+
+Evidence/Architecture Map仍先于改造。针对当前任务记录下表，不全文预加载全部厂商主题：[CODE][ENGINE]
+
+| 链路 | 项目事实/待查证 | 能力缺失时 |
+|---|---|---|
+| Device/driver/tool | API请求与设备版本、feature支持/启用、入口、driver UUID、工具channel、真实采集 | 标未知，不由新headers推断老手机能力 |
+| Frame/present | 真实渲染/生成/呈现帧、pacing owner、Surface/rotation和热状态 | 保留现有帧循环，关闭未验证插帧 |
+| Resource/queue | allocator、export/import owner、layout、queue ownership、generation、retirement | 先用受支持buffer往返或现有Vulkan Compute |
+| Optional SDK | SDK/API/ABI/shader/model版本、Device绑定、全局表、多个Engine/context | 条件启用；仿真与native分别记录 |
+
+每个结论关联真实文件/函数/行为；无设备/源码时只输出风险和最小验证计划。
+主题按 [现有路由](../../07_integration_pack/task_routing_rules.md#mobile-topics) 按需选一条；
+不因移动能力扩展重写RHI、统一提高最低Vulkan版本或强制引入OpenCL/第三方框架。

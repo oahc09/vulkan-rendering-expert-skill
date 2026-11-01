@@ -71,6 +71,7 @@
 | `VkImage` | `04_buffer_image_memory/image.md` |
 | `VkImageView` | `04_buffer_image_memory/image_view.md` |
 | `VkBuffer` | `04_buffer_image_memory/buffer.md` |
+| 外部资源 / memory FD / sync FD / AHB | `04_buffer_image_memory/external_resource_interop.md` |
 | Memory Allocation | `04_buffer_image_memory/memory_allocation.md` |
 | `VkFramebuffer` | `04_buffer_image_memory/framebuffer.md` |
 | Image Layout | `04_buffer_image_memory/image_layout.md` |
@@ -122,6 +123,7 @@
 | 对象 / 主题 | 入口卡片 |
 |---|---|
 | `VkRenderPass` | `07_rendering/render_pass.md` |
+| 移动tile / local read / QCOM能力与回退 | `07_rendering/mobile_tile_rendering.md` |
 | Dynamic Rendering | `07_rendering/dynamic_rendering.md` |
 | Attachment Load / Store | `07_rendering/attachment_load_store.md` |
 | Render Target Layout | `07_rendering/render_target_layout.md` |
