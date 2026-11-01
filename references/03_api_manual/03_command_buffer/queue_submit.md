@@ -151,7 +151,7 @@ submitInfo = waits[waitInfo] + commands[cmdInfo] + signals[signalInfo]
 5. 多 queue 场景下 semaphore 跨 queue 传递但 stage mask 设置错误。[SPEC]
 6. Timeline wait 的目标值没有可达的后续 signal，或 signal 依赖该 wait 完成，导致永久等待；单纯 wait-before-signal 并非非法。[TOOL]
 7. Submit 到错误 queue（如 compute queue 提交 graphics command buffer）。[SPEC]
-8. Present 等待的 semaphore 不是该 frame 的 renderFinishedSemaphore。[SPEC]
+8. Present 等待的 semaphore 不是该 acquired image 的 renderFinishedSemaphore[imageIndex]（或未提供等效完成证明）。[SPEC]
 
 ---
 
