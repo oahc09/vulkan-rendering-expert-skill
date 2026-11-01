@@ -76,6 +76,7 @@ Surface 尺寸 / 方向变化 或 VK_ERROR_OUT_OF_DATE_KHR
 
 ---
 
+<a id="present-retirement-contract"></a>
 ## 4. 标准使用流程
 
 ```text
@@ -125,7 +126,7 @@ Surface 尺寸 / 方向变化 或 VK_ERROR_OUT_OF_DATE_KHR
 - [ ] 是否在创建新 swapchain 前重新查询 `vkGetPhysicalDeviceSurfaceCapabilitiesKHR`？
 - [ ] `imageExtent` 是否为 0？为 0 时是否延迟 recreate？（Android 常见）[ANDROID]
 - [ ] 是否传入 `oldSwapchain`？
-- [ ] 旧 swapchain 是否仍在被 GPU 使用？是否等待 idle 后再销毁？
+- [ ] 旧渲染资源的提交是否完成，旧 swapchain / present semaphore 是否另有 presentation 退役证明？不能只看 idle。
 
 ### 使用阶段
 

@@ -74,7 +74,7 @@ v1.0  可用于真实 Vulkan 工程辅助
 
 ### 1. 结构检查
 
-仓库根目录执行 `node scripts/check-skill.mjs`；发布渠道仍使用 200 文件预算时加 `--max-files 200`。该命令只做结构与引用检查，能力验收按 `integration_test_plan.md` 执行并记录实际回答，不能把结构 PASS 当作行为或运行验收 PASS。
+仓库根目录执行 `node scripts/check-skill.mjs`；它检查完整 Git 树，不把 Git 总文件数当作交付包预算。实际白名单包由 `scripts/agensi_audit_and_pack.py` 报告，发布检查使用显式版本和完整候选 SHA。该命令只做结构与引用检查，能力验收按 `integration_test_plan.md` 执行并记录实际回答，不能把结构 PASS 当作行为或运行验收 PASS。
 
 - [ ] 目录结构完整。
 - [ ] 每个模块有 README。
@@ -83,7 +83,7 @@ v1.0  可用于真实 Vulkan 工程辅助
 - [ ] 文件命名一致。
 - [ ] 模块编号一致。
 - [ ] 没有重复或废弃文件混入主路径。
-- [ ] Git 跟踪文件总数 ≤200（ClawHub 限制）。
+- [ ] 实际交付白名单 manifest 不超过内部 200 文件预算（当前基线 196）；平台限制与内部预算分别核验，不能为 Git 总数删除运行时知识。
 
 ### 2. 行为检查
 

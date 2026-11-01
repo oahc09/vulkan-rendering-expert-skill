@@ -137,7 +137,9 @@ UNDEFINED
 
 ## Synchronization2
 
-Vulkan 1.3+ 项目默认使用 Synchronization2 API：
+本知识库以 Vulkan 1.4 为当前知识基线，但 Synchronization2 在 Vulkan 1.3 已核心化且必须支持；不是 1.4 才可用。核心/扩展路径均需匹配实际 API 版本、入口与显式启用的 feature。字段归属见 [version-feature-contract](vulkan_1_4_overview.md#version-feature-contract)。
+
+Vulkan 1.3+ 项目在启用 synchronization2 后优先使用 Synchronization2 API：
 
 ```text
 VkDependencyInfo

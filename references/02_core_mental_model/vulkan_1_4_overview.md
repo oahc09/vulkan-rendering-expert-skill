@@ -78,7 +78,10 @@ VK_EXT_pipeline_robustness
 
 ---
 
+<a id="version-feature-contract"></a>
 ## 3. 强制功能
+
+独立读取本节时也须区分：数值版本用 `VK_API_VERSION_1_4`，`VK_VERSION_1_4` 只是头文件宏；应用请求版本、物理设备版本和可用入口共同决定核心路径。查询支持不等于 device 创建时启用。
 
 下列为常用 feature 的最低核心支持版本与字段归属，完整清单查 [Feature Requirements](https://docs.vulkan.org/spec/latest/chapters/features.html#features-requirements)。不要把扩展名、feature 字段和无独立 feature bit 的功能混列。[SPEC]
 
@@ -97,6 +100,8 @@ Vulkan 1.4 新增必须支持：
 ```
 
 > **注意**：mandatory 只表示"实现必须支持"，**不等于"自动启用"**。使用上述任何 feature 前，仍需在 `VkDeviceCreateInfo.pNext` 中通过对应版本的 feature struct 显式启用（1.2 promote → `VkPhysicalDeviceVulkan12Features`；1.3 promote → `VkPhysicalDeviceVulkan13Features`；1.4 promote → `VkPhysicalDeviceVulkan14Features`）。详见 §6.3 与 §7.2。[SPEC]
+
+若 `VkDeviceCreateInfo.pNext` 链包含 `VkPhysicalDeviceFeatures2`，`pEnabledFeatures` 必须为 `NULL`。同一 feature 不同时用聚合版本结构和对应独立结构重复加入链；按目标版本检查允许的结构与字段。依据：[VkDeviceCreateInfo](https://docs.vulkan.org/refpages/latest/refpages/source/VkDeviceCreateInfo.html)。
 
 ### 3.1 Push Descriptors [SPEC]
 

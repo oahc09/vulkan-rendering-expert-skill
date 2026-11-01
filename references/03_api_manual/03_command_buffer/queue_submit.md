@@ -35,14 +35,14 @@ VkCommandBuffer (executable)
 
 - Command buffer 必须处于 executable 状态（已 `vkEndCommandBuffer`）。[SPEC]
 - Command buffer 必须来自与 submit queue 兼容的 command pool（同一 queue family）。[SPEC]
-- Wait semaphore 必须已被 signal 或处于 pending signal 状态。[SPEC]
+- Binary wait 的匹配 signal 操作必须已提交；timeline 支持 wait-before-signal，但应用必须保证未来 signal 可达，不能形成依赖死锁。[SPEC]
 - Timeline semaphore 值必须单调递增。[SPEC]
 
 ### 下游影响
 
 - GPU 开始执行 command buffer 中的命令。
 - Fence 在 GPU 完成后被 signal。[SPEC]
-- Signal semaphore 在 GPU 完成后被 signal，可被后续 submit / present 等待。[SPEC]
+- Semaphore signal 的完成范围由提交 API 与同步 scope 决定；Submit2 的 signal stageMask 限定第一同步范围，不能一律解释为全部 GPU 工作完成。WSI present 等待 binary semaphore。[SPEC]
 - Present 通常依赖 graphics queue 的 signal semaphore。[SPEC]
 
 ---
@@ -80,7 +80,7 @@ VkCommandBuffer (executable)
 录制 command buffer
 → 准备 VkSubmitInfo:
     pWaitSemaphores      = [imageAvailableSemaphore]
-    pWaitDstStageMask    = [COLOR_ATTACHMENT_OUTPUT_BIT]  // 或 ALL_COMMANDS / TOP_OF_PIPE
+    pWaitDstStageMask    = [COLOR_ATTACHMENT_OUTPUT_BIT]  // 仅当 swapchain image 最早访问为 color attachment；否则按实际访问选择
     pCommandBuffers      = [cmd]
     pSignalSemaphores    = [renderFinishedSemaphore]
 → vkQueueSubmit(queue, 1, &submitInfo, inFlightFence)
@@ -89,14 +89,19 @@ VkCommandBuffer (executable)
 → inFlightFence signal 后 CPU 可复用 frame resource
 ```
 
-Synchronization2 流程：
+Synchronization2 概念流程（不是 C++ 聚合初始化；须设置正确 sType/pNext、计数与指针，并启用 synchronization2）：
 
 ```text
-VkCommandBufferSubmitInfo cmdInfo{ cmd };
-VkSemaphoreSubmitInfo waitInfo{ imageAvailableSemaphore, COLOR_ATTACHMENT_OUTPUT_BIT };
-VkSemaphoreSubmitInfo signalInfo{ renderFinishedSemaphore, ALL_GRAPHICS_BIT };
-VkSubmitInfo2 submitInfo{ ... };
-vkQueueSubmit2(queue, 1, &submitInfo, inFlightFence);
+cmdInfo.commandBuffer = cmd
+waitInfo.semaphore = imageAvailableSemaphore[frameIndex]
+waitInfo.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT
+    // 仅限最早访问为 color attachment 的路径（包括相应 layout transition）
+signalInfo.semaphore = renderFinishedSemaphore[imageIndex]
+signalInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
+    // 本例使用保守的提交完成范围，不把 ALL_GRAPHICS 当作 compute/transfer 完成证明
+submitInfo = waits[waitInfo] + commands[cmdInfo] + signals[signalInfo]
+检查 vkResetFences；紧邻实际 vkQueueSubmit2
+检查 vkQueueSubmit2 返回值；失败走恢复，不 present 或普通 fence wait
 ```
 
 ---
@@ -107,7 +112,7 @@ vkQueueSubmit2(queue, 1, &submitInfo, inFlightFence);
 |---|---|---|
 | `waitSemaphoreCount` / `pWaitSemaphores` | 必须与 acquire / 前序 pass 的 signal semaphore 一一对应。[SPEC] | semaphore 数量或顺序与 `pWaitDstStageMask` 不匹配。[TOOL] |
 | `pWaitDstStageMask` | 决定 GPU 在哪些 pipeline stage 等待 semaphore，应尽量精确。[SPEC] | 填 `ALL_COMMANDS` 导致过度同步；填错 stage 导致 hazard。[TOOL] |
-| `commandBufferCount` / `pCommandBuffers` | 一次 submit 可包含多个 command buffer，按顺序执行。[SPEC] | 跨 frame 的 command buffer 混在一个 submit 中，fence 管理混乱。[ENGINE] |
+| `commandBufferCount` / `pCommandBuffers` | 一次 submit 可包含多个 command buffer；submission order 不等于执行完全串行或自动建立所有内存依赖。[SPEC] | 跨 frame 的 command buffer 混在一个 submit 中，fence 管理混乱。[ENGINE] |
 | `signalSemaphoreCount` / `pSignalSemaphores` | 通常一个 renderFinishedSemaphore 供 present 等待。[SPEC] | signal 与 present 等待的 semaphore 不一致。[SPEC] |
 | `fence` | 用于 CPU 等待 GPU 完成；可为 `VK_NULL_HANDLE`。[SPEC] | 同一 fence 被多个重叠 submit 使用。[SPEC] |
 | `pNext` timeline info | Timeline semaphore 必须填写 `VkTimelineSemaphoreSubmitInfo` 指定 wait / signal value。[SPEC] | 值未单调递增或类型未使用 timeline semaphore。[TOOL] |
@@ -126,7 +131,7 @@ vkQueueSubmit2(queue, 1, &submitInfo, inFlightFence);
 ### 使用阶段
 
 - [ ] 是否检查 `vkQueueSubmit` 返回值？
-- [ ] Wait stage mask 是否与 producer 的 signal stage 匹配？
+- [ ] Wait stage 是否覆盖 consumer 最早访问，signal scope 是否覆盖 producer 写入及必要操作（不要求两个 mask 相等）？
 - [ ] 同一 frame 的 acquire / submit / present semaphore 是否一一对应？
 - [ ] Timeline semaphore 值是否单调递增？
 
@@ -140,11 +145,11 @@ vkQueueSubmit2(queue, 1, &submitInfo, inFlightFence);
 ## 7. 高频错误
 
 1. `vkQueueSubmit` 的 wait semaphore 与 `vkAcquireNextImageKHR` 的 signal semaphore 不是同一个。[SPEC]
-2. Wait stage mask 填 `TOP_OF_PIPE`，导致后续 color attachment 操作在 image 可用前开始。[SPEC]
+2. Wait stage 未覆盖 swapchain image 的最早访问或相应 layout transition，导致 hazard；TOP_OF_PIPE 不是该错误的通用判据，过早等待可能降低并行度。[SPEC]
 3. 同一 fence 被连续两帧使用，前一帧 GPU 未完成时后一帧又 submit。[SPEC]
 4. Command buffer 仍处于 recording 状态就 submit。[SPEC]
 5. 多 queue 场景下 semaphore 跨 queue 传递但 stage mask 设置错误。[SPEC]
-6. Timeline semaphore 的 wait value 大于 signal value，导致永久等待。[TOOL]
+6. Timeline wait 的目标值没有可达的后续 signal，或 signal 依赖该 wait 完成，导致永久等待；单纯 wait-before-signal 并非非法。[TOOL]
 7. Submit 到错误 queue（如 compute queue 提交 graphics command buffer）。[SPEC]
 8. Present 等待的 semaphore 不是该 frame 的 renderFinishedSemaphore。[SPEC]
 
@@ -194,7 +199,7 @@ vkQueueSubmit2(queue, 1, &submitInfo, inFlightFence);
 ### in-flight 风险
 
 - Submit 后 command buffer 进入 pending 状态，fence signal 前不能 reset。[SPEC]
-- Semaphore 被 wait 前必须已经被 signal；重复使用 binary semaphore 需确保已完成 wait。[SPEC]
+- Binary semaphore 的匹配 signal 操作须先提交；重用需证明前一次 wait 已完成。Timeline 可 wait-before-signal，不能套用 binary 状态规则。[SPEC]
 
 ---
 
@@ -209,12 +214,12 @@ vkQueueSubmit2(queue, 1, &submitInfo, inFlightFence);
 
 - Binary semaphore：acquire → render → present 的标准链。[SPEC]
 - Timeline semaphore：适合管理跨帧依赖、upload → render 依赖。[GUIDE]
-- 同一 queue 内多个 command buffer 按 submit 顺序执行，无需额外 semaphore。[SPEC]
+- 同一 queue 的 submission order 不自动建立所有执行/内存依赖；仍须按资源访问设置 barrier 等同步，通常无需为了同队列依赖额外使用 semaphore。[SPEC]
 - 跨 queue 必须显式 semaphore 同步。[SPEC]
 
 ### 资源访问同步
 
-- Submit 的 wait stage mask 必须与 producer 的 signal stage 匹配，否则 consumer 可能在资源就绪前访问。[SPEC]
+- Wait stage 覆盖 consumer 的最早相关访问；signal scope 覆盖 producer。两者可以不同，不能以 mask 相等代替依赖分析。[SPEC]
 - Image layout transition 通常在 command buffer 内通过 barrier 完成，不需要跨 submit。[SPEC]
 
 ---
@@ -222,7 +227,7 @@ vkQueueSubmit2(queue, 1, &submitInfo, inFlightFence);
 ## 11. Android 注意点
 
 - Android 通常使用单一 graphics/present queue，semaphore 链路为：acquire semaphore → submit wait → submit signal → present wait。[ANDROID]
-- `VK_SUBOPTIMAL_KHR` / `VK_ERROR_OUT_OF_DATE_KHR` 出现后，当前 frame 的 submit 可能已失败或需要 recreate，不能继续 present。[ANDROID]
+- 区分 acquire / submit / present 的返回值：acquire 的 SUBOPTIMAL 已取得 image，可完成当前帧后重建；OUT_OF_DATE 不继续本次提交。submit 失败独立进入恢复，不能把 acquire/present 状态当作 submit 返回值。[ANDROID]
 - 某些 Android 设备对 `vkQueueSubmit` 的 CPU 开销敏感，应尽量减少 submit 批次。[ENGINE]
 - AGI 可检查 queue submit 与 surface present 的时序，发现 latency 问题。[TOOL]
 
@@ -256,7 +261,7 @@ vkQueueSubmit2(queue, 1, &submitInfo, inFlightFence);
 常规 Android / 桌面渲染，存在多 frame-in-flight。
 
 **不适用情况**：
-单帧渲染、命令完全串行、或已使用 timeline semaphore 统一管理的场景。
+纯离屏、无 WSI present 的场景。单帧或内部 timeline 管理不豁免 WSI binary semaphore 的复用与退役规则。
 
 **来源**：`[ENGINE][SPEC]`
 
@@ -272,6 +277,10 @@ vkQueueSubmit2(queue, 1, &submitInfo, inFlightFence);
 - `../08_synchronization/synchronization2.md`
 
 ---
+
+权威帧循环与失败路径：[frame-loop-contract](../../05_workflows/01_renderer_setup/setup_frame_loop.md#frame-loop-contract)。
+规范依据：[vkQueueSubmit](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueSubmit.html)、
+[VkSemaphoreSubmitInfo](https://docs.vulkan.org/refpages/latest/refpages/source/VkSemaphoreSubmitInfo.html)。
 
 ## 15. 需要回查官方文档的情况
 

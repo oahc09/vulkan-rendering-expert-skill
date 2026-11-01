@@ -20,6 +20,8 @@ Frame Begin
 → Frame End
 ```
 
+权威步骤及提前退出契约：[frame-loop-contract](../05_workflows/01_renderer_setup/setup_frame_loop.md#frame-loop-contract)。
+
 ## CPU 侧流程
 
 ```text

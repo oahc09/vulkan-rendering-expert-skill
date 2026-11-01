@@ -9,7 +9,7 @@
 `agents/claude-code.yaml` 的宿主运行时解析器。原 `scripts/check-skill.mjs`
 只把它纳入内容指纹，不解析其 YAML；文件名不能证明 Claude Code 会读取它。
 它是示意集成配置，不能视为已验证的 Claude Code 配置 schema。
-本次只使其最小启动清单与 v1.0.9 契约一致，未改其他宿主配置：
+v1.0.10 保留其与 v1.0.9 一致的最小启动契约，未改其他宿主配置：
 
 1. `SKILL.md`；
 2. `references/00_expert_entry/hard_rules.md` **全文**；
@@ -25,7 +25,7 @@
 | 字段 | 手填建议 |
 | --- | --- |
 | Title | Vulkan Rendering Expert Skill |
-| version | 1.0.9（必须与本次候选 `metadata.version` 相同） |
+| version | 1.0.10（必须与本次候选 `metadata.version` 相同） |
 | summary | Engineering-focused Vulkan guidance for rendering architecture, debugging, synchronization, Android integration, performance optimization, and source-level verification. |
 | tags | vulkan, rendering, android, graphics-engine, debugging, performance, synchronization |
 | use_cases | Diagnose black screens and validation errors; reason about synchronization and resource lifetimes; investigate Android surface/swapchain issues; assess performance bottlenecks; compare rendering architecture options. |
@@ -80,7 +80,7 @@ git status --short
 git rev-parse HEAD
 # 输出目录须已存在、位于 checkout 外；文件名不得已存在。
 python scripts/agensi_audit_and_pack.py . \
-  --out /absolute/path/outside-checkout/vulkan-rendering-expert-skill-1.0.9-agensi-free.zip
+  --out /absolute/path/outside-checkout/vulkan-rendering-expert-skill-1.0.10-agensi-free.zip
 ```
 
 把示例输出路径替换为自己的仓库外目录。保留 JSON 报告用于关联 commit、包内容和 SHA-256；
@@ -106,3 +106,25 @@ python scripts/agensi_audit_and_pack.py . \
 | 架构选型 | 提问：“我们的 Android Vulkan 引擎应选 RenderPass、Dynamic Rendering 还是 RenderGraph？”提供目标设备/API/features、pass 数与团队约束后要求比较；若给源码，先让其建图再给迁移范围。 | 走 architecture 路由和 engine_architecture；按需求 → 约束 → Candidate → Trade-off → Decision；区分渲染 API 和图调度架构层次，给适用边界与重新评估条件；源码任务先 Evidence/Architecture Map，分 Must/Should/Defer/Do Not Change；仅设计不声称已实现或运行通过。 | 未运行 |
 
 发布者逐项附实际证据再更新状态；缺少宿主、模型、授权工程或设备时保持未运行并说明原因。
+
+## v1.0.10 候选边界（2026-11-01）
+
+此版本按“一致性与发布验收”计划收口，不扩展 API 模块。配对测试仓
+`oahc09/vulkan-rendering-expert-skill-tests` 保存精确计划、历史原文、候选 SHA 契约及本轮报告。
+知识文件净增量为 0；全树文件数与 196 文件的实际白名单包分别记录。
+
+- 静态/安全/确定性打包可以支持文档正确性修订候选，不证明真实 Agent 行为。
+- 真实模型 16 场景与四类宿主未完成前，保持 **BLOCKED / 未验证**；不得声称完整 M3 或 30% token 目标达成。
+- 30% 目标只比较固定 v1.0.8 SHA 的原 12 场景；新增 4 场景和 v1.0.9→v1.0.10 回归分别报告。
+- 模型、参数、provider usage、read trace、输入/输出哈希缺一不可；mock 只验证 runner。
+- 任意候选代码变更后重新固定 SHA 并重跑，不能复用旧 SHA 的 PASS。
+- 当前交付为 Draft PR，不自动发布、上传 Agensi 或合入 main。
+
+### 本轮规范复核边界
+
+2026-11-01 冻结 Spec/Registry：
+[Khronos Vulkan-Docs b94f8bd2d004d2949469d8a5071ee10eb7d23566](https://github.com/KhronosGroup/Vulkan-Docs/tree/b94f8bd2d004d2949469d8a5071ee10eb7d23566)
+（含 `xml/vk.xml`）；Headers：
+[9fbc2a782ee3f8a4db64e7d991e23da75e893f44](https://github.com/KhronosGroup/Vulkan-Headers/tree/9fbc2a782ee3f8a4db64e7d991e23da75e893f44)。
+对应官方参考页核对 fence reset、queue submit、Submit2 scope、acquire 与 feature enable。
+本轮没有安装或运行 Vulkan SDK / GPU renderer，SDK/runtime 版本及硬件测试不声明已验证。
