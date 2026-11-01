@@ -113,3 +113,7 @@
 → 03_api_manual/02_surface_swapchain（可选）
 → 03_api_manual/08_synchronization（可选）
 ```
+
+### Shader / Resource / GPU-driven Scale
+
+按主类型进入，GPU Scene模型 → indirect API能力/ABI → compute workflow同步与LOD/Hi-Z；shader接口 → pipeline scheduler → streaming residency按实际缺口补载。八模块不增加，第九模块/新强制启动包均不需要；实验、rubric、raw报告和工具链仅在配对tests仓，不进入运行时知识包。

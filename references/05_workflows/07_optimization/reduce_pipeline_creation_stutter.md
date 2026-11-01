@@ -26,8 +26,8 @@ Cold Pipeline Creation (blocking, slow)
 → Pipeline Cache (disk + memory)
 → Startup Pre-warm (blocking but expected)
 → Runtime Async Compile (non-blocking fallback)
-→ Derivative Pipeline (faster variant)
-→ Specialization Constants (fewer pipelines)
+→ Derivative Pipeline (conditional reuse)
+→ Specialization Constants (bounded combinations)
 → Smooth Frame Time
 ```
 
@@ -102,9 +102,9 @@ SPIR-V Shader Modules
 
 Pipeline 状态：
 
-- 使用 specialization constants 替代预处理宏，减少 shader 变体数量；例如用 `const_id` 控制 feature toggle、LOD bias、light count [SPEC]。
+- 有选择地用 specialization 替代预处理宏，可减少 SPIR-V 文件但不自动减少 pipeline 组合；例如用 `const_id` 控制 feature toggle、LOD bias、light count [SPEC]。
 - 对大量相似 pipeline（如不同 blend mode、cull mode），使用 `basePipelineHandle` 创建 derivative，可能降低编译时间 [SPEC]；效果因驱动而异，需实测 [HEUR]。
-- 使用 `VK_EXT_graphics_pipeline_library` 将 vertex input / pre-rasterization / fragment output / fragment shader 分库编译，可显著减少 runtime pipeline 创建耗时 [SPEC]；需要 Vulkan 1.3 或扩展支持。
+- 使用 `VK_EXT_graphics_pipeline_library` 将 vertex input / pre-rasterization / fragment output / fragment shader 分库编译，可能分摊创建成本，库编译/链接和内存需实测 [ENGINE]；需要扩展及 feature/依赖实际支持并启用，不由 Vulkan 1.3 自动保证。
 
 ---
 
@@ -119,8 +119,8 @@ Pipeline 状态：
 
 必须说明：
 
-- `VkPipeline` 不是 internally synchronized object；多线程同时调用 `vkCreate*Pipelines` 使用同一 `VkPipelineCache` 是允许的，但 `vkDestroyPipeline` 与创建/使用不能并发 [SPEC]。
-- Async pipeline 创建完成后，必须在 GPU 未使用 fallback pipeline 的帧边界切换到新 pipeline；通常通过 frame fence 保证 [ENGINE]。
+- 共享 cache 的创建/merge/读取按实际 flags 与具体命令的 host synchronization 判定，见 pipeline_cache.md §16；销毁必须协调 CPU 创建调用和 GPU 使用 [SPEC]。
+- 新 pipeline 创建完成后可发布给新的命令录制，旧 fallback 可继续 in-flight；旧对象需最后引用完成才销毁，不要求发布时所有 GPU idle [ENGINE]。
 - Pipeline cache 数据写入磁盘应在非关键路径（如退出时或后台线程），避免 I/O stall [HEUR]。
 
 ---
@@ -150,7 +150,7 @@ Pipeline 状态：
    - 使用一个简单但兼容的 pipeline（如默认材质）作为 fallback；
    - 或跳过渲染直到 async pipeline ready [HEUR]。
 7. **提交 async compile task**：
-   - 后台线程调用 `vkCreate*Pipelines`，共享全局 `VkPipelineCache` [SPEC]；
+   - 后台线程调用 `vkCreate*Pipelines`，cache 策略与 flags/host 同步一致 [SPEC]；
    - 任务包含 `VkGraphicsPipelineCreateInfo`、layout、render pass 信息。
 8. **切换到 async pipeline**：
    - 完成后通过原子标志或 frame fence 通知主线程；
@@ -164,7 +164,7 @@ Pipeline 状态：
     - 同一 shader module 配合不同 `VkSpecializationInfo` 创建不同 pipeline，减少 SPIR-V 文件数量 [SPEC]。
 11. **考虑 Graphics Pipeline Library（GPL）**：
     - 将 pipeline 拆分为 vertex input、pre-rasterization、fragment shader、fragment output 四个库；
-    - 运行时链接为完整 pipeline，显著降低 stutter [SPEC]；
+    - 运行时链接为完整 pipeline，创建/链接总成本和首次卡顿实测 [ENGINE]；
     - 需要启用 `VK_EXT_graphics_pipeline_library` 并处理 flags。
 12. **监控与调优**：
     - 统计 cache hit/miss、async compile 等待时间、startup pre-warm 耗时；
@@ -174,8 +174,8 @@ Pipeline 状态：
 
 ## 9. Android 注意点
 
-- `ANativeWindow` / surface 创建后 render pass format 才确定；依赖 surface format 的 pipeline 必须在 surface 创建后创建，启动预编译阶段若尚未有 surface，只能预编译 format-independent 部分或使用 GPL [ANDROID]。
-- 移动端后台线程资源受限，async compile 线程数建议 1~2，避免与 render thread 争用 CPU/GPU driver lock [ANDROID]。
+- 若项目只有取得 Surface 格式后才确定输出合同，相关 pipeline 需等合同确定；已知离屏/候选格式可提前创建，最终呈现前复核兼容。没有通用的 Surface 先于 pipeline API 要求 [SPEC][ENGINE]。
+- 移动端按 CPU 时间/内存/队列背压调整 worker 并发，测与 render thread、driver lock 的争用，不规定统一线程数 [ANDROID]。
 - Pipeline cache blob 在 Android 上可保存到应用私有目录；注意不同设备/驱动间 cache 不通用，建议按 device ID / driver version 分文件 [ANDROID]。
 - rotation / resize 通常不改变 pipeline（除非 surface format 变化），但若启用了 GPL 的 fragment output 库且 format 改变，需要重建对应库 [ANDROID]。
 - pause / resume 期间保留 pipeline cache 与已创建 pipeline；不要销毁 cache，否则下次启动失去加速 [ANDROID]。
@@ -189,7 +189,7 @@ Pipeline 状态：
 - [ ] RenderDoc / AGI / Nsight：
   - 可见 async pipeline 在完成后被绑定；
   - startup 阶段预编译 pipeline 列表正确；
-  - cache hit 后 `vkCreate*Pipelines` 耗时显著降低 [TOOL]。
+  - 记录冷/热 `vkCreate*Pipelines` 耗时，不将显著加速作为预设事实 [TOOL]。
 - [ ] 截图 / 数值验证：fallback 切换到 async pipeline 时无画面跳变或 artifact。
 - [ ] logcat（Android）：无 validation error；可输出 `pipelineCreationTime`、`cacheHitRate`、`asyncCompileQueueSize`。
 - [ ] 性能指标：
@@ -247,3 +247,26 @@ Pipeline 状态：
 - Async compile 线程模型与同步方式。
 - 是否使用 GPL / derivative / specialization constants。
 - Android lifecycle 日志。
+
+<a id="pipeline-build-scheduler"></a>
+## 15. 有界创建调度与发布合同（C2）
+
+前提：已验证 [Shader 接口/代际](../06_pipeline_descriptor/shader_binding_workflow.md#shader-hot-reload) 和 [cache key/同步](../../03_api_manual/06_pipeline/pipeline_cache.md#cache-compatibility)。输入为完整 key、Engine/Device/material generation、优先级和预算；输出 Ready 或具原因的 Failed/Canceled/Obsolete。[ENGINE]
+
+```text
+Queued → Building → Ready → Published → Retired
+  └ Canceled     └ Failed / Obsolete（禁止迟到发布）
+```
+
+- 按 key 去重，优先首屏/近期可见材质与 GPU-driven state bins；设队列长度、每帧 CPU 时间、构建内存、重试次数上限。不等待全变体预热完成才首帧。
+- worker 深拷贝/持有 create-info、pNext、specialization data、entry point 字符串、layout/render-pass/module 等依赖直到调用完成；不把临时栈指针留给迟到任务。
+- Vulkan 创建调用中途没有通用取消 API：逻辑取消使结果不可发布，待调用返回后回收；teardown 停新任务并协调正在运行的 CPU 创建，不能先毁 Device。
+- Ready 时复核 owner 与 generation，CPU 发布采用项目已有互斥/消息/原子协议；GPU fence 不代替 CPU 内存同步。旧 command buffer 仍可使用旧 pipeline，完成后原 owner 回收。
+- fallback 必须兼容 layout、render target、vertex/state 合同；任意默认材质不能乱绑。不兼容时保留旧完整版本或显式跳过，记录画质策略。
+- 损坏 cache、shader 编译失败、Device 已退役、任务超预算分别反馈，错误不无限重试；缓存局部失效不触发 Surface/Device 全量重建。
+
+测量冷/热启动、首个正确帧、首次效果切换、创建时间 p50/p95/p99、队列延迟/峰值内存、最终帧时间。GPL/derivative/特化分别开关 A/B；后台移走阻塞不代表 CPU 总耗时更低。[ENGINE]
+
+回归：缺输入、损坏缓存、重复请求、创建失败、取消迟到、Device 退出、旧 pipeline in-flight、双 Engine 独立发布。Host 状态机 PASS、真实 Vulkan 创建和移动性能分开。
+
+固定规范：[Vulkan-Docs v1.4.328 pipelines](https://github.com/KhronosGroup/Vulkan-Docs/blob/d38733398a4bec673bd5d24c904d4739a45f020d/chapters/pipelines.adoc)，调度状态/预算是引擎策略，不是 Vulkan API。

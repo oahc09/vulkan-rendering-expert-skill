@@ -182,3 +182,14 @@
 
 
 v1.0.12仅按章节扩展既有Android Surface、媒体采样与颜色输出内容，API/Workflow文件数不变；新主题按唯一任务路由中的显式锚点读取，未命中不预载。
+
+## Shader / 资源 / GPU-driven 规模化主题
+
+| 问题 | 按需入口 |
+|---|---|
+| Shader manifest / SPIR-V / reflection / FP16 | `../03_api_manual/06_pipeline/shader_module.md#shader-artifact-contract` |
+| Pipeline key / cache / Binary / GPL | `../03_api_manual/06_pipeline/pipeline_cache.md#cache-compatibility` |
+| VMA / 流式预算 / OOM背压 | `../03_api_manual/04_buffer_image_memory/vma_usage.md#streaming-budget-policy` |
+| Indirect能力回退 / firstInstance / DrawID | `../03_api_manual/03_command_buffer/indirect_commands.md#indirect-capability-fallback` |
+| Indirect count溢出/command ABI | `../03_api_manual/03_command_buffer/indirect_commands.md#indirect-capacity-safety` |
+| Mesh/task / meshlet / 传统fallback | `../03_api_manual/06_pipeline/mesh_shader.md#mesh-path-fallback` |

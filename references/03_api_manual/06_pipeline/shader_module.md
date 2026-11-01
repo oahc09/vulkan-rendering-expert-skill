@@ -42,7 +42,7 @@ Shader 源码 (GLSL/HLSL/SLANG)
 ### 下游影响
 
 - 决定 pipeline 中某个 stage 的执行代码。[SPEC]
-- 通过 reflection 决定 descriptor set layout、push constant range、vertex input 等接口。[ENGINE]
+- 将 reflection 作为 descriptor、push constant、vertex input 合同的输入，结合引擎 schema 验证兼容性。[ENGINE]
 
 ---
 
@@ -117,7 +117,7 @@ Shader 源码 (GLSL/HLSL/SLANG)
 ### 销毁阶段
 
 - [ ] 确认 module 不再用于后续 pipeline 创建后再销毁。
-- [ ] 不要在 pipeline 仍在 in-flight 时销毁 module 虽然允许，但建议延后到安全点。[HEUR]
+- [ ] 已完成创建的 pipeline 可继续使用；module 销毁只需协调仍在引用它的 CPU 创建调用，不把 pipeline 的 GPU 退休条件套到 module。[SPEC]
 
 ---
 
@@ -180,7 +180,7 @@ Shader 源码 (GLSL/HLSL/SLANG)
 
 - `vkCreateShaderModule` 是 CPU 侧操作，不涉及 GPU 同步。
 - Pipeline 创建可能耗时，但不需要 fence / semaphore。
-- 多个 thread 可并发创建不同 shader module；同一 module 不建议并发用于多个 pipeline 创建 unless 安全。[HEUR]
+- 多个 thread 可并发创建不同 shader module；共享只读 module 的创建输入必须存活，销毁与尚未完成的创建调用协调；按各命令 host synchronization 判断。[SPEC]
 
 ---
 
@@ -197,7 +197,7 @@ Shader 源码 (GLSL/HLSL/SLANG)
 
 ### CPU 侧
 
-- Shader module 创建本身是轻量 CPU 操作，但 SPIR-V 编译可能很重；建议离线编译。[ENGINE]
+- Shader module 创建成本依实现与产物而异，但 SPIR-V 编译可能很重；建议离线编译。[ENGINE]
 - 不要每帧创建/销毁 shader module。[ENGINE]
 
 ### GPU 侧
@@ -206,7 +206,7 @@ Shader 源码 (GLSL/HLSL/SLANG)
 
 ### 移动端
 
-- 移动 GPU 对 shader 变体敏感，建议用 specialization constants 减少变体数量。[ENGINE]
+- 移动 GPU 对 shader 变体敏感，可用 specialization 减少部分 SPIR-V 文件，但不自动减少 pipeline 组合。[ENGINE]
 - 避免在关键帧中首次创建大量 pipeline 导致卡顿。[ENGINE]
 
 ---
@@ -242,3 +242,28 @@ SPIR-V 应作为构建产物纳入版本管理，CI 中跑 `spirv-val`；运行�
 2. `VkPipelineShaderStageCreateInfo` 中 `pSpecializationInfo` 的精确布局规则。
 3. Mesh / task shader 等新增 stage 的 pipeline 创建规则。
 4. `VK_EXT_shader_object` 与传统 pipeline 的差异。
+
+<a id="shader-artifact-contract"></a>
+## 16. Shader 产物合同（C1）
+
+输入是授权项目源码/依赖、固定工具链、目标环境与 Engine schema；输出是完整产物包与逐层判定，不是一个孤立 `.spv`。[ENGINE]
+
+```text
+sourceHash / includeDependencyHashes
+compilerName / compilerVersion / compilerOptions
+sourceLanguage / entryPoint / stage
+targetVulkanEnvironment / targetSpirvEnvironment
+requiredExtensions / requiredFeatures / requiredLimits
+reflectionHash / interfaceContractHash / bytecodeHash
+materialSchemaVersion / buildRevision
+```
+
+这些是工程 manifest 字段，不是 Vulkan 结构体；复用既有构建格式，不强制运行时 JSON。包含宏、include、工具版本及 target 的缓存 key 才能避免误用旧产物。保存真实完整编译/校验命令与返回码，不将示意 CLI 当可运行配方。[ENGINE]
+
+编译 PASS → SPIR-V 验证 PASS → 接口合同 PASS → 实际 Device 支持且启用 → Pipeline 创建 PASS → 图像/数值 PASS，分别记录。编译器支持新 SPIR-V 不代表旧设备支持；未执行项标 NOT_RUN，不从前层继承成功。[SPEC][TOOL]
+
+FP16 算术 `shaderFloat16`、16-bit buffer/push storage（如 `storageBuffer16BitAccess`、`uniformAndStorageBuffer16BitAccess`、`storagePushConstant16`）、stage I/O `storageInputOutput16`、整数 `shaderInt16` 分别查询/启用；FP16 算术不自动准许所有 storage/I/O。std140/std430/scalar layout 与 host padding 分开校验实际 offsets、array/matrix stride；scalar/uniform 标准布局也有各自能力要求。[SPEC]
+
+默认保留剔除/depth 比较的保守精度；精度变体要测近平面、远近尺度、NaN/Inf、动画和跨 GPU，不以 FPS 或静态截图代替数值验收。接口与热更新见 [定向合同](../../05_workflows/06_pipeline_descriptor/shader_binding_workflow.md#shader-hot-reload)。
+
+固定规范：[Vulkan-Docs v1.4.328 features](https://github.com/KhronosGroup/Vulkan-Docs/blob/d38733398a4bec673bd5d24c904d4739a45f020d/chapters/features.adoc)、[shader/pipeline](https://github.com/KhronosGroup/Vulkan-Docs/blob/d38733398a4bec673bd5d24c904d4739a45f020d/chapters/pipelines.adoc)。核验 2026-11-01，source-read；不是设备支持声明。

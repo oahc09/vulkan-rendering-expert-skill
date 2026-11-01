@@ -57,7 +57,7 @@ CPU 图像数据
 - [ ] Staging buffer / 上传队列可用。
 - [ ] Descriptor pool 对 `COMBINED_IMAGE_SAMPLER` 或 `SAMPLED_IMAGE` 有足够容量。
 - [ ] RenderDoc / AGI 可抓帧验证 texture 内容。
-- [ ] Android 端 Surface / ANativeWindow 生命周期已可追踪。
+- [ ] Android 输出相关资源的 Surface 生命周期可追踪；普通离屏 texture 不要求 Surface。
 
 ---
 
@@ -103,7 +103,7 @@ CPU Pixel Data
 
 - 若同一张 texture 在不同 draw 中采样方式不同，使用分离 `SAMPLED_IMAGE + SAMPLER` 可减少 sampler 数量 [HEUR]。
 - `COMBINED_IMAGE_SAMPLER` 在移动端驱动优化路径更成熟，优先用于常规材质 [ANDROID]。
-- 描述符中 `imageLayout` 必须为 `VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL` 或 `VK_IMAGE_LAYOUT_GENERAL`（compute 采样） [SPEC]。
+- 描述符中 `imageLayout` 必须为 `VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL` 或 `VK_IMAGE_LAYOUT_GENERAL` 等所选描述符允许的 layout；compute 采样不强制 GENERAL [SPEC]。
 
 ---
 
@@ -119,7 +119,7 @@ CPU Pixel Data
 - producer stage：`VK_PIPELINE_STAGE_TRANSFER_BIT` 或 `VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT` / `VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT`。
 - producer access：`VK_ACCESS_TRANSFER_WRITE_BIT` / `VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT` / `VK_ACCESS_SHADER_WRITE_BIT`。
 - oldLayout：`VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL` 或 `VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL` / `VK_IMAGE_LAYOUT_GENERAL`。
-- newLayout：`VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL`（graphics 采样）或 `VK_IMAGE_LAYOUT_GENERAL`（compute 读写）。
+- newLayout：`VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL`（包括 compute 只读采样）或 `VK_IMAGE_LAYOUT_GENERAL`（storage 读写，核对 usage）。
 - consumer stage：`VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT` 或 `VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT`。
 - consumer access：`VK_ACCESS_SHADER_READ_BIT`。
 
@@ -135,7 +135,7 @@ CPU Pixel Data
 6. **录制上传命令**：
    - 使用 `vkCmdPipelineBarrier` 将 image 从 `UNDEFINED` 转换到 `TRANSFER_DST_OPTIMAL`；
    - 使用 `vkCmdCopyBufferToImage` 从 staging buffer 复制到 image；
-   - 若生成 mipmaps，循环使用 `vkCmdBlitImage` + barrier；
+   - 若生成 mipmaps，先确认格式 blit/filter 能力；支持时逐层 blit+barrier，否则离线生成/选受支持替代；
    - 使用 `vkCmdPipelineBarrier` 从 `TRANSFER_DST_OPTIMAL` 转换到 `SHADER_READ_ONLY_OPTIMAL` [SPEC]。
 7. **提交上传**：将命令缓冲提交到 graphics 或 transfer queue，使用 `VkFence` 或 `vkQueueWaitIdle` 等待完成。
 8. **释放/复用 staging**：上传完成后 `vkDestroyBuffer` + `vkFreeMemory` 或回收到 upload ring buffer。
@@ -150,7 +150,7 @@ CPU Pixel Data
 
 ## 9. Android 注意点
 
-- 创建 `VkImage` 前必须确保 `ANativeWindow` 已绑定到 `VkSurfaceKHR` 且 swapchain 已创建；虽然 texture 不直接依赖 swapchain image，但上传命令通常提交到同一 queue，queue 必须在 surface 创建后的 device 上有效 [ANDROID]。
+- 普通 texture 的创建/上传要求有效 Device、格式/usage 能力、内存与 queue，不要求先有 ANativeWindow、Surface 或 swapchain。项目若把 queue 初始化绑在窗口流程上，应标项目依赖；外部 AHB 与呈现 image 另有合同 [SPEC][ENGINE]。
 - pause / resume 时 staging buffer 可能被释放；恢复后若 texture 未持久化到 device-local memory，需要重新上传。
 - rotation / resize 导致 swapchain recreate 时，仅当 texture 尺寸/比例与 surface 相关时才重建。
 - 移动端优先使用 `ASTC` / `ETC2` 压缩格式降低带宽 [ANDROID]；需调用 `vkGetPhysicalDeviceFormatProperties` 确认支持。
@@ -180,7 +180,7 @@ CPU Pixel Data
 2. **Image usage 缺失**：创建 image 时未加 `VK_IMAGE_USAGE_TRANSFER_DST_BIT`，导致 copy 命令 validation error [SPEC]。
 3. **Layout transition 缺失/错误**：上传后仍处于 `TRANSFER_DST_OPTIMAL`，fragment shader 采样触发 `IMAGE_LAYOUT_ERROR` [TOOL]。
 4. **Descriptor imageLayout 与实际 layout 不一致**：descriptor 写 `SHADER_READ_ONLY_OPTIMAL` 但 image 实际为 `GENERAL` [SPEC]。
-5. **Staging buffer 未对齐**：`vkGetBufferMemoryRequirements` alignment 未满足，copy offset 产生 validation error。
+5. **Staging buffer 未对齐**：内存绑定对齐与 buffer-to-image copy offset/压缩块对齐是不同规则，分别检查。
 6. **Mip 层级不匹配**：`mipLevels > 1` 但未生成 mip，sampler `mipmapMode=LINEAR` 时画面闪烁 [HEUR]。
 7. **Sampler 数量超限**：未检查 `maxSamplerAllocationCount`，大量材质时 `vkCreateSampler` 失败 [SPEC]。
 8. **Android rotation 后 descriptor 悬垂**：texture 与 viewport 尺寸相关时，重建后未更新 descriptor set。
@@ -220,3 +220,28 @@ CPU Pixel Data
 - `VkImageCreateInfo`、`VkSamplerCreateInfo` 参数。
 - upload command buffer 的 barrier 参数。
 - Android lifecycle 日志（surface create/destroy、pause/resume）。
+
+<a id="texture-streaming-residency"></a>
+## 15. 内容转码、部分 mip 与驻留（C3）
+
+输入合同：asset hash/version、颜色语义（sRGB/linear/HDR/normal）、尺寸/层数/mip 范围、目标 usage/tiling/filter、Engine/Device/resource generation；输出 initialized/resident 子资源范围与完成点。[ENGINE]
+
+KTX2 是容器，不等于 GPU ASTC/ETC2/BC 格式；Basis ETC1S/UASTC 是可转码内容，supercompression 与最终 GPU block compression 也是不同层。检查实际 payload/DFD/颜色语义；按设备 format properties、image format properties 和所需 feature/usage/tiling/filter 选择最终格式，再调用已固定工具链的转码接口。无目标压缩支持时选择验证过的未压缩替代或拒绝该内容，记录内存/画质变化，不按品牌猜能力。[REF][SPEC]
+
+压缩 mip 要按各层尺寸/块大小/层数计算字节与 copy region，校验 offset、row length、image height 及边缘块例外；不能用 width×height×4 套所有格式。上传已有 mip 链优先；没有合法 BLIT_SRC/BLIT_DST/过滤支持时，不强行运行时 blit，用离线 mip 或受支持替代。compute/storage mip 也须独立能力校验。[SPEC][ENGINE]
+
+```text
+Request → CPU Decode/Transcode → Reserve budgets → Upload chunks
+→ GPU completion + access visibility → Publish versioned descriptor/view
+→ Last consumer retirement → Reuse staging / evict old resource
+```
+
+预算包含 CPU 时间、转码临时内存、上传字节、staging in-flight、GPU allocation、新旧版本并存峰值；预算不足暂停/降级，队列背压而非无限积压。跨 queue 的上传与采样建立 semaphore 依赖，exclusive 跨 family 加 ownership transfer；同 queue 按实际 copy→shader 访问 barrier，CPU 发布不替代 GPU 可见性。[SPEC][ENGINE]
+
+只暴露已初始化且允许采样的 mip：首版使用 image view 子范围和安全 sampler LOD，发布新 descriptor 版本；baseMipLevel 改变同时校验 shader LOD 的相对语义，显式 LOD/梯度/邻层过滤都不得落入未初始化内容。不在 in-flight 普通 descriptor set 上任意改写，除非另证实对应 update-after-bind 等条件。[SPEC]
+
+**限制 sampler LOD 不等于释放 image allocation；完整链 allocation 不等于每个 mip 内容已就绪。** 回收预算优先低分辨率替代、整体淘汰或重建小 image；sparse residency 另需 feature/绑定/page 生命周期，不是默认。目标 mip 未就绪保留合法粗 mip/替代纹理。[ENGINE]
+
+取消前未提交的独占 CPU 数据可释放；已提交 copy 引用的 staging/image 等其 GPU 完成，取消迟到结果检查 generation 后拒绝发布。共享纹理由实际 owner/引用与退休协议回收，不随单 Surface/Engine 退出误释放。[ENGINE]
+
+验证：压缩与未压缩、NPOT/最后小 mip、缺格式/过滤、色彩/alpha、预算下降、取消、并发双输出；每层 mip 图像及资源计数证据单列。参考固定 [Vulkan-Docs v1.4.328 resources](https://github.com/KhronosGroup/Vulkan-Docs/blob/d38733398a4bec673bd5d24c904d4739a45f020d/chapters/resources.adoc)、[copies](https://github.com/KhronosGroup/Vulkan-Docs/blob/d38733398a4bec673bd5d24c904d4739a45f020d/chapters/copies.adoc)、[KTX-Software v4.4.0 transcode](https://github.com/KhronosGroup/KTX-Software/blob/beef80159525d9fb7abb8645ea85f4c4f6842e8f/lib/basis_transcode.cpp)。2026-11-01 source-read，未运行转码/GPU。

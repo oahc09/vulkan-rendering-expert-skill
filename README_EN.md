@@ -113,3 +113,9 @@ Attaching key information yields the most accurate answers — see the per-task-
 ## v1.0.12 — Android System Rendering
 
 v1.0.12 extends Android multi-instance/surface ownership, media-frame leases and synchronization, and color/HDR/alpha output contracts. No runtime knowledge files are added; the 200-file budget and startup remain unchanged. The paired tests repository adds 12 system cases (40 total). Isolated state/math fixtures are static evidence, not native Android, Live-model or device acceptance.
+
+## v1.0.13 — Shader / Resource / GPU-driven Scale (2026-11-01)
+
+Shader artifact/interface/hot reload, pipeline cache and bounded build scheduling, streaming residency/budgets, GPU-driven fixed slots/Count, LOD/current-frame Hi-Z/particles/multi-view are delivered together. Runtime knowledge adds no files; the 8 modules, startup/trigger rules, MIT license and 200-file package ceiling remain.
+
+The paired tests repository contains the exact plan, 24 new ENG13 paired-condition cases (64 total, original 40 frozen), source traceability and an original C++/GLSL Engine Scale Lab. Build, software Vulkan execution, Live model/host and Android MobileScale are separate evidence layers. This candidate is not an automatically published release and does not claim mobile performance from software Vulkan.

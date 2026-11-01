@@ -108,14 +108,14 @@ Application Object
 | resource create | buffer / image | `UNDEFINED` → target layout | first consumer |
 | resource use | buffer / image | in-flight tracker 记录 fence | deferred deletion queue |
 | fence signaled | resource record | safe to destroy | deletion worker |
-| device lost | all in-flight resources | 不再依赖 fence，强制等待 idle 后销毁 | cleanup path |
+| device lost | all in-flight resources | 停止普通提交，协调 CPU 调用，按 lost 路径取证/销毁 | cleanup path |
 
 必须说明：
 
 - 销毁 Vulkan 对象前，必须保证 GPU 不再访问；通常通过 `vkWaitForFences` 或 `vkDeviceWaitIdle` 实现 [SPEC]。
 - 使用 timeline semaphore 时，可将每个 submit 关联一个 monotonic submission ID，deferred deletion entry 标记完成 ID，每帧刷新时检查 `vkGetSemaphoreCounterValue` >= entry.id [SPEC]。
 - 同一资源被多个 frame 的 command buffer 引用时，必须等所有相关 fence 都 signaled 才能销毁 [ENGINE]。
-- Device lost 后，fence 可能永远不会 signaled；清理路径应使用 `vkDeviceWaitIdle` 超时或放弃，然后直接销毁对象并重新初始化 renderer [TOOL]。
+- Device lost 后，fence 可能永远不会 signaled；vkDeviceWaitIdle 没有 timeout 参数；检查返回值，停止并协调 CPU 调用，按已确认 lost 状态取证并有序清理，不把普通未完成工作当 lost 随意释放 [TOOL]。
 
 ---
 
@@ -163,7 +163,7 @@ Application Object
    - `vkWaitForFences(perFrameFence)` 后，将本 frame 引用的资源标记为可释放；
    - 遍历 deferred queue 执行安全销毁 [SPEC]。
 6. **Swapchain recreate 处理**：
-   - 尺寸相关资源（swapchain image view、framebuffer、depth image 等）不再由应用直接销毁（由 swapchain 拥有），但 offscreen image 需按 lifetime 流程延迟销毁 [SPEC]。
+   - swapchain image 本身由 swapchain 拥有，应用创建的 image view、framebuffer、depth/offscreen image 仍由应用在相关使用退休后销毁 [SPEC]。
 7. **Pipeline / descriptor pool 卸载**：
    - 标记为 pending delete；
    - 等所有引用它的 command buffer 完成后再销毁；
@@ -171,7 +171,7 @@ Application Object
 8. **Device lost 保护**：
    - 捕获 `VK_ERROR_DEVICE_LOST`；
    - 停止提交新命令；
-   - 使用 `vkDeviceWaitIdle`（带超时）或直接进入 emergency cleanup；
+   - vkDeviceWaitIdle 无 timeout 参数；协调 CPU worker 后按已确认 lost 的恢复合同进入 cleanup；
    - 可选使用 `VK_EXT_device_fault` 收集 fault info [TOOL]。
 9. **销毁路径**：
    - 先 drain deferred deletion queue（等待所有 fence）；
@@ -181,7 +181,7 @@ Application Object
     - 在 validation layer 报 lifetime 错误时，打印资源创建堆栈或 handle [TOOL]。
 11. **幂等销毁设计（shutdown safety）**：
 
-    Vulkan spec 允许 `vkDestroy*` / `vkFree*` 在 handle 为 `VK_NULL_HANDLE` 时执行 no-op，这是设计幂等 shutdown 的基础 [SPEC]。但 wrapper 仍需主动置空，避免异常路径双重销毁。
+    各 destroy/free 命令对可空参数的规则不同，不能统称所有 vkFree* 均允许 NULL；有效父 Device 与具体命令参数仍必须满足。幂等性由 wrapper 状态检查保证 [SPEC][ENGINE]。但 wrapper 仍需主动置空，避免异常路径双重销毁。
 
     ```text
     SafeDestroy(VkBuffer& buf, VkDevice device, const VkAllocationCallbacks* pAllocator):
@@ -192,7 +192,7 @@ Application Object
     VulkanApp::shutdown():
         if isShutdown: return              // 幂等入口
         isShutdown = true
-        vkDeviceWaitIdle(device)           // 幂等，可重复调用 [SPEC]
+        if device != VK_NULL_HANDLE: CheckWaitResult(vkDeviceWaitIdle(device)) // 必须有效，处理 lost
         DestroySwapchainDependent()         // view / framebuffer / depth / scene RT
         DrainDeferredDeletionQueue()        // 等待所有 fence 或跳过（device lost）
         DestroyLongLived()                  // pipeline / pipeline_layout / descriptor_pool
@@ -202,7 +202,7 @@ Application Object
 
     关键规则：
 
-    - `vkDeviceWaitIdle` 是幂等的，shutdown 入口可无条件调用 [SPEC]。
+    - shutdown wrapper 先检查有效 Device 与状态，再决定等待；不能向空/已销毁 Device 调用 vkDeviceWaitIdle [SPEC]。
     - 每个 `vkDestroy*` 后立即把 handle 置 `VK_NULL_HANDLE`，防止 destructor 与显式 shutdown 双重销毁同一 handle [ENGINE]。
     - AllocationCallbacks 必须与创建时一致，destroy 时传不同 pAllocator 是 undefined behavior [SPEC]。
     - swapchain recreate 与 shutdown 共用清理函数时，必须通过 flag 区分"仅 swapchain-dependent 资源"与"全部资源"，避免 recreate 误销毁长生命周期对象 [ENGINE]。
@@ -352,3 +352,28 @@ Application Object
 - Deferred deletion queue 刷新策略。
 - 发生 device lost 时的调用栈与 fault info。
 - Android lifecycle 日志。
+
+<a id="geometry-streaming-retirement"></a>
+## 15. Geometry/LOD 驻留、取消与共享退休（C3）
+
+输入：已有 Resource Manager/allocator/提交完成机制；复用 v1.0.12 owner/generation，不新建第二套 manager。GPU-driven 消费前同时验证 residency、地址/索引范围与版本，不以“有 allocation”代替“内容可用”。[ENGINE]
+
+| 数据 | 最小合同 / 发布条件 |
+|---|---|
+| mesh/LOD record | stable mesh/LOD ID、vertex/index 格式、index type、范围、bounds、误差、generation、resident |
+| geometry page/segment | owner Device、allocation 范围、vertex/index offsets，vertexOffset 有符号；普通 buffer 分段即可，不强制 sparse/BDA |
+| upload ticket | Engine/Device/resource generation、取消状态、staging 字节、提交 queue/完成点、访问可见性 |
+| scene snapshot | mesh/material/地址表及可见命令使用同一有效版本；更新表不能让旧 in-flight 命令读到新旧混合 |
+
+`Requested → Decoding → Reserved → Submitted → Ready → Published → Retiring → Freed` 是引擎建议状态。Ready 必须有上传完成与后续访问依赖；Published 不意味着 staging、旧 buffer 和 metadata 可以立即销毁。[ENGINE][SPEC]
+
+- 未提交取消释放独占 CPU 数据/预约预算；已提交取消只阻止发布，等 copy 完成回收其引用内存。Building/Submitted 的迟到回调再次核对 generation。
+- Geometry/texture 上传共享预算：CPU 解码、临时内存、staging in-flight、每帧上传字节、GPU allocation、并存旧版本峰值。软/紧急阈值、滞回和重试退避见 [预算合同](../../03_api_manual/04_buffer_image_memory/vma_usage.md#streaming-budget-policy)。
+- LOD 未 resident 时选已就绪粗 LOD/明确替代或跳过，禁止 indirect 指向未上传 buffer。物理迁移后刷新 descriptor/BDA/索引表；地址有效不证明指向正确 generation。
+- 移除一个 Engine/Surface 只释放其引用，其他 Engine 的共享 mesh/material 不受影响。引用计数为零还须等待所有 queue/frame 的最后 GPU 使用；一个 queue 的完成值不能代表另一个 queue 已完成。
+- 发布新 snapshot 后旧命令、旧地址表、旧 geometry 一起进入原 owner 的退休机制；不能用降低 LOD 或撤销 resident 位掩盖正在使用的旧引用。
+- upload→draw 的 buffer barrier 按实际 vertex/index/SSBO 消费者设置，command/count 另有 DRAW_INDIRECT 依赖；跨 queue semaphore 与必要 ownership transfer 分开。
+
+回归：mesh 缺页、预算突降、上传后取消、索引越界/错 signedness、迁移旧地址、Engine A 销毁而 B 继续、反复装卸后待退休列表平台化。Host 模拟不是 Vulkan draw/dispatch 证据。
+
+规范依据：[Vulkan-Docs v1.4.328 resources](https://github.com/KhronosGroup/Vulkan-Docs/blob/d38733398a4bec673bd5d24c904d4739a45f020d/chapters/resources.adoc)、[descriptor 生命周期](https://github.com/KhronosGroup/Vulkan-Docs/blob/d38733398a4bec673bd5d24c904d4739a45f020d/chapters/descriptorsets.adoc)。状态/阈值是 ENGINE 策略，source-read 不代表设备通过。

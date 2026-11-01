@@ -1,5 +1,13 @@
 # Change Log
 
+## v1.0.13 — Shader / Resource / GPU-driven Scale（2026-11-01）
+
+- 基于已合v1.0.12 skill d049afe / tests 9278d9b，五轴同版：Shader artifact/ABI/hot reload；pipeline/cache/build；streaming/budget；GPU-driven；LOD/Hi-Z/particles/multi-view。
+- 修正命中卡片的虚构dispatch-indirect stage、dispatch乘积limit、Count必要论、byte-count扩展归属、VMA缓存维护和立即退休等冲突。
+- 原文件锚点扩充，运行时净增0、白名单≤200；八模块、原启动/触发、MIT、安全打包与G1–G6保留。
+- 原40行为题冻结，新24 ENG13成对条件输入单列；原12题token基线不改。原创C++/GLSL Engine Scale Lab在tests仓，编译/软件Vulkan/移动真机/Live证据分层，不由静态测试推断性能。
+- 候选版本，不自动发布/合main；精确计划hash、来源、失败原始记录及真实完成边界见配对Draft PR和tests报告。
+
 ## v1.0.12 — Android System Rendering（2026-11-01）
 
 - 基于已合v1.0.11 skill1f85b8b/tests3a8ea8b，只扩C1多实例Surface、C2媒体AHB帧合同、C3颜色/HDR/透明输出。
