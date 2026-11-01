@@ -841,3 +841,58 @@ AHB refcount 保持 allocation，不授予无限帧读取权。完成计数必�
 ### 13. 关联 Workflow
 
 - [媒体输入采样与回交](../../05_workflows/02_render_pass_effects/add_texture_sampling_pass.md#android-media-sampling)
+
+<a id="gpu-command-count-visibility"></a>
+## Case: GPU命令正确但独立count未同步
+
+### 0. Metadata
+
+来源等级：[ENGINE] 设计案例；非历史Live答案、非用户事故实测。
+
+### 1. 现象
+
+程序化场景从固定槽切为compact+Count后偶发漏物体；此为设计案例，不是声称已发生的用户事故。
+
+### 2. 初始上下文
+
+目标版本/设备features、scene seed、shader/资源generation与queue关系均需实际记录。
+
+### 3. 初始误判
+
+commands barrier正确不代表count/visibleIDs正确；检查GPU写入与parser/shader消费者的独立范围。
+
+### 4. 排查过程
+
+对照同seed CPU实例化与固定槽；dump有效前缀/overflow，查reset→cull→finalize→commands/count/IDs依赖。
+
+### 5. 根因候选
+
+只在调用点、数据与时序证据吻合后确认；不凭症状自动判驱动缺陷。
+
+### 6. 关键证据
+
+读取路径/版本/hash、资源范围/owner/completion和原始失败日志；实验fixture与生产代码证据分开。
+
+### 7. 修复方案
+
+Minimal Fix补独立count/IDs依赖及所有固定槽reset；Structural Fix按资源生成barrier合同，不用全GPU idle隐藏问题。
+
+### 8. 验证方式
+
+覆盖0/满/超容量、多帧/多view、Count关闭和无MDI路径；Validation与同步工具结果、ID集合、图像分别报告。
+
+### 9. 可复用经验
+
+能力查询、结果正确性、性能收益是三个不同结论。
+
+### 10. 适用条件
+
+已有Vulkan渲染器的Shader/资源/GPU-driven增量实现。
+
+### 11. 不适用情况
+
+不要求引入完整新RHI，不借设计案例声称Live或移动端验收通过。
+
+### 12. 关联工作流
+
+[权威合同](../../05_workflows/03_compute_workflows/compute_to_graphics_sync.md#gpu-produced-draw-sync)。

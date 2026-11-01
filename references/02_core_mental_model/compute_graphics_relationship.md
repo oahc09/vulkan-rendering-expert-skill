@@ -99,7 +99,7 @@ Indirect Buffer
 1. compute 写 storage image 后，没有 barrier 就采样。
 2. storage image 仍处于 GENERAL，但 descriptor 按 SHADER_READ_ONLY_OPTIMAL 填写。
 3. image usage 缺少 STORAGE 或 SAMPLED。
-4. compute 和 graphics 在不同 queue，缺少 queue ownership transfer。
+4. compute 和 graphics 在不同 queue 缺少 semaphore；跨 family 的 exclusive 资源还缺少 ownership transfer。
 5. compute 写 indirect buffer 后，没有同步 indirect command read。
 6. dispatch group 数量错误导致部分区域未写入。
 7. workgroup size 与图像尺寸没有正确边界处理。
@@ -109,3 +109,21 @@ Indirect Buffer
 ```text
 Compute 和 Graphics 之间的关键不是“两个 pipeline 都能绑定资源”，而是资源状态、访问权限和同步关系必须完整。
 ```
+
+<a id="gpu-scene-contract"></a>
+## gpu-scene-contract
+
+GPU Scene 是带版本与寿命的数据契约，不是把所有对象塞进一个 buffer 就完成。[ENGINE]
+
+| 字段 / 资源 | 契约 |
+|---|---|
+| object ID + transform + world bounds | 稳定 ID；负缩放/非均匀缩放/动画后的保守 bounds；非有限值保守可见并诊断 |
+| material / mesh / LOD ID | state bin 与 descriptor / pipeline 相容；LOD 仅指向 resident generation |
+| geometry ranges | vertex/index offset、signed baseVertex、长度、usage 与容量可验证 |
+| scene / residency generation | CPU 更新、GPU snapshot 与描述符同一代发布；旧代等最后使用者完成 |
+| per-view visible IDs / commands / count / Hi-Z | 每 view 独立容量、reset、projection/depth convention 与完成标记 |
+| shared geometry / textures | 多视图只读共享；最后一个消费者完成才释放，不以主相机完成代替 |
+
+实例 transform 用最大奇异值的上界放大球半径（一般 affine 可用 Frobenius 范数上界，含 shear）；AABB 可用 abs(linearMatrix)*extent。不可只取有符号最大 scale。平面测试包含 epsilon 与半径；near-plane 相交或无可靠投影 bounds 的对象保守保留。CPU/GPU ID 可见集逐项对照，同时渲染比较，不能仅比较数量。[ENGINE]
+
+入口：`05_workflows/03_compute_workflows/add_compute_pass.md#gpu-driven-rendering`；参数 ABI 与 fallback：`03_api_manual/03_command_buffer/indirect_commands.md#indirect-capability-fallback`。

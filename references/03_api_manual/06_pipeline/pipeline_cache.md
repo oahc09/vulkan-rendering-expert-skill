@@ -16,7 +16,7 @@
 
 ## 1. 一句话定位
 
-`VkPipelineCache` 是 `vkCreate*Pipelines` 的内部缓存容器，用于复用之前编译的 pipeline 中间数据，显著降低重复创建与后续启动的 CPU 耗时。[SPEC]
+`VkPipelineCache` 是 `vkCreate*Pipelines` 的内部缓存容器，用于复用之前编译的 pipeline 中间数据，可能降低重复创建与后续启动的 CPU 耗时，效果需实测。[SPEC]
 
 ---
 
@@ -88,7 +88,7 @@ VkPipelineCacheCreateInfo（可含初始 blob 数据）
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
 | `initialDataSize` / `pInitialData` | 持久化 blob；可为空表示新建 cache。[SPEC] | blob 版本与驱动不匹配导致被忽略。[TOOL] |
-| `flags` | 当前保留为 0 或 `VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT`。[SPEC] | 误用 flag。[TOOL] |
+| `flags` | 按支持/启用能力选择 flags；外部同步与 maintenance8 merge flag 见 §16。[SPEC] | 误用 flag。[TOOL] |
 | `pipelineCache`（创建 pipeline 时） | 传入同一 cache 以复用编译结果。[SPEC] | 每个 pipeline 单独创建 cache，失去缓存意义。[TOOL] |
 
 ---
@@ -99,7 +99,7 @@ VkPipelineCacheCreateInfo（可含初始 blob 数据）
 
 - [ ] 是否尝试加载持久化 blob？
 - [ ] Blob 是否来自兼容的驱动/设备？
-- [ ] 是否所有 pipeline 共享同一个 cache？
+- [ ] 共享 cache 或 per-thread cache/merge 策略是否有明确同步合同？
 
 ### 使用阶段
 
@@ -132,8 +132,8 @@ VkPipelineCacheCreateInfo（可含初始 blob 数据）
 
 ### RenderDoc / AGI
 
-- 分析 pipeline 创建耗时；cache 命中时创建时间应显著下降。
-- AGI 可显示 pipeline cache 命中情况。
+- 分析 pipeline 创建耗时；比较冷/热创建分布，不预设命中必然加速。
+- 命中信息按实际工具/驱动是否暴露记录，不能从耗时单独推断命中。
 
 ### 日志 / 代码检查
 
@@ -174,13 +174,13 @@ VkPipelineCacheCreateInfo（可含初始 blob 数据）
 
 ### 资源访问同步
 
-- `vkGetPipelineCacheData` 与 `vkCreate*Pipelines` 不应并发；需 CPU 侧同步。[SPEC]
+- 按 cache flags 与具体命令 host synchronization 判定，见 §16；导出若与修改并发可能尺寸变化，处理 VK_INCOMPLETE。稳定快照锁是工程策略，不伪称所有并发都违规。[SPEC][ENGINE]
 
 ---
 
 ## 11. Android 注意点
 
-- Android 上 pipeline 创建耗时通常远高于 desktop，pipeline cache 几乎是必须项。[ANDROID][ENGINE]
+- Android 上先测 pipeline 创建是否占关键路径，cache 是可选优化而非正确性前提。[ANDROID][ENGINE]
 - 持久化 cache blob 到应用私有目录，避免被系统清理；同时处理 blob 失效（如驱动更新）。[ANDROID]
 - 不要在 `onSurfaceCreated` 中阻塞式创建所有 pipeline；应分帧预热并复用 cache。[ANDROID]
 - 部分 Mali/Adreno 对 cache blob 格式敏感，跨设备或驱动版本可能不兼容，需做版本校验。[ANDROID]
@@ -191,7 +191,7 @@ VkPipelineCacheCreateInfo（可含初始 blob 数据）
 
 ### CPU 侧
 
-- 使用 cache 后，后续 pipeline 创建时间通常下降一个数量级。[ENGINE]
+- 用冷/热启动和首次效果切换的 p50/p95/p99 验证收益，不预填比例。[ENGINE]
 - `vkGetPipelineCacheData` 可能在退出时耗时，应异步保存。[HEUR]
 
 ### GPU 侧
@@ -209,7 +209,7 @@ VkPipelineCacheCreateInfo（可含初始 blob 数据）
 ## 13. 专家经验
 
 **经验**：
-始终为每个 `VkDevice` 维护一个全局 pipeline cache，并在应用退出时持久化到磁盘。加载时检查 blob 的校验和或版本戳，若驱动/应用版本变化则丢弃重建。不要把 cache 当作“创建完 pipeline 就扔”的临时对象，它的价值在于跨会话复用。对大型项目，可预生成并随包分发 cache blob，但需针对目标设备驱动版本做测试。
+可为每个 `VkDevice` 选择共享 cache 或按线程 cache+merge，并在应用退出时持久化到磁盘。加载时检查 blob 的校验和或版本戳，若驱动/应用版本变化则丢弃重建。不要把 cache 当作“创建完 pipeline 就扔”的临时对象，它的价值在于跨会话复用。对大型项目，可预生成并随包分发 cache blob，但需针对目标设备驱动版本做测试。
 
 **适用条件**：
 所有需要创建多个 graphics/compute pipeline 的项目，尤其是移动端。
@@ -240,3 +240,32 @@ VkPipelineCacheCreateInfo（可含初始 blob 数据）
 3. `vkMergePipelineCaches` 的合并语义与容量限制。
 4. 不同驱动对 cache blob 跨版本兼容性的处理。
 5. 多线程下 pipeline cache 访问的最佳同步实践。
+
+<a id="cache-compatibility"></a>
+## 16. 缓存层、key、持久化与 host 同步（C2）
+
+源码编译缓存、SPIR-V、引擎 pipeline 状态 key、VkPipelineCache opaque 数据和 Pipeline Binary 是不同层，不互相替代。[SPEC][ENGINE]
+
+引擎 key 至少涵盖 shader/entry point/interface 哈希、特化值、pipeline layout、render pass/subpass 兼容信息或 dynamic rendering attachment formats/viewMask、采样数、相关静态状态、动态状态声明与 feature 路径。只按文件名或单一 shader hash 复用会把不同 blend/format 等状态混在一起；动态值与动态状态声明也不能混淆。[ENGINE]
+
+磁盘封装记录来源、schema/build/driver 环境、payload 长度与校验；cache header 按规定布局/字节序检查 headerVersion、vendorID、deviceID、pipelineCacheUUID。只接受可信来源的完整有效数据；未知、截断、损坏或不兼容则丢弃并冷创建/使用旧完整路径，不修改 opaque bytes，不下载第三方驱动二进制。校验和只能检测损坏，不证明语义兼容。导出先查询大小，再取数据并处理 VK_INCOMPLETE/错误，原子替换磁盘文件。[SPEC][ENGINE]
+
+| 操作 | 同步条件 |
+|---|---|
+| vkCreateGraphicsPipelines / vkCreateComputePipelines 使用共享 cache | 默认这些 cache 访问由实现内部同步；启用 EXTERNALLY_SYNCHRONIZED 后应用同步修改，不把所有 Vulkan 对象都视作内部同步 |
+| vkMergePipelineCaches 的 dstCache | 默认需要外部同步；只有支持并启用 maintenance8 对应能力且 cache 带 INTERNALLY_SYNCHRONIZED_MERGE_BIT_KHR 时适用例外；此位与 EXTERNALLY_SYNCHRONIZED 互斥 |
+| vkGetPipelineCacheData | 核对当前 flags/命令要求；读尺寸与读数据间可能增长，不假定两调用是原子快照；锁或停写用于稳定导出 |
+| destroy / Device teardown | 所有使用 cache 的 CPU 调用结束再销毁；不以 GPU fence 代替 CPU worker join |
+
+可选 per-thread cache 最后受控 merge，减少共享锁争用但增加内存；不要强制一个全局 cache 或无限线程。以上 flags 按目标版本查合法性，旧设备保留 flags=0 路径。[SPEC][ENGINE]
+
+<a id="pipeline-binary-path"></a>
+## 17. 可选 Pipeline Binary（C2）
+
+先枚举 VK_KHR_pipeline_binary 并查询/启用 pipelineBinaries feature；Vulkan 1.4 不自动提供它。不支持、miss、数据缺失或不兼容时走正常 shader→pipeline 创建。[SPEC]
+
+区分引擎 key、vkGetPipelineKeyKHR 的 pipeline key、每个 binary key 与 global key。`pPipelineCreateInfo=NULL` 查询的 global key 变化意味着旧 binary 数据不能用于新 Device 的 vkCreatePipelineBinariesKHR。一个 pipeline 可对应多个 binary，保存完整数量、keys、字节及校验，不混用 VkPipelineCache blob。[SPEC]
+
+取得数据：按扩展约束用 CAPTURE_DATA 创建 pipeline，再 vkCreatePipelineBinariesKHR / vkGetPipelineBinaryDataKHR；归还捕获存储用 vkReleaseCapturedPipelineDataKHR。消费时恢复 binary handles，以 VkPipelineBinaryInfoKHR 链接 create-info，保持与捕获 pipeline 一致的所需状态。create-info 链接的 VkPipelineBinaryInfoKHR 的 binaryCount 非零时，或设置 VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR 时，不能使用 VkPipelineCache，传 VK_NULL_HANDLE；仅链入 binaryCount=0 本身不触发前一限制，仍须满足其他有效用法。binaryCount 与 CAPTURE_DATA 的组合另按 VU 核对，不能无条件同时塞入所有缓存机制。失败清理部分 handles 并显式回退，不能把 VkResult 成功等同于图像正确。[SPEC]
+
+固定来源：[Vulkan-Docs v1.4.328 pipelines：cache flags/merge、binaries](https://github.com/KhronosGroup/Vulkan-Docs/blob/d38733398a4bec673bd5d24c904d4739a45f020d/chapters/pipelines.adoc)。2026-11-01 source-read；原生 Binary/GPL 未在此卡执行。

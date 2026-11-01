@@ -16,7 +16,7 @@
 
 ## 1. 一句话定位
 
-`VkSpecializationInfo` 允许在创建 pipeline 时向 SPIR-V 中的 specialization constant 传入常量值，从而在编译期生成不同的 shader 变体，避免运行时分支与大量预编译 shader 文件。[SPEC]
+`VkSpecializationInfo` 允许在创建 pipeline 时向 SPIR-V 中的 specialization constant 传入常量值，从而在编译期生成不同的 shader 变体，可能消除固定分支或减少部分 SPIR-V 文件；实际收益与组合规模需测量。[SPEC]
 
 ---
 
@@ -189,7 +189,7 @@ SPIR-V 中声明 specialization constant（layout(constant_id=...)）
 
 ### GPU 侧
 
-- 编译期常量可被驱动优化，通常比 uniform 分支更高效。[ENGINE]
+- 编译期常量可被优化，但相对 uniform 分支的收益依实际代码和设备测量。[ENGINE]
 
 ### 移动端
 
@@ -230,3 +230,14 @@ Specialization constants 最适合表达“创建时确定、运行时不变化�
 3. `VkSpecializationMapEntry` 的 offset/size 对结构体 padding 的要求。
 4. Specialization 与 pipeline derivative / base pipeline 的交互。
 5. 不同驱动对 specialization constant 的优化程度。
+
+<a id="variant-cost-boundary"></a>
+## 16. 变体成本边界（C1/C2）
+
+分别计数 source variants、SPIR-V 产物、pipeline key 和真正用到的组合。特化不是动态 uniform，不保证减少 pipeline 数或加速；只构建近期会用的组合，其他按需限流。[ENGINE]
+
+key 包含 stage/entry point、constantID→类型化字节值（含默认值策略）及相关静态/动态状态和接口。map entry 的 offset/size 不越 pData，ID 不重复，bool 使用 VkBool32 规则；按所选特化核验数组长度、LocalSize 和设备 limits。反射未求值的常量不能直接当最终容量。[SPEC]
+
+GPL 拆分编译与链接、derivative 的潜在复用、specialization 的常量优化是三种不同机制。GPL 需支持并启用 graphicsPipelineLibrary 及依赖，不因 Vulkan 1.3/1.4 就自动可用；库兼容性、链接与优化成本、内存均进入 A/B。不能无条件宣称显著加速或移动端统一开启。[SPEC][ENGINE]
+
+固定来源：[Vulkan-Docs v1.4.328 pipelines](https://github.com/KhronosGroup/Vulkan-Docs/blob/d38733398a4bec673bd5d24c904d4739a45f020d/chapters/pipelines.adoc)。与 [创建调度](../../05_workflows/07_optimization/reduce_pipeline_creation_stutter.md#pipeline-build-scheduler) 联用，source-read 不代表测量。

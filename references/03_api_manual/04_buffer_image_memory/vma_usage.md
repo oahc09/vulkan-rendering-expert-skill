@@ -7,7 +7,7 @@
 | 模块 | `03_api_manual` |
 | 分类 | 资源链 |
 | Vulkan 对象 | VMA (Vulkan Memory Allocator) |
-| 常用 API | `vmaCreateAllocator` / `vmaCreateBuffer` / `vmaCreateImage` / `vmaMapMemory` / `vmaUnmapMemory` / `vmaDestroyBuffer` / `vmaDestroyImage` / `vmaDefragment` |
+| 常用 API | `vmaCreateAllocator` / `vmaCreateBuffer` / `vmaCreateImage` / `vmaMapMemory` / `vmaUnmapMemory` / `vmaDestroyBuffer` / `vmaDestroyImage` / `vmaBeginDefragmentation` |
 | 适用平台 | 通用 |
 | 来源等级 | `[GUIDE] [ENGINE] [TOOL] [HEUR]` |
 | 适用 Vulkan 版本 | VMA 库，支持 Vulkan 1.0+ |
@@ -71,8 +71,8 @@ VkInstance / VkPhysicalDevice / VkDevice
 | `vmaUnmapMemory` | 解除映射。[GUIDE] |
 | `vmaFlushAllocation` / `vmaInvalidateAllocation` | non-coherent memory 的 flush / invalidate 包装。[GUIDE] |
 | `vmaGetAllocationInfo` | 查询 allocation 的 offset / size / memory type。[GUIDE] |
-| `vmaDefragment` / `vmaDefragmentationBegin` / `vmaDefragmentationEnd` | 内存碎片整理。 |
-| `vmaGetBudget` / `vmaGetHeapBudgets` / `vmaCalculateStatistics` / `vmaCalculatePoolStatistics` | 预算与统计。 |
+| `vmaBeginDefragmentation` / `vmaBeginDefragmentationPass` / `vmaEndDefragmentationPass` / `vmaEndDefragmentation` | 内存碎片整理。 |
+| `vmaGetHeapBudgets` / `vmaCalculateStatistics` / `vmaCalculatePoolStatistics` | 预算与统计。 |
 | `vmaCreatePool` / `vmaDestroyPool` | 自定义内存池。 |
 | `vmaCreateBufferWithAlignment` / `vmaAllocateMemory` / `vmaAllocateMemoryPages` | 进阶用法。 |
 
@@ -80,8 +80,8 @@ VkInstance / VkPhysicalDevice / VkDevice
 
 - VMA 2.x：`VMA_MEMORY_USAGE_GPU_ONLY` / `CPU_ONLY` / `CPU_TO_GPU` / `GPU_TO_CPU` 枚举式用法。[GUIDE]
 - VMA 3.x：引入 `VMA_MEMORY_USAGE_AUTO` + `VMA_ALLOCATION_CREATE_HOST_ACCESS_*_BIT` flag 组合式用法，取代旧枚举；推荐新代码使用 `AUTO`。[GUIDE]
-- VMA 内部按需启用 `VK_KHR_dedicated_allocation`、`VK_KHR_bind_memory2`、`VK_EXT_memory_budget`、`VK_AMD_device_coherent_memory`、`VK_KHR_maintenance4` 等。[GUIDE]
-- `vmaDefragment`（2.x）在 3.x 中被 `vmaDefragmentationBegin` + `vmaDefragmentationEnd` 取代；使用前需确认 VMA 版本。[GUIDE]
+- 应用先支持/启用对应功能并正确传 allocator flags，VMA 据此使用 `VK_KHR_dedicated_allocation`、`VK_KHR_bind_memory2`、`VK_EXT_memory_budget`、`VK_AMD_device_coherent_memory`、`VK_KHR_maintenance4` 等。[GUIDE]
+- `vmaDefragment`（2.x）在 3.x 中被 `vmaBeginDefragmentation` + `vmaEndDefragmentation` 取代；使用前需确认 VMA 版本。[GUIDE]
 - Android 可用性：完全可用；推荐配合 `VK_EXT_memory_budget` 监控移动端 OOM。[ANDROID]
 
 ---
@@ -92,7 +92,7 @@ VkInstance / VkPhysicalDevice / VkDevice
 1. 创建 VkInstance / VkDevice（启用 VMA 推荐扩展，可选）
 2. vmaCreateAllocator(&createInfo, &allocator)
    - createInfo.physicalDevice / device / instance
-   - createInfo.pVulkanFunctions（动态链接传 NULL 即可，静态链接需提供）
+   - createInfo.pVulkanFunctions（按 VMA_STATIC_VULKAN_FUNCTIONS / VMA_DYNAMIC_VULKAN_FUNCTIONS 和实际 loader 配置提供）
    - createInfo.flags（如 VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT /
      VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT）
 3. 创建 buffer / image:
@@ -105,13 +105,14 @@ VkInstance / VkPhysicalDevice / VkDevice
 4. CPU 写入（如 uniform / staging）:
    vmaMapMemory(allocator, allocation, &pData)
    memcpy(pData, ...)
+   vmaFlushAllocation(allocator, allocation, offset, size)（non-coherent，仍保持 mapped）
    vmaUnmapMemory(allocator, allocation)
-   （non-coherent 由 VMA 自动 flush，HOST_ACCESS_RANDOM 需手动 invalidate）
+   （GPU→CPU 另走：GPU 写入与 host 访问依赖 → 等完成 → map/invalidate → CPU read；unmap 不自动维护缓存）
 5. GPU 使用: vkCmdBindVertexBuffers / vkCmdBindDescriptorSets / shader 访问
 6. 销毁: vmaDestroyBuffer(allocator, buffer, allocation)
          vmaDestroyImage (allocator, image, allocation)
 7. 最后: vmaDestroyAllocator(allocator)
-   - 必须等 GPU idle 且所有 allocation 已销毁
+   - 必须所有 GPU 引用完成、CPU allocator 调用退出且所有 allocation 已销毁
 ```
 
 ---
@@ -121,7 +122,7 @@ VkInstance / VkPhysicalDevice / VkDevice
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
 | `VmaAllocatorCreateInfo::flags` | 启用 dedicated allocation / memory budget 等优化。[GUIDE] | 启用了 budget flag 但 device 未启用 `VK_EXT_memory_budget`。[TOOL] |
-| `VmaAllocatorCreateInfo::pVulkanFunctions` | 动态链接传 NULL；静态链接或自定义 loader 需提供函数表。[GUIDE] | 静态链接时传 NULL 导致符号未解析。 |
+| `VmaAllocatorCreateInfo::pVulkanFunctions` | 按静态/动态函数配置与实际 loader 提供函数表，动态加载需正确的 proc-address 入口。[GUIDE] | 静态链接时传 NULL 导致符号未解析。 |
 | `VmaAllocationCreateInfo::usage` | 3.x 用 `VMA_MEMORY_USAGE_AUTO`；2.x 用 `GPU_ONLY` / `CPU_TO_GPU` 等。[GUIDE] | 混用 2.x 枚举与 3.x flag；选错导致 GPU 资源落在 host-visible heap。[ENGINE] |
 | `VmaAllocationCreateInfo::flags` | `HOST_ACCESS_SEQUENTIAL_WRITE_BIT`（顺序写，如 upload）/ `HOST_ACCESS_RANDOM_BIT`（读写，需 cached）/ `DEDICATED_MEMORY_BIT` / `MAPPED_BIT`（持久映射）。[GUIDE] | 需要随机读却只给 `SEQUENTIAL_WRITE`（non-cached 读慢）；用 `MAPPED_BIT` 但忽略 invalidate 时机。[TOOL] |
 | `VmaAllocationCreateInfo::preferredFlags` | 优先 `DEVICE_LOCAL` 等，best-effort。[GUIDE] | requiredFlags 与 preferredFlags 误用导致分配失败。 |
@@ -165,7 +166,7 @@ VkInstance / VkPhysicalDevice / VkDevice
 4. 3.x 项目误用 2.x 的 `VMA_MEMORY_USAGE_GPU_ONLY` 枚举（3.x 仍兼容但被 deprecated）。[GUIDE]
 5. 启用 `VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT` 但 device 未启用 `VK_EXT_memory_budget` 扩展，初始化失败。[TOOL]
 6. `vmaDefragment` 在 VMA 3.x 中被废弃，调用旧 API 编译报错或行为不同。[GUIDE]
-7. 大量小 allocation 未启用 dedicated allocation / pool，导致 sub-allocation 碎片或 metadata 开销高。[ENGINE]
+7. 大量小 allocation 应先评估普通 sub-allocation；不要为每个小资源强制 dedicated。仅有证据时用合适 pool 管理碎片/metadata。[ENGINE]
 8. 在 GPU 仍访问 allocation 时调用 `vmaDestroyBuffer`，与裸 Vulkan 同样会 device-lost。[SPEC]
 9. 移动端把高频 GPU 读写的资源放在 host-visible heap（误用 `CPU_TO_GPU`），带宽与功耗受损。[ANDROID][ENGINE]
 
@@ -189,7 +190,7 @@ VkInstance / VkPhysicalDevice / VkDevice
 
 - 检查 `vmaCreateBuffer` / `vmaCreateImage` 返回值。
 - 调用 `vmaGetAllocationInfo` 校验 `memoryType` 是否符合预期（device-local / host-visible）。
-- 启用 VMA 的 `VMA_RECORDING_ENABLED` 可回放分配序列定位泄漏。[TOOL]
+- 用应用分配/释放日志与该版本支持的 VMA 统计定位泄漏；不假定旧版录制宏仍可用。[TOOL]
 - 定期调用 `vmaCalculateStatistics` 监控 total allocated / block count 是否持续增长（泄漏信号）。[ENGINE]
 
 ---
@@ -223,8 +224,8 @@ VkInstance / VkPhysicalDevice / VkDevice
 ### CPU-GPU 同步
 
 - VMA 不提供同步；CPU 写入 mapped memory 后，GPU 读取仍需 barrier / semaphore / fence。[SPEC]
-- coherent memory（VMA `AUTO` + `HOST_ACCESS_SEQUENTIAL_WRITE` 通常选 coherent）CPU 写入后 GPU 立即可见，但 GPU 完成写入后 CPU 读取仍需 invalidate / barrier。[SPEC]
-- non-coherent memory：VMA 在 `vmaUnmapMemory` 时自动 flush（2.x）；3.x `HOST_ACCESS_SEQUENTIAL_WRITE` 自动 flush，`HOST_ACCESS_RANDOM` 需手动 `vmaInvalidateAllocation`。[GUIDE]
+- HOST_COHERENT 只免显式 flush/invalidate，不免 CPU/GPU 执行与内存依赖；AUTO/HOST_ACCESS flag 不保证实际 memoryType coherent，查询属性。[SPEC][GUIDE]
+- non-coherent memory：vmaMapMemory/vmaUnmapMemory 不自动 flush/invalidate；CPU 写入后 vmaFlushAllocation，GPU 写完成并建立 host 访问依赖后 vmaInvalidateAllocation 再读。HOST_ACCESS_* 不是缓存维护命令。[GUIDE][SPEC]
 
 ### GPU-GPU 同步
 
@@ -234,15 +235,15 @@ VkInstance / VkPhysicalDevice / VkDevice
 ### 资源访问同步
 
 - `vmaMapMemory` 本身不同步；CPU 与 GPU 并发访问 mapped memory 是数据竞争，需 fence / barrier。[SPEC]
-- defragmentation 内部使用 staging + barrier，但仍要求调用方确保 GPU 不访问目标资源。[GUIDE]
+- defragmentation 由调用方按 pass/move 计划安排资源重建、拷贝、同步与引用切换；VMA 不自动提交正确的 GPU copy/barrier。[GUIDE]
 
 ---
 
 ## 11. Android 注意点
 
 - 移动端通常为统一内存架构，但 `DEVICE_LOCAL` 仍代表 GPU 侧更优 cache / tiling；VMA `AUTO` 默认会把 GPU 资源放 device-local。[ANDROID][ENGINE]
-- 大纹理上传：staging allocation（`AUTO` + `HOST_ACCESS_SEQUENTIAL_WRITE_BIT`）→ device-local image → `vmaDestroyBuffer` 释放 staging，是标准模式。[ENGINE]
-- 移动端 OOM 风险高：启用 `VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT` + `VK_EXT_memory_budget`，定期 `vmaGetBudget` 监控。[ANDROID]
+- 大纹理上传：staging allocation（`AUTO` + `HOST_ACCESS_SEQUENTIAL_WRITE_BIT`）→ device-local image → GPU copy 完成后 `vmaDestroyBuffer` 释放 staging，是标准模式。[ENGINE]
+- 移动端 OOM 风险高：启用 `VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT` + `VK_EXT_memory_budget`，定期 `vmaGetHeapBudgets` 监控。[ANDROID]
 - 部分 Android 设备 `vkAllocateMemory` 单次大块（>256 MB）可能失败；VMA 默认 256 MB block 大小可调，必要时自定义 `VmaPool`。[VENDOR][ANDROID]
 - pause / resume 后无需重建 allocator（device 存活）；若 device lost 则必须销毁 allocator 重建。[ANDROID]
 - AGI 可关联 VMA stats string 与 trace，定位 allocation 来源。[AGI]
@@ -266,16 +267,16 @@ VkInstance / VkPhysicalDevice / VkDevice
 
 ### 移动端
 
-- 统一内存架构下，host-visible + device-local 可能不可兼得；按访问模式选择。[ANDROID]
-- Tile-based GPU 上，attachment 应优先 device-local + `LAZILY_ALLOCATED`（若支持）。[VENDOR]
-- 避免把 GPU 频繁读写资源放 host-visible heap，否则功耗与带宽受损。[ANDROID][ENGINE]
+- 统一内存架构可同时具有 HOST_VISIBLE 与 DEVICE_LOCAL；按实际 memory types 和访问模式测量选择。[ANDROID]
+- 仅满足 transient attachment 用途与所需生命周期/usage 时考虑 LAZILY_ALLOCATED；不能用于普通持久 sampled/storage 纹理。[VENDOR]
+- 不要仅按 HOST_VISIBLE 标签判断性能；结合 UMA/实际 memory type、访问和带宽测量。[ANDROID][ENGINE]
 
 ---
 
 ## 13. 专家经验
 
 **经验**：
-生产项目应默认使用 VMA 而非裸 `vkAllocateMemory`。新代码（VMA 3.x）统一用 `VMA_MEMORY_USAGE_AUTO` + flag 组合：GPU 资源 `AUTO`；CPU 上传 `AUTO` + `HOST_ACCESS_SEQUENTIAL_WRITE_BIT`；CPU 读写 `AUTO` + `HOST_ACCESS_RANDOM_BIT`；持久映射 uniform `AUTO` + `SEQUENTIAL_WRITE` + `MAPPED_BIT`。把高频更新资源用 `VmaPool` + ring buffer 管理。定期 `vmaCalculateStatistics` 监控泄漏，长跑场景（如编辑器）按需 `vmaDefragmentationBegin` / `End`。staging buffer 模式：上传完立即 `vmaDestroyBuffer` 释放 staging。Android 必须启用 memory budget 监控。
+生产项目应默认使用 VMA 而非裸 `vkAllocateMemory`。新代码（VMA 3.x）统一用 `VMA_MEMORY_USAGE_AUTO` + flag 组合：GPU 资源 `AUTO`；CPU 上传 `AUTO` + `HOST_ACCESS_SEQUENTIAL_WRITE_BIT`；CPU 读写 `AUTO` + `HOST_ACCESS_RANDOM_BIT`；持久映射 uniform `AUTO` + `SEQUENTIAL_WRITE` + `MAPPED_BIT`。把高频更新资源用 `VmaPool` + ring buffer 管理。定期 `vmaCalculateStatistics` 监控泄漏，长跑场景（如编辑器）按需 `vmaBeginDefragmentation` / `End`。staging 仅在引用它的 GPU copy 完成后释放/复用，不是 CPU 录制/提交后立即销毁。memory_budget 可选，缺支持时用保守内部预算并明确不确定性。
 
 **适用条件**：
 任何非教学级 Vulkan 项目；资源数量大、动态加载、需要内存监控与碎片整理。
@@ -302,11 +303,33 @@ VkInstance / VkPhysicalDevice / VkDevice
 
 ## 15. 需要回查官方文档的情况
 
-1. VMA 版本（2.x vs 3.x）的具体 API 差异，尤其 `vmaDefragment` → `vmaDefragmentationBegin` / `End` 的迁移路径与废弃版本号。
+1. VMA 版本（2.x vs 3.x）的具体 API 差异，尤其 `vmaDefragment` → `vmaBeginDefragmentation` / `End` 的迁移路径与废弃版本号。
 2. `VMA_MEMORY_USAGE_AUTO` 在 3.x 中选择 memory type 的具体算法（优先级表）。
 3. 各 `VMA_ALLOCATION_CREATE_HOST_ACCESS_*` flag 对应的 memory property（coherent / cached）选择规则。
 4. `VmaPool` 自定义 block size / memory type index 在目标 GPU 的最优配置。
 5. `VK_EXT_memory_budget` 在目标 Android 设备的返回值含义与 budget 估算算法。
-6. `vmaDefragmentationBegin` 的 flag（`VMA_DEFRAGMENTATION_FLAG_*`）与 GPU 拷贝语义。
+6. `vmaBeginDefragmentation` 的 flag（`VMA_DEFRAGMENTATION_FLAG_*`）与 GPU 拷贝语义。
 7. `VK_AMD_device_coherent_memory` / `VK_KHR_maintenance4` 在 VMA 内部的启用条件与收益。
 8. VMA 对 `VK_KHR_external_memory` / Android hardware buffer（`AHardwareBuffer`）的集成边界。
+
+<a id="streaming-budget-policy"></a>
+## 16. 有界流式预算与回收策略（C3）
+
+本增量固定 **VMA 3.3.0**。先核对项目真实版本与 API，不将旧版函数名混入新版本；`vmaGetHeapBudgets` 获取各 heap 的 usage/budget，`vmaCalculateStatistics` 提供 allocator 统计。启用 VK_EXT_memory_budget 及匹配 allocator flag 时可用扩展估计；不支持时保持 VMA/应用估计并标注来源，不能伪称整设备精确余量。[REF]
+
+预算是观测值，不保证下一次分配成功，也不只属于本 Engine。allocationBytes、blockBytes、heap usage/budget、内容 resident bytes、CPU/transcode 临时内存和 staging in-flight 分别统计。限制 mip LOD 不减少已绑定的完整 image allocation。[REF][ENGINE]
+
+| 状态 | 动作 | 恢复与失败 |
+|---|---|---|
+| 正常 | 每帧预约 CPU/上传字节/staging/GPU/新旧并存峰值预算，再排任务 | 分配返回值仍必须检查 |
+| 超软阈值 | 限流/暂停低优先级上传，保留粗 mip/LOD，淘汰无引用冷内容 | 低于恢复阈值一段稳定窗口才加速，避免抖动 |
+| 紧急/分配失败 | 停新预约，回收已退休资源；选择小替代/整体淘汰；有界退避 | 不销毁 in-flight 资源、不无限重试、不关闭同步 |
+| 部分分配/上传取消 | 回滚独占未提交资源/预算；已提交引用按完成点退休 | generation 阻止迟到发布，保留其他 Engine 引用 |
+
+阈值按项目负载/设备配置，不写通用百分比；预算降低不能自动把所有 Surface/Device 销毁。`VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT` 可使超预算分配失败，但不替代上述背压或 OOM 恢复。[REF][ENGINE]
+
+资源/池迁移与碎片整理须额外预算峰值：vmaBeginDefragmentation → vmaBeginDefragmentationPass → 应用执行计划、重建资源与 copy/完成同步 → vmaEndDefragmentationPass → vmaEndDefragmentation。受影响 descriptor、设备地址、mesh 表和旧命令引用逐项切换/退休，不能直接改 allocation 后继续使用旧 handle/address。[REF][ENGINE]
+
+验证连续装卸、预算骤降、半途失败、双 Engine 共享纹理/geometry 与取消迟到；先确认 allocation/待退休/staging 计数稳定，再报告峰值、到达时间及热状态。CPU 模拟只能证明状态机输入输出，真实驱动/移动 OOM 与性能另测。
+
+固定来源：[VMA v3.3.0 官方 header 与内嵌文档](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator/blob/1d8f600fd424278486eade7ed3e877c99f0846b1/include/vk_mem_alloc.h) 的 Staying within budget / Memory mapping / Defragmentation；2026-11-01 source-read，不复制第三方实现、不宣称已运行。

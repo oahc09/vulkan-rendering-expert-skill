@@ -269,6 +269,27 @@
 | P3 / HDR / 输入工作输出颜色合同 | `../02_core_mental_model/render_target_model.md#color-output-contract` |
 | 每Surface HDR feature / metadata / compositeAlpha | `../03_api_manual/02_surface_swapchain/swapchain.md#android-color-presentation` |
 | tone mapping owner / 半透明黑边 / 输出转换 | `../05_workflows/02_render_pass_effects/add_postprocess_pass.md#color-output-workflow` |
+| specialization / 变体爆炸 | `../03_api_manual/06_pipeline/specialization_constants.md#variant-cost-boundary` |
+| Pipeline Binary条件路径 | `../03_api_manual/06_pipeline/pipeline_cache.md#pipeline-binary-path` |
+| Shader manifest / SPIR-V / reflection / FP16 | `../03_api_manual/06_pipeline/shader_module.md#shader-artifact-contract` |
+| Shader ABI / dynamic UBO / 热重载 | `../05_workflows/06_pipeline_descriptor/shader_binding_workflow.md#shader-interface-validation` |
+| 热重载代际 / 旧pipeline退休 | `../05_workflows/06_pipeline_descriptor/shader_binding_workflow.md#shader-hot-reload` |
+| Pipeline key / cache / Binary / GPL | `../03_api_manual/06_pipeline/pipeline_cache.md#cache-compatibility` |
+| 异步pipeline编译/取消/发布 | `../05_workflows/07_optimization/reduce_pipeline_creation_stutter.md#pipeline-build-scheduler` |
+| KTX2 / Basis / mip驻留 / 纹理流式 | `../05_workflows/05_resource_management/add_texture_resource.md#texture-streaming-residency` |
+| Geometry streaming / LOD资源退休 | `../05_workflows/05_resource_management/manage_resource_lifetime.md#geometry-streaming-retirement` |
+| VMA / 流式预算 / OOM背压 | `../03_api_manual/04_buffer_image_memory/vma_usage.md#streaming-budget-policy` |
+| GPU Scene / bounds / generation | `../02_core_mental_model/compute_graphics_relationship.md#gpu-scene-contract` |
+| GPU-driven / fixed-slot / MDI / Count | `../05_workflows/03_compute_workflows/add_compute_pass.md#gpu-driven-rendering` |
+| Indirect能力回退 / firstInstance / DrawID | `../03_api_manual/03_command_buffer/indirect_commands.md#indirect-capability-fallback` |
+| Indirect count溢出/command ABI | `../03_api_manual/03_command_buffer/indirect_commands.md#indirect-capacity-safety` |
+| GPU命令/IDs/count同步 | `../05_workflows/03_compute_workflows/compute_to_graphics_sync.md#gpu-produced-draw-sync` |
+| GPU LOD / resident fallback | `../05_workflows/03_compute_workflows/add_compute_pass.md#gpu-lod-residency` |
+| Hi-Z / 遮挡剔除 / reversed Z | `../05_workflows/03_compute_workflows/add_compute_pass.md#hiz-occlusion` |
+| 多视图剔除/独立HiZ与完成点 | `../05_workflows/03_compute_workflows/add_compute_pass.md#multi-view-culling` |
+| GPU particles / alive compact | `../05_workflows/03_compute_workflows/add_compute_pass.md#gpu-particles` |
+| Mesh/task / meshlet / 传统fallback | `../03_api_manual/06_pipeline/mesh_shader.md#mesh-path-fallback` |
+| 规模渲染A/B / 软件Vulkan与MobileScale | `../05_workflows/07_optimization/optimize_frame_time.md#scaled-rendering-ab` |
 
 <a id="mobile-topics"></a>
 ## 移动端主题（既有主类型的按需分支）
@@ -295,3 +316,10 @@
 只在多实例、媒体输入或颜色/透明合成意图命中时使用上表新锚点；不改变固定启动三项、模型/宿主配置或原触发词。Android/API/debug/workflow/architecture按原类型输出；真实仓库仍叠加Evidence/Architecture Map与修改影响面。
 先读一个权威合同，再按待解决问题定向补workflow；不要为非媒体问题预加载全部AHB/HDR章节。对每次实际读取保存path/anchor/hash与provider usage，新SYS题单独计量，不并入原12题30% token指标。
 设计案例按需查 `../06_cases/04_swapchain_android/case_swapchain_android.md#multi-output-generation-case`、`../06_cases/03_sync_layout/case_sync_layout.md#android-media-early-return`、`../06_cases/01_black_screen/case_black_screen.md#android-alpha-color-case`，不能把设计案例当事故复现或Live答案。
+
+<a id="engine-scale-topics"></a>
+## Shader / 资源 / GPU-driven 规模化主题
+
+仍按原 API/debug/performance/implementation/architecture 主类型，只命中加载上表对应锚点。先读一个权威合同，再按缺口补 workflow；真实项目叠加 Evidence Map、Architecture Map 与回归影响面，不把此主题变成全库启动包。C1/C2/C3/C4/C5 的 shader、pipeline、streaming、GPU-driven、LOD/Hi-Z/particles/multi-view 同属本版本，不把 GPU-driven 延后。
+
+ENG13 新24题按 primary/contrast 成对输入评估，实际 path/anchor/hash/read trace/provider usage 单列；旧40题不变，原12题 v1.0.8 token分母与30%目标不被新题稀释。Source/build/HostShaderUnit/Static/Snapshot/Live/VulkanIntegration/MobileScale 分层报告，未运行保留 BLOCKED，不以关键词或软件GPU代替真实模型/移动设备验收。

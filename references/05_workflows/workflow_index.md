@@ -105,3 +105,20 @@
 
 
 v1.0.12仅按章节扩展既有Android Surface、媒体采样与颜色输出内容，API/Workflow文件数不变；新主题按唯一任务路由中的显式锚点读取，未命中不预载。
+
+## Shader / 资源 / GPU-driven 规模化主题
+
+| 问题 | 按需入口 |
+|---|---|
+| Shader ABI / dynamic UBO / 热重载 | `../05_workflows/06_pipeline_descriptor/shader_binding_workflow.md#shader-interface-validation` |
+| 热重载代际 / 旧pipeline退休 | `../05_workflows/06_pipeline_descriptor/shader_binding_workflow.md#shader-hot-reload` |
+| 异步pipeline编译/取消/发布 | `../05_workflows/07_optimization/reduce_pipeline_creation_stutter.md#pipeline-build-scheduler` |
+| KTX2 / Basis / mip驻留 / 纹理流式 | `../05_workflows/05_resource_management/add_texture_resource.md#texture-streaming-residency` |
+| Geometry streaming / LOD资源退休 | `../05_workflows/05_resource_management/manage_resource_lifetime.md#geometry-streaming-retirement` |
+| GPU-driven / fixed-slot / MDI / Count | `../05_workflows/03_compute_workflows/add_compute_pass.md#gpu-driven-rendering` |
+| GPU命令/IDs/count同步 | `../05_workflows/03_compute_workflows/compute_to_graphics_sync.md#gpu-produced-draw-sync` |
+| GPU LOD / resident fallback | `../05_workflows/03_compute_workflows/add_compute_pass.md#gpu-lod-residency` |
+| Hi-Z / 遮挡剔除 / reversed Z | `../05_workflows/03_compute_workflows/add_compute_pass.md#hiz-occlusion` |
+| 多视图剔除/独立HiZ与完成点 | `../05_workflows/03_compute_workflows/add_compute_pass.md#multi-view-culling` |
+| GPU particles / alive compact | `../05_workflows/03_compute_workflows/add_compute_pass.md#gpu-particles` |
+| 规模渲染A/B / 软件Vulkan与MobileScale | `../05_workflows/07_optimization/optimize_frame_time.md#scaled-rendering-ab` |

@@ -8,15 +8,15 @@
 | 分类 | Pipeline 链 |
 | Vulkan 对象 | `VkPhysicalDeviceMeshShaderFeaturesEXT`（feature）、`VkGraphicsPipelineCreateInfo`（task/mesh stage） |
 | 常用 API | `vkCmdDrawMeshTasksEXT` / `vkCmdDrawMeshTasksIndirectEXT` / `vkCmdDrawMeshTasksIndirectCountEXT` |
-| 适用平台 | Desktop（NVIDIA/AMD/Intel 桌面 GPU）为主；Android 移动端支持有限，需按设备查询 |
+| 适用平台 | 逐设备查询 feature / properties；保留传统 vertex 路径 |
 | 来源等级 | `[SPEC] [REGISTRY] [ENGINE] [HEUR]` |
-| 适用 Vulkan 版本 | `VK_EXT_mesh_shader`（Vulkan 1.1+，依赖 `VK_KHR_spirv_1_4`）；`VK_NV_mesh_shader` 为早期私有扩展 |
+| 适用 Vulkan 版本 | `VK_EXT_mesh_shader`（依赖 `VK_KHR_spirv_1_4` 或 Vulkan 1.2）；`VK_NV_mesh_shader` 为早期私有扩展 |
 
 ---
 
 ## 1. 一句话定位
 
-用计算式 stage（task → mesh）替代传统 vertex/geometry 组装，配合 meshlet 化资产实现 GPU-driven 剔除与提交，减少 CPU draw call 与顶点冗余处理。[SPEC]
+用计算式 stage（task → mesh）替代传统 vertex/geometry 组装，配合 meshlet 化资产实现 GPU-driven 剔除与提交，有机会减少 CPU 提交与顶点冗余；收益须实测。[SPEC]
 
 ---
 
@@ -25,7 +25,7 @@
 ```text
 VkPhysicalDeviceFeatures2（meshShader / taskShader feature 查询）
 → VkShaderModule（task / mesh / fragment）
-→ VkGraphicsPipelineCreateInfo（task + mesh stage 填入，无 vertex stage）
+→ VkGraphicsPipelineCreateInfo（mesh stage 与可选 task stage，无 vertex stage）
 → vkCmdBindPipeline（VK_PIPELINE_BIND_POINT_GRAPHICS）
 → vkCmdDrawMeshTasksEXT
 → mesh shader 输出 → rasterization → fragment shader
@@ -56,15 +56,15 @@ VkPhysicalDeviceFeatures2（meshShader / taskShader feature 查询）
 
 | API | 作用 |
 |---|---|
-| `vkCmdDrawMeshTasksEXT(groupCountX, groupCountY, groupCountZ)` | 直接提交 task 分组数（groupCount 即 meshlet 分组维度）。[SPEC] |
+| `vkCmdDrawMeshTasksEXT(groupCountX, groupCountY, groupCountZ)` | 有 task stage 时提交 task workgroups，否则提交 mesh workgroups；不等于自动一组一个 meshlet。[SPEC] |
 | `vkCmdDrawMeshTasksIndirectEXT` | 参数从 GPU buffer 读取（`VkDrawMeshTasksIndirectCommandEXT`）。[SPEC] |
-| `vkCmdDrawMeshTasksIndirectCountEXT` | count 也来自 GPU buffer 的变体，GPU-driven culling 的最终形态。[SPEC] |
+| `vkCmdDrawMeshTasksIndirectCountEXT` | count 也来自 GPU buffer 的可选变体，不是 GPU-driven 的必要条件。[SPEC] |
 
 ### 相关扩展 / 版本
 
 - `VK_EXT_mesh_shader`（跨厂商）；`VK_NV_mesh_shader`（NVIDIA 早期）。[REGISTRY]
-- Vulkan 1.1+ 且依赖 `VK_KHR_spirv_1_4`（promoted 后随环境解析）。[SPEC]
-- Android 是否可用：需查询设备能力；当前主流移动 GPU 支持不普遍，**必须运行时查询 feature 后再启用**。`[ANDROID]`
+- 依赖 `VK_KHR_spirv_1_4` 或 Vulkan 1.2，按目标设备启用链解析。[SPEC]
+- Android 是否可用：需查询设备能力；**必须运行时查询 feature 后再启用**。`[ANDROID]`
 
 ---
 
@@ -76,7 +76,7 @@ VkPhysicalDeviceFeatures2（meshShader / taskShader feature 查询）
 → 编译 task/mesh SPIR-V（SPV_VERSION 1.4+）
 → 创建 pipeline：task(可选) + mesh + fragment，不填 vertex stage
 → meshlet 化网格资产（顶点/索引重排为 meshlet，常 64 顶点/124 三角形量级 [HEUR]）
-→ vkCmdDrawMeshTasksEXT（taskCount = meshlet 分组数，即 EXT 的 groupCountX/Y/Z draw 参数）
+→ vkCmdDrawMeshTasksEXT（groupCountX/Y/Z 按实际 task 或 mesh shader 映射与设备 limits 计算，不固定等于 meshlet 数）
 → mesh shader 内输出最终三角形
 ```
 
@@ -89,7 +89,7 @@ GPU-driven 变体：culling pass（task shader 或 compute）写出可见 meshle
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
 | taskCount（draw 参数，对应 EXT 的 groupCountX/Y/Z） | 与 mesh shader 的 local size 及 meshlet 数量匹配 | 按"三角形数"而非"task 分组数"传入 |
-| `setMeshOutputsEXT` | 每次调用声明本组输出顶点/图元数 | 未调用即写输出数组 |
+| `SetMeshOutputsEXT` | 每次调用声明本组输出顶点/图元数 | 未调用即写输出数组 |
 | mesh stage 无 vertex input | 顶点数据经 storage buffer / descriptor 读取；`pVertexInputState` 在含 mesh stage 的 pipeline 中被规范忽略，官方示例置 NULL [SPEC][ENGINE] | 顶点数据仍按 vertex input 路径（bindings/attributes）提供而非 storage buffer 读取 |
 | primitive topology | input assembly state（含 topology）在 mesh pipeline 中被规范忽略，拓扑由 mesh shader 内 `OpExecutionMode` 声明。[SPEC] | 沿用 vertex pipeline 的 topology 语义理解 |
 | `groupCountX/Y/Z` | 带 task stage 时 draw 参数受 task 侧 limit 约束（每维 ≤ `maxTaskWorkGroupCount`，总量 ≤ `maxTaskWorkGroupTotalCount`）；task shader 内 `OpEmitMeshTasksEXT` 参数受 mesh 侧 limit 约束（每维 ≤ `maxMeshWorkGroupCount`，总量 ≤ `maxMeshWorkGroupTotalCount`）；无 task stage 时 draw 参数直接受 mesh 侧 limit 约束。[SPEC] | 间接变体由 GPU 写入超限值导致 draw 失败。[TOOL] |
@@ -101,7 +101,7 @@ GPU-driven 变体：culling pass（task shader 或 compute）写出可见 meshle
 
 ### 创建阶段
 
-- [ ] 运行时是否通过 `VkPhysicalDeviceMeshShaderFeaturesEXT` 查询 `meshShader` / `taskShader` 均为 VK_TRUE？[SPEC]
+- [ ] 运行时查询且创建设备启用了 meshShader？仅使用 task stage 时另需 taskShader；无 task 的 mesh 路径合法。[SPEC]
 - [ ] 设备是否启用了 `VK_EXT_mesh_shader` 扩展并勾选对应 feature？[SPEC]
 - [ ] task/mesh SPIR-V 是否以 1.4+ 编译（扩展依赖 `VK_KHR_spirv_1_4`）？[SPEC]
 - [ ] `VkGraphicsPipelineCreateInfo.pStages` 是否包含 mesh stage（task 可选）且不含 vertex stage？[SPEC]
@@ -112,8 +112,8 @@ GPU-driven 变体：culling pass（task shader 或 compute）写出可见 meshle
 ### 使用阶段
 
 - [ ] `groupCountX/Y/Z` 上限按 stage 归属核对：带 task stage 时 draw 参数是否 ≤ `maxTaskWorkGroupCount`（每维）且总量 ≤ `maxTaskWorkGroupTotalCount`；task 内 `OpEmitMeshTasksEXT` 参数与无 task stage 时的 draw 参数是否 ≤ mesh 侧 `maxMeshWorkGroupCount` / `maxMeshWorkGroupTotalCount`？[SPEC]
-- [ ] taskCount 是否等于 meshlet 分组数（每组对应一个 mesh work group），而非三角形数？[ENGINE]
-- [ ] mesh shader 是否在写 `gl_MeshVerticesEXT` / `gl_PrimitivesEXT` 前调用 `setMeshOutputsEXT`？[SPEC]
+- [ ] task/mesh group count 是否符合资产与 shader 映射和各轴/total limits（不要求一一对应），而非三角形数？[ENGINE]
+- [ ] mesh shader 是否在写 `gl_MeshVerticesEXT` / `gl_PrimitivesEXT` 前调用 `SetMeshOutputsEXT`？[SPEC]
 - [ ] meshlet buffer 的顶点/索引布局与 shader 读取 stride 是否一致（注意 `std430` padding）？[ENGINE]
 - [ ] 间接变体的 count buffer / parameter buffer 是否有效（同 `03_api_manual/03_command_buffer/indirect_commands.md` 的检查点）？[SPEC]
 
@@ -136,7 +136,7 @@ GPU-driven 变体：culling pass（task shader 或 compute）写出可见 meshle
 4. meshlet 数据布局与 shader 读取 stride 不符（`std430` 数组 padding、顶点与索引交错偏移错位），输出几何错乱。[ENGINE]
 5. taskCount=0：同 compute `groupCount=0` 问题，draw 无图元输出，排查路径见 `04_debug_playbooks/04_resource_sync/compute_no_output.md`。[ENGINE]
 6. 间接 draw 的 count buffer 未同步（culling pass 写入尚未可见即被读取），draw 数量随机错误。[SPEC]
-7. 未调用 `setMeshOutputsEXT` 就写输出数组，输出未定义。[SPEC]
+7. 未调用 `SetMeshOutputsEXT` 就写输出数组，输出未定义。[SPEC]
 8. 间接变体由 GPU 写入超限 groupCount，draw 失败：带 task stage 时 draw 参数超 task 侧 `maxTaskWorkGroupCount` / `maxTaskWorkGroupTotalCount`；task 内 `OpEmitMeshTasksEXT` 参数与无 task stage 时的 draw 参数超 mesh 侧 `maxMeshWorkGroupCount` / `maxMeshWorkGroupTotalCount`。[TOOL]
 9. 按 vertex pipeline 语义理解 primitive topology / vertexCount，把 taskCount 当三角形数传入。[HEUR]
 10. SPIR-V 版本低于 1.4，shader module 创建或 pipeline 链接失败。[TOOL]
@@ -156,7 +156,7 @@ GPU-driven 变体：culling pass（task shader 或 compute）写出可见 meshle
 
 - 在 GPU Pipeline 中确认 draw 类型为 mesh draw 且 pipeline 绑定正确。[TOOL]
 - 查看 meshlet / vertex data buffer 的实际内容与 stride（Mesh Viewer + buffer viewer）。[TOOL]
-- pipeline statistics 中对比 mesh 输出 primitive 数与预期（验证 culling 与 `setMeshOutputsEXT`）。[TOOL]
+- pipeline statistics 中对比 mesh 输出 primitive 数与预期（验证 culling 与 `SetMeshOutputsEXT`）。[TOOL]
 - AGI System Profiler 查看 task/mesh stage 占用率与 wave 效率，判断 meshlet 尺寸是否合理。[TOOL]
 - 时间线确认 culling pass → barrier → mesh draw 的顺序与 barrier 是否存在。[TOOL]
 
@@ -198,9 +198,9 @@ GPU-driven 变体：culling pass（task shader 或 compute）写出可见 meshle
 
 ### GPU-GPU 同步
 
-- GPU-driven culling（task shader 内剔除后写 indirect 参数，或独立 compute 剔除 pass）需要 compute 风格的 memory barrier 覆盖：`srcStageMask = COMPUTE_SHADER`（或 task/mesh 输出写入 stage），`dstStageMask = DRAW_INDIRECT_BIT`，`srcAccessMask = SHADER_WRITE_BIT`，`dstAccessMask = INDIRECT_COMMAND_READ_BIT`；跨 draw 依赖同 `03_api_manual/08_synchronization/pipeline_barrier.md`。[SPEC]
+- GPU-driven culling（独立 compute 剔除 pass，或确实写入下一次 draw 参数的 shader）需要 compute 风格的 memory barrier 覆盖：`srcStageMask = COMPUTE_SHADER`（或 task/mesh 输出写入 stage），`dstStageMask = DRAW_INDIRECT_BIT`，`srcAccessMask = SHADER_WRITE_BIT`，`dstAccessMask = INDIRECT_COMMAND_READ_BIT`；跨 draw 依赖同 `03_api_manual/08_synchronization/pipeline_barrier.md`。[SPEC]
 - culling 结果同时被后续 mesh draw 的 storage buffer 读取时，还需覆盖 `SHADER_READ` 可见性。[SPEC]
-- 跨 queue（compute queue 剔除 + graphics queue 绘制）需 ownership transfer barrier。[SPEC]
+- 跨 queue 需 semaphore；仅跨 family 的 exclusive 资源还需匹配 ownership release/acquire。[SPEC]
 
 ### 资源访问同步
 
@@ -210,8 +210,8 @@ GPU-driven 变体：culling pass（task shader 或 compute）写出可见 meshle
 
 ## 11. Android 注意点
 
-- `VK_EXT_mesh_shader` 在 Android 上支持有限：主流移动 GPU 支持不普遍，部分新 Adreno / Mali 驱动与桌面级 SoC 才具备；**必须运行时查询 `VkPhysicalDeviceMeshShaderFeaturesEXT` 后再启用**，不得按品牌/型号假设。[ANDROID]
-- 不支持时的回退路径：传统 vertex pipeline + multi-draw indirect（GPU-driven 收益仍可保留大半），参见 `03_api_manual/03_command_buffer/indirect_commands.md`。[ANDROID]
+- `VK_EXT_mesh_shader` 必须运行时查询/启用所用 feature 与 properties，不能按品牌或型号假设支持。[ANDROID]
+- 不支持时的回退路径：传统 vertex pipeline + multi-draw indirect（收益比例未知，需实测），参见 `03_api_manual/03_command_buffer/indirect_commands.md`。[ANDROID]
 - 移动端若支持，meshlet 尺寸与 task local size 需按移动 GPU 的 wave/子组粒度实测（桌面经验值直接迁移常劣化）。[ANDROID]
 - 用 AGI System Profiler 验证 task/mesh 占用率与剔除收益，小场景可能出现 culling 开销大于收益的反向劣化。[ANDROID]
 - 回退路径在移动端的 `multiDrawIndirect` / `drawIndirectFirstInstance` 支持差异同样需运行时查询。[ANDROID]
@@ -222,15 +222,15 @@ GPU-driven 变体：culling pass（task shader 或 compute）写出可见 meshle
 
 ### CPU 侧
 
-- mesh shader 把 draw call 提交从 CPU 每物体一次降为整场景一次（配合 indirect count），CPU frame time 与物体数量解耦。[ENGINE]
-- meshlet 化为离线成本，运行时 CPU 无额外组装开销。[ENGINE]
+- mesh draw 仍按相容 pipeline/material/resource bins 提交；与 CPU 合批及传统 GPU-driven 基线比较，不保证整场景一次或 CPU 成本与规模无关。[ENGINE]
+- meshlet 可离线生成；程序化/动态几何需另外计入构建、上传、重排和内存成本。[ENGINE]
 
 ### GPU 侧
 
 - meshlet 大小影响顶点复用率与 task 占用率 [HEUR]（适用条件：桌面 GPU；移动端需实测，常用起点为 64 顶点 / 124 三角形量级 [HEUR]）。
 - 收益主要来自 GPU-driven culling 剔除不可见 meshlet（省掉顶点着色开销）与 CPU draw call 卸载，而不是单三角形吞吐提升；小场景或简单几何可能无收益。[ENGINE]
 - task shader 层级剔除（粗粒度）+ mesh shader 内精细剔除的两级结构在密集几何场景收益明显 [HEUR]（适用条件：桌面 GPU，高几何密度资产）。
-- 输出顶点/图元超出组内实际需求会浪费 invocation；`setMeshOutputsEXT` 应按实际输出声明。[ENGINE]
+- 输出顶点/图元超出组内实际需求会浪费 invocation；`SetMeshOutputsEXT` 应按实际输出声明。[ENGINE]
 
 ### 移动端
 
@@ -258,6 +258,15 @@ mesh shader 的收益主要来自 GPU-driven culling 与 CPU draw call 卸载，
 
 ---
 
+<a id="mesh-path-fallback"></a>
+### mesh-path-fallback
+
+meshShader 与 taskShader 分别查询/启用；task stage 可省略，不能把两者当单一布尔值。查询 maxTask/meshWorkGroupCount 各轴与 total、workgroup invocations、payload/shared memory、output vertex/primitive/components 等限制；meshlet 离线尺寸与 shader local size 取设备支持范围内的策略，不把 64/124 作为跨 GPU 标准。[SPEC][ENGINE]
+
+EXT 路径使用 GLSL `SetMeshOutputsEXT`、`EmitMeshTasksEXT` 与对应 EXT SPIR-V execution model；NV 路径不是改函数名即可互换。资产 meshlet bounds 必须含变形/缩放后的保守范围。无 task 可直接 mesh；无 mesh 回退传统 vertex + fixed-slot indirect / 可选 Count；无 MDI 可逐命令 indirect 或 CPU 合批。fallback 保留相同 scene IDs、LOD/residency、材质和视图，不偷减画质宣称加速。[ENGINE]
+
+只在真实支持设备运行后记录 mesh/task、pipeline binary/GPL 或 async queue 的性能；软件实现缺扩展可标 conditional-not-run，不用 CPU 合约测试替代 GPU 执行。固定规范：[VK_EXT_mesh_shader](https://github.com/KhronosGroup/Vulkan-Docs/blob/b94f8bd2d004d2949469d8a5071ee10eb7d23566/appendices/VK_EXT_mesh_shader.adoc)。GLSL 接口核对 [Khronos GLSL extension](https://github.com/KhronosGroup/GLSL/blob/main/extensions/ext/GLSL_EXT_mesh_shader.txt)，编译工具及 SPIR-V target environment 单独记录。
+
 ## 14. 相关 API 卡片
 
 - `03_api_manual/03_command_buffer/indirect_commands.md`
@@ -273,5 +282,5 @@ mesh shader 的收益主要来自 GPU-driven culling 与 CPU draw call 卸载，
 2. taskCount / meshlet 输出上限（`maxMeshWorkGroupTotalCount` 等 limit）。
 3. 与其他 stage/feature 的交互限制。
 4. `VK_NV_mesh_shader` 与 `VK_EXT_mesh_shader` 的语义差异（NV 版无 task stage 输出上限细节差异等）。
-5. `setMeshOutputsEXT` / 输出数组的 validation 规则与未定义行为边界。
+5. `SetMeshOutputsEXT` / 输出数组的 validation 规则与未定义行为边界。
 6. Android 目标设备（Adreno / Mali / PowerVR）驱动对扩展的实际支持与已知缺陷。

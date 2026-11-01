@@ -292,3 +292,12 @@ A/B保持视觉标准与输入一致，分别记录工具开启的诊断运行�
 
 来源：[ADPF](https://developer.android.com/games/optimize/adpf)、
 [Frame Pacing / Swappy](https://developer.android.com/games/sdk/frame-pacing)。
+
+<a id="scaled-rendering-ab"></a>
+### scaled-rendering-ab
+
+规模实验固定 seed、视角、物体1k/10k/100k、目标可见率10/50/100%、分辨率、材质、灯光和 resident LOD；记录实际可见率，不把配置值假称结果。CPU参考必须包含合理 instancing/batching。比较 CPU参考 → GPU固定槽 → compact+Count，再分别切 LOD、当前帧Hi-Z、粒子与多 view；禁止一次改完后把差异都归因 GPU-driven。[ENGINE]
+
+记录 CPU update/cull/record/submit、GPU reset+cull+compact+Hi-Z+draw 与全帧时间、VRAM/host/staging/old-new峰值、upload bytes、overflow/fallback 和可见ID/图像一致性。GPU query 先验证 queue timestampValidBits、timestampPeriod、availability/完成与 wrap；不支持则明确缺失，不用 CPU wall time 冒充 GPU 时间。排除 warmup、报告样本数/分位数/误差和测量开销。[ENGINE]
+
+软件 Vulkan 的 source/build/validation/图像结果，与真实 Android MobileScale 的 GPU型号/driver/API/features、热状态、功耗/带宽、分辨率、持续时长分别报告。桌面或 llvmpipe 不证明移动端60FPS。没有授权设备则 MobileScale BLOCKED，保留可运行命令和所缺证据；不得填入估算成绩。mesh/task、Binary/GPL、async queue、前帧Hi-Z 为独立条件路径；未支持或未测不算通过。[ENGINE]
