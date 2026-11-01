@@ -1,5 +1,13 @@
 # Change Log
 
+## v1.0.12 — Android System Rendering（2026-11-01）
+
+- 基于已合v1.0.11 skill1f85b8b/tests3a8ea8b，只扩C1多实例Surface、C2媒体AHB帧合同、C3颜色/HDR/透明输出。
+- 修正生命周期命中范围的wait-idle伪超时、统一idle与present退休混淆、AHB当窗口等旧冲突；owner/ack/generation与shared-device故障分层。
+- 原文件按锚点扩充，运行时知识净增0、包预算200；原启动/触发/MIT/G1–G6保留。
+- 新SYS12题与原28题分cohort；Media Surface Lab隔离fixture不冒充Java/Native/GPU设备执行，Live/宿主/Device继续明确未验证。
+- 精确计划、来源矩阵、测试/包证据在配对tests仓，未自动发布或合main。
+
 ## v1.0.11 — Mobile Vulkan Evolution（2026-11-01）
 
 - 基于已合入的v1.0.10主仓349dc35b与tests75630ee5扩展移动端能力，不回退其安全打包、按段读取和历史隔离。

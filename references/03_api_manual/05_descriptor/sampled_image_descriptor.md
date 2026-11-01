@@ -196,6 +196,26 @@ VkImage
 
 ---
 
+
+<a id="android-media-ycbcr"></a>
+### Android 媒体 externalFormat / YCbCr 采样
+
+前提是[媒体帧合同](../04_buffer_image_memory/external_resource_interop.md#android-media-frame-contract)已满足：有效 lease、producer readiness、AHB import、队列 ownership 与实际采样 layout。Descriptor 只描述访问，不取得帧所有权、不等待 acquire FD、不转换颜色空间。[SPEC][ENGINE]
+
+| 分支 | 必查与创建约束 |
+|---|---|
+| 普通 RGB VkFormat | 从 AHB 查询得到实际等价格式，按该 format/tiling/usage 查询支持；不可用 external format 的 formatFeatures 替代普通格式查询。无 YCbCr conversion 时沿普通 sampler 路径。 |
+| 普通多平面 YCbCr | 查询并启用 `samplerYcbcrConversion`（核心 1.1 或扩展路径）；format 必须满足 conversion 规则。COLOR aspect conversion 不是把每个 plane 当 RGBA。 |
+| 非零 externalFormat | 仅使用 AHB 查询返回值；image/conversion 的 VkFormat 为 `VK_FORMAT_UNDEFINED`，匹配 `VkExternalFormatANDROID`；按 external format 能力而非猜测 RGBA usage。默认采样路径不能推导任意 storage/attachment 支持。 |
+
+转换参数包括 model、range、components、x/y chroma offset、chromaFilter、forceExplicitReconstruction。AHB 的 suggestedYcbcrModel/Range/ChromaOffset 是缺乏更可靠输入信息时的建议，并非所有帧的颜色认证；以可信 producer 元数据和格式限制核对。External conversion 的 components 字段被忽略；普通格式则按规范 swizzle。检查 MIDPOINT/COSITED、linear chroma 与 separate reconstruction filter 能力，不能无条件 linear 或自行改 offset。[SPEC]
+
+传统 descriptor-set 路径将定义一致的 conversion 关联 sampler 与 image view，view components 使用 identity swizzle；使用 `COMBINED_IMAGE_SAMPLER` 和 layout 中的 immutable sampler；不能直接换为普通 separate image+sampler。Sampler conversion 的 address modes、anisotropy、unnormalized coordinates、过滤组合须按规范约束（通常 clamp-to-edge、禁用 anisotropy、normalized coordinates）；不照搬材质 repeat/AF 配方。普通 format 的 combined descriptor 倍数与 external format 的预算规则见本卡末尾既有计数段，不能恒按 1 分配。[SPEC]
+
+每帧 crop/旋转/镜像在采样坐标合同处理，timestamp/source generation 与 descriptor 版本一起追踪；不是通过 image layout 修正方向或颜色。元数据/格式/conversion 改变时重建所需 sampler/layout/pipeline 绑定，并退休旧在途 descriptor，不能覆盖 pending 使用。YCbCr→RGB 后还需独立的 transfer/primaries/工作空间及输出合同，不能把 conversion 结果自动当线性 sRGB 或 HDR 已完成。[ENGINE]
+
+来源：[AHB format properties](https://docs.vulkan.org/refpages/latest/refpages/source/VkAndroidHardwareBufferFormatPropertiesANDROID.html)、[conversion 参数](https://docs.vulkan.org/refpages/latest/refpages/source/VkSamplerYcbcrConversionCreateInfo.html)、[immutable conversion 绑定](https://docs.vulkan.org/refpages/latest/refpages/source/VkSamplerYcbcrConversionInfo.html)、[sampler 限制](https://docs.vulkan.org/refpages/latest/refpages/source/VkSamplerCreateInfo.html)。
+
 ## 12. 性能注意点
 
 ### CPU 侧
@@ -218,7 +238,7 @@ VkImage
 ## 13. 专家经验
 
 **经验**：
-如果场景中大量材质使用相同 sampler 参数，优先使用 `COMBINED_IMAGE_SAMPLER` 减少 descriptor 数量；如果需要灵活组合 image 与 sampler（例如不同 filter 模式复用同一 texture），则使用 separate `SAMPLED_IMAGE` + `SAMPLER`。无论哪种方式，都要保证 `imageLayout` 与当前 image 实际 layout 一致，否则验证层会立刻报错。
+如果场景中大量材质使用相同 sampler 参数，优先使用 `COMBINED_IMAGE_SAMPLER` 减少 descriptor 数量；如果普通非 YCbCr-conversion 纹理需要灵活组合 image 与 sampler（例如不同 filter 模式复用同一 texture），可评估 separate `SAMPLED_IMAGE` + `SAMPLER`；媒体 conversion 路径按本卡专节约束。无论哪种方式，都要保证 `imageLayout` 与当前 image 实际 layout 一致，否则验证层会立刻报错。
 
 **适用条件**：
 所有需要纹理采样的渲染。

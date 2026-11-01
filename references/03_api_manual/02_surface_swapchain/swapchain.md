@@ -92,7 +92,7 @@ VkSurfaceKHR
     → vkQueueSubmit(..., renderFinishedSemaphore)
     → vkQueuePresentKHR(..., renderFinishedSemaphore)
 → 销毁:
-    等待 GPU idle
+    停止该输出新使用，分别证明submission完成与WSI/present资源退休
     → 销毁依赖 swapchain image 的 framebuffer / image view / depth image
     → vkDestroySwapchainKHR
 ```
@@ -200,8 +200,8 @@ VkSurfaceKHR
 
 ### in-flight 风险
 
-- swapchain image 被提交后，直到 present 完成前不能再次 acquire 或写入。[SPEC]
-- retired swapchain 仍可能被 GPU 使用，创建新 swapchain 后不要立即销毁旧 swapchain，除非确认 GPU idle。[SPEC]
+- 再次写入swapchain image前必须经成功acquire及其同步依赖获得可用性；不要以host侧present返回值推断image可写。[SPEC]
+- retired swapchain仍可能有GPU与presentation使用；创建新swapchain不证明旧对象可销毁，需分别取得相关提交与WSI退休证据。[SPEC]
 - swapchain image view / framebuffer 随 swapchain 重建而重建，in-flight command buffer 可能引用旧对象。[ENGINE]
 
 ---
@@ -210,12 +210,12 @@ VkSurfaceKHR
 
 ### CPU-GPU 同步
 
-- 销毁 swapchain 前，CPU 需等待 GPU idle 或所有 in-flight fence signal。[SPEC]
+- 销毁swapchain前按适用WSI协议证明所有使用完成；in-flight submit fence只证明对应GPU提交，不单独证明present wait semaphore已退休。[SPEC]
 - Android 切后台时，应停止 acquire / submit / present，避免 CPU 在无效 swapchain 上阻塞。[ANDROID]
 
 ### GPU-GPU 同步
 
-- `vkAcquireNextImageKHR` 的 `imageAvailableSemaphore` 必须被 graphics queue submit 等待。[SPEC]
+- 实际使用acquired image的队列提交必须等待其可用性依赖；graphics是常见路径，不把规范限定为graphics queue。[SPEC]
 - `vkQueueSubmit` 的 `renderFinishedSemaphore` 必须被 `vkQueuePresentKHR` 等待。[SPEC]
 - 多 queue 时，present queue 与 graphics queue 之间的 semaphore 必须匹配。[SPEC]
 
@@ -227,6 +227,31 @@ VkSurfaceKHR
 ---
 
 ## 11. Android 注意点
+
+<a id="android-color-presentation"></a>
+### 逐输出颜色/HDR/alpha能力（独立读取入口）
+
+前提：有效且属于本应用的Surface，present queue支持已确认；输入/工作/输出编码按[颜色合同](../../02_core_mental_model/render_target_model.md#color-output-contract)记录。使用 `vkGetPhysicalDeviceSurfaceFormatsKHR`（或合法formats2路径）枚举的 **VkFormat + VkColorSpaceKHR 成对选择**，不能由device格式支持或另一个Surface结果推出当前Surface可呈现HDR。检查color-space扩展/平台约束、extent/transform/usage和 `supportedCompositeAlpha`。[SPEC]
+
+| 路径 | gate | 不支持时 |
+|---|---|---|
+| SDR基线 | 当前Surface实际可用的SDR format/colorSpace pair，输入正确映射/编码 | 重新枚举并明确不可呈现原因；不伪造pair |
+| 广色域P3 / 标准HDR | 当前Surface实际支持pair、精度/输出编码与平台显示链一致 | 显式SDR映射，不沿用另一输出的HDR状态 |
+| GOOGLE动态metadata | 以下查询、启用和逐Surface支持全部成立 | 保持已验证标准HDR或SDR，不提高整个引擎最低版本 |
+
+`VK_GOOGLE_hdr_smpte_st_209450_metadata`（revision 1，2026-10-08，非ratified厂商扩展）依赖 `(VK_KHR_get_physical_device_properties2 或 Vulkan 1.1)`、`VK_KHR_get_surface_capabilities2`、`VK_KHR_swapchain`、`VK_EXT_hdr_metadata`。检查扩展及各依赖，再通过 `VkPhysicalDeviceHdrSmpteSt209450FeaturesGOOGLE` 查询并在device创建时启用 `hdrSmpteSt209450`。把 `VkSurfaceCapabilitiesHdrSmpteSt209450GOOGLE` 链入 `VkSurfaceCapabilities2KHR`，用 `vkGetPhysicalDeviceSurfaceCapabilities2KHR` 针对当前Surface查询 `hdrSmpteSt209450Supported`。只枚举到名字不等于feature已启用或每Surface均支持。[SPEC]
+
+全部gate满足才把 `VkHdrSmpteSt209450GOOGLE` 链入 `VkHdrMetadataEXT`，经 `vkSetHdrMetadataEXT` 设置。`metadataSize > 0` 且指针/结构合法；metadata字节在调用中复制，返回后可释放该输入buffer。规范不校验这段SMPTE bitstream的内容，内容有效性/使用不在Vulkan范围；Validation clean不是色彩认证，也不代替像素转换/tone mapping。不要从新闻拼出不同扩展名或不存在的独立set函数。[SPEC]
+
+Alpha必须端到端匹配：
+- PRE_MULTIPLIED期待已乘alpha的RGB；POST_MULTIPLIED期待尚未乘alpha的RGB；OPAQUE忽略alpha。只选supportedCompositeAlpha中的模式。
+- INHERIT依赖原生窗口系统设置，不代表自动正确透明；实际宿主合成仍需验证。
+- Shader输出/附件blend与最终compositor是两个阶段；已premultiplied输入不可再乘，不能把全部输出改OPAQUE掩盖黑边。[SPEC][ENGINE]
+
+WSI swapchain与直接向应用自有 `ASurfaceControl` 提交buffer是两条路径。后者在其公开API/级别下设置dataspace、acquire/release同步及回收，例如 `ASurfaceTransaction_setBufferDataSpace` API29+；不能拿该函数修改WSI内部队列，不能同时让两方拥有同一呈现路径。旋转、display变化、Surface重建/crop变化要重新评估能力、transform和颜色合同，而不只是viewport。[ANDROID][ENGINE]
+
+来源（2026-11-01 source-read，未跑设备）：[扩展/依赖](https://docs.vulkan.org/refpages/latest/refpages/source/VK_GOOGLE_hdr_smpte_st_209450_metadata.html)、[metadata规则](https://docs.vulkan.org/refpages/latest/refpages/source/VkHdrSmpteSt209450GOOGLE.html)、[固定Registry依赖](https://github.com/KhronosGroup/Vulkan-Docs/blob/b94f8bd2d004d2949469d8a5071ee10eb7d23566/xml/vk.xml)、[固定Headers符号](https://github.com/KhronosGroup/Vulkan-Headers/blob/9fbc2a782ee3f8a4db64e7d991e23da75e893f44/include/vulkan/vulkan_core.h)、[alpha](https://docs.vulkan.org/refpages/latest/refpages/source/VkCompositeAlphaFlagBitsKHR.html)、[NDK SurfaceControl](https://developer.android.com/ndk/reference/group/native-activity)。
+
 
 - Android 上 `VK_SUBOPTIMAL_KHR` 可能在横竖屏切换或 surface 尺寸变化时出现，应触发 recreate。[ANDROID]
 - `APP_CMD_TERM_WINDOW` 后必须停止 acquire / present，否则可能 native crash。[ANDROID]
@@ -260,7 +285,7 @@ VkSurfaceKHR
 ## 13. 专家经验
 
 **经验**：
-在 Android 工程中，建议把 swapchain recreate 设计为“暂停渲染 → 等待 idle → 销毁依赖资源 → 用 oldSwapchain 创建新 swapchain → 重建 image view / framebuffer / depth → 恢复渲染”的固定流程，不要零散处理。
+在Android工程中按每输出状态机管理重建：停止该输出旧代新使用，重查能力，合法时以oldSwapchain创建替代对象，旧GPU依赖和WSI资源分别按完成证据退休，再启用新代。oldSwapchain必须仍是符合当前Surface等创建约束的有效对象；不能传已销毁句柄，也不把全device idle设为固定局部恢复策略。详见[生命周期权威段](../../05_workflows/04_android_integration/handle_android_lifecycle.md#multi-surface-lifecycle)。
 
 **适用条件**：
 Android Native 渲染，生命周期事件可稳定接收，存在横竖屏切换或分屏场景。

@@ -40,7 +40,7 @@ surfaceDestroyed → 关闭该 generation 入口 → render 线程停止访问�
 需要确认：
 
 - Android 版本、设备 GPU（Adreno / Mali / PowerVR）。
-- 是否使用 native Activity 或 Java/Kotlin Activity + `SurfaceView` / `TextureView` / `SurfaceHolder`。
+- 是否使用 NativeActivity 或 Java/JNI Activity + `SurfaceView` / `TextureView` / `SurfaceHolder`。
 - render thread 模型：单 render thread、render thread + worker threads、专用 compute thread。
 - 是否使用多 buffering（双缓冲 / 三缓冲）以及 frame-in-flight 数量。
 - 是否已有 swapchain recreate 处理（如 `VK_ERROR_OUT_OF_DATE_KHR` / `VK_SUBOPTIMAL_KHR`）。
@@ -50,8 +50,8 @@ surfaceDestroyed → 关闭该 generation 入口 → render 线程停止访问�
 
 ## 3. 前置检查
 
-- [ ] Validation Layer 可用。
-- [ ] RenderDoc / AGI 可抓帧。
+- [ ] 已记录Validation Layer可用性与实际覆盖；不可用不冒称clean。
+- [ ] 已记录RenderDoc / AGI可用性；抓不到时用合法日志/最小复现并标覆盖缺口。
 - [ ] 已能在正常启动路径创建 swapchain 并呈现多帧。
 - [ ] 已能在 `VK_ERROR_OUT_OF_DATE_KHR` 时手动 recreate swapchain。
 - [ ] 已跟踪每帧的 fence 与 in-flight command buffer。
@@ -109,7 +109,7 @@ Process → DeviceContext（共享策略先确认）→ RenderInstance / Engine
 | 事件/资源 | 必须区分的完成条件 |
 |---|---|
 | acquire 成功 / SUBOPTIMAL | 已取得image和信号，必须进入明确消费/收尾路径，不能直接丢弃 |
-| acquire OUT_OF_DATE / TIMEOUT / NOT_READY | 没有本次成功acquire，保留仍signaled的frame fence，不盲目reset |
+| acquire OUT_OF_DATE / TIMEOUT / NOT_READY | 没有本次成功acquire，在此前frame fence等待已成功且尚未reset的前提下保留其signaled状态，不盲目reset |
 | frame slot 复用 | 检查 `vkWaitForFences` 的返回值；timeout/device lost不能当成功 |
 | command buffer 引用的旧 image/view | 相关 submission 确实完成后才销毁 |
 | present wait semaphore / swapchain退休 | submit fence不等于present完成，按维护扩展present fence或适用WSI退役协议 |

@@ -133,6 +133,23 @@ Previous Pass Output Image
 
 ## 8. 实现步骤
 
+<a id="color-output-workflow"></a>
+### Android色彩输出实施入口
+
+前提：有效输入lease与同步、目标Surface capability已查询；先读[颜色合同](../../02_core_mental_model/render_target_model.md#color-output-contract)及[呈现gate](../../03_api_manual/02_surface_swapchain/swapchain.md#android-color-presentation)，下列步骤不改变其权威规则。
+
+1. 填输入primaries/transfer/range/bitdepth/alpha/参考白；元数据未知时记录假设和待测色条，而非按文件名猜。
+2. 指定工作空间和转换：YCbCr采样后的RGB不自动是linear；明确transfer解码、色域映射与中间精度，不用layout transition“改颜色”。
+3. 每输出决定tone-mapping owner。A SDR与B HDR/P3可有不同输出pass；不能全局一个HDR bool。仅实际能力允许才启用可选metadata，失败回SDR/标准路径。
+4. 检查blend：若在明确线性工作空间用premultiplied source-over，RGB示例为src ONE/dst ONE_MINUS_SRC_ALPHA；alpha累积也应按目标约定配置。Straight输入先按约定转换一次，不对已premultiplied值再乘。此配方不是任意艺术混合的强制规范。
+5. 输出编码与attachment固定功能转换配合，避免shader编码后sRGB附件再次编码；compositeAlpha/宿主合成与最终像素约定一致。
+6. 固定测试图案：线性灰阶0/0.18/0.5/1、原色块、alpha0/0.5/1边缘，浮点参考误差示例1e-6、8-bit量化比较示例1/255；这些是隔离数学fixture容差，实际GPU/色域处理另预先定义阈值，不能宣布屏幕色准。
+7. resize/display/format/crop改变后失效相关pipeline/descriptor/颜色capability缓存，旧generation资源按实际GPU/WSI完成退休。
+8. 分别保存离屏数值、真实宿主透明合成与设备HDR观察；截图不是面板测量。无设备保持NOT RUN，不将CPU公式测试称GPU渲染。
+
+### 通用后处理步骤
+
+
 1. **编写 fullscreen shader**：
    - Vertex shader 生成 fullscreen triangle / quad，输出 UV（注意 Vulkan UV 原点与翻转） [SPEC]。
    - Fragment shader 实现后处理算法，采样输入 image。
@@ -173,7 +190,7 @@ Previous Pass Output Image
 - 移动端 fullscreen pass 是 bandwidth 敏感操作，建议在 AGI 中检查每像素读取次数与 tile resolve 开销 [ANDROID]。
 - 多个后处理 pass 串联时，考虑合并到单个 pass 或降低中间 buffer 精度/分辨率以节省 bandwidth [ANDROID]。
 - pause / resume 后 staging / uniform buffer 与 descriptor 生命周期要稳定，避免悬垂 [ANDROID]。
-- `preTransform` 变化后只需更新 viewport / scissor 与 swapchain 相关资源，fullscreen pipeline 通常无需重建 [ANDROID]。
+- `preTransform`/display变化后重查输出能力、变换与颜色合同；viewport/scissor仅是其中一部分，pipeline是否重建由format/静态状态/渲染接口实际依赖决定 [ANDROID]。
 - AGI / logcat 验证：检查 fullscreen draw 的 fragment shader cost、texture bandwidth、overdraw [TOOL]。
 
 ---

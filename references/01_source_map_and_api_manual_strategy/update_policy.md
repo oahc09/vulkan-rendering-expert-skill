@@ -97,3 +97,11 @@ SDK/headers声明、驱动支持、device显式启用、路径运行和实测收
 及其中Registry；SDK/模型各自固定，不将该修订号当已安装SDK。
 复核触发：上游release、driver/device变更、接口/ABI或许可证变化、失效链接、能力回归。
 未build/device tested只能写source_read，不填性能百分比。
+
+
+## v1.0.12来源与能力复核
+
+资料窗口仍为2026-10-01至10-31，不把连续规划版本视为时间又过一月。AndroidX Graphics Core1.1.0-beta01（10-07）的SurfaceControl释放线程/transform/重建修复只作为生命周期回归线索，GL/Canvas实现不是Vulkan直接补丁；Media3 1.12.0-alpha01（10-21）P3映射只是Alpha元数据能力，非强制依赖或完整HDR支持。分别记录事件日、版本与2026-11-01核查日。
+
+GOOGLE HDR扩展按固定Headers `9fbc2a782ee3f8a4db64e7d991e23da75e893f44`核符号，逐设备feature/逐Surface能力再启用；通用Android基础API不是本月发明。可变官网页记录核查日，无法冻结的源码明确限界；来源ledger在tests仓，不把完整第三方文档塞运行包。Source-read不等于build/device，截图也不证明HDR面板亮度。
+来源：[Graphics release](https://developer.android.com/jetpack/androidx/releases/graphics#graphics-core-1.1.0-beta01)、[Media3](https://developer.android.com/jetpack/androidx/releases/media3#1.12.0-alpha01)。

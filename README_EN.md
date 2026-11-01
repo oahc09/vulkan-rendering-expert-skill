@@ -108,3 +108,8 @@ Attaching key information yields the most accurate answers — see the per-task-
 - **Just ask (recommended)**: no files to read first — the skill routes by symptom/intent to the matching playbook, workflow, or case.
 - **See the knowledge map**: read `references/README.md` and `references/MODULE_SUMMARY.md` for the division of labor across the 8 modules.
 - **Deep dive**: read modules in order `00` → `07`; start with `04_debug_playbooks/` for debugging, `05_workflows/` for implementation, and `02_core_mental_model/engine_architecture.md` for architecture, and `05_workflows/01_renderer_setup/project_diagnosis.md` for real-repository diagnosis.
+
+
+## v1.0.12 — Android System Rendering
+
+v1.0.12 extends Android multi-instance/surface ownership, media-frame leases and synchronization, and color/HDR/alpha output contracts. No runtime knowledge files are added; the 200-file budget and startup remain unchanged. The paired tests repository adds 12 system cases (40 total). Isolated state/math fixtures are static evidence, not native Android, Live-model or device acceptance.

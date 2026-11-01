@@ -259,6 +259,16 @@
 | Vulkan/OpenCL 往返集成 | `../05_workflows/04_android_integration/vulkan_opencl_interop.md#interop-workflow` |
 | NSS / NFRU / 神经SDK多Engine | `../05_workflows/02_render_pass_effects/mobile_neural_graphics.md#neural-capability-contract` |
 | QHWI / Filament句柄材质 / SDK版本迁移 | `../06_cases/07_engine_architecture/case_engine_architecture.md#mobile-sdk-framework-contracts` |
+| 多Engine / 预览关闭影响其他输出 / owner | `../02_core_mental_model/android_surface_swapchain_lifecycle.md#multi-instance-ownership` |
+| 旧Surface回调 / 销毁确认 / shared device故障 | `../05_workflows/04_android_integration/handle_android_lifecycle.md#multi-surface-lifecycle` |
+| Wallpaper / AppWidget / SurfaceView宿主接入 | `../05_workflows/04_android_integration/integrate_surfaceview_anativewindow.md#android-host-contract` |
+| Android Surface有效访问/逐输出呈现支持 | `../03_api_manual/10_android_platform/android_surface.md#surface-host-boundaries` |
+| Camera/MediaCodec AHB / 双消费者 / 帧归还 | `../03_api_manual/04_buffer_image_memory/external_resource_interop.md#android-media-frame-contract` |
+| externalFormat / YCbCr媒体采样 | `../03_api_manual/05_descriptor/sampled_image_descriptor.md#android-media-ycbcr` |
+| producer到采样/输入切换与背压 | `../05_workflows/02_render_pass_effects/add_texture_sampling_pass.md#android-media-sampling` |
+| P3 / HDR / 输入工作输出颜色合同 | `../02_core_mental_model/render_target_model.md#color-output-contract` |
+| 每Surface HDR feature / metadata / compositeAlpha | `../03_api_manual/02_surface_swapchain/swapchain.md#android-color-presentation` |
+| tone mapping owner / 半透明黑边 / 输出转换 | `../05_workflows/02_render_pass_effects/add_postprocess_pass.md#color-output-workflow` |
 
 <a id="mobile-topics"></a>
 ## 移动端主题（既有主类型的按需分支）
@@ -277,3 +287,11 @@
 - 框架迁移：case_engine_architecture 的 mobile-sdk-framework-contracts，不把上游README/CI当目标GPU实测。
 
 若宿主不支持段落读取，读目标全文并如实记录token；不要跳过硬规则，也不要为省token隐藏能力限制。
+
+
+<a id="android-system-topics"></a>
+## Android系统渲染主题（仍属既有主类型）
+
+只在多实例、媒体输入或颜色/透明合成意图命中时使用上表新锚点；不改变固定启动三项、模型/宿主配置或原触发词。Android/API/debug/workflow/architecture按原类型输出；真实仓库仍叠加Evidence/Architecture Map与修改影响面。
+先读一个权威合同，再按待解决问题定向补workflow；不要为非媒体问题预加载全部AHB/HDR章节。对每次实际读取保存path/anchor/hash与provider usage，新SYS题单独计量，不并入原12题30% token指标。
+设计案例按需查 `../06_cases/04_swapchain_android/case_swapchain_android.md#multi-output-generation-case`、`../06_cases/03_sync_layout/case_sync_layout.md#android-media-early-return`、`../06_cases/01_black_screen/case_black_screen.md#android-alpha-color-case`，不能把设计案例当事故复现或Live答案。
