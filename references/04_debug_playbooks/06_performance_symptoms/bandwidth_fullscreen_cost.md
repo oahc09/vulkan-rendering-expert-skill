@@ -418,3 +418,16 @@ Android 上 fullscreen pass 与 tile-based GPU、Surface 生命周期、功耗�
 
 
 ---
+
+
+<a id="transparent-coverage-diagnostics"></a>
+## 高覆盖与混合精度分流
+
+输入固定场景/camera/质量和生产路径阶段计时；输出可验证瓶颈，不把透明错误直接归咎带宽或驱动。[ENGINE]
+
+1. 颜色错误先读 [合成合同](../../02_core_mental_model/render_target_model.md#transparent-composition-contract)：关光照/tone mapping，分开输入量化、alpha/encoding、顺序、逐层存储和输出；RGBA8与FP16无需逐位一致。
+2. 排序耗时高检查 visible count、keys/dispatch/上传与缓存失效；相机静止不代表动态 GS 可复用。
+3. raster/resolve 高检查 footprint/层数分布、shader/混合/附件流量、OIT池溢出；点数下降但覆盖不降不是优化失败的驱动证据。
+4. 按 [覆盖预算](../../05_workflows/07_optimization/optimize_mobile_bandwidth.md#coverage-budget) 控制变量，区分估算覆盖、原子诊断与硬件 counter。负载/曝光变化另记，不外推功耗。
+
+能力不足回退排序/独立读写/受支持精度，容量失败明确报告。诊断 buffers 与附件直到实际消费者完成才回收。验证相同点数大小变化、同覆盖不同点数、低alpha多层和两集合交错；输出误差/阶段时间/设备与未测层，不只“FPS变高”。

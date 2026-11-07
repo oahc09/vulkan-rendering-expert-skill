@@ -193,3 +193,10 @@ v1.0.12仅按章节扩展既有Android Surface、媒体采样与颜色输出内�
 | Indirect能力回退 / firstInstance / DrawID | `../03_api_manual/03_command_buffer/indirect_commands.md#indirect-capability-fallback` |
 | Indirect count溢出/command ABI | `../03_api_manual/03_command_buffer/indirect_commands.md#indirect-capacity-safety` |
 | Mesh/task / meshlet / 传统fallback | `../03_api_manual/06_pipeline/mesh_shader.md#mesh-path-fallback` |
+
+
+## v1.0.15 定向知识
+
+- [Blend格式能力](06_pipeline/graphics_pipeline.md#blend-format-capability)
+- [透明附件精度](04_buffer_image_memory/image.md#transparent-target-precision)
+- [折射读写边界](07_rendering/render_target_layout.md#refraction-read-write-boundary)

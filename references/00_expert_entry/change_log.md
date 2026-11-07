@@ -1,5 +1,12 @@
 # Change Log
 
+## v1.0.15 — Mobile Transparency, Volumetrics & Gaussian Rendering（2026-11-07）
+
+- 基于已合v1.0.14（4a7ff82），增加C1透明合成/精度/WBOIT、C2单层折射/局部体积/天气、C3 GS数据/投影/排序/ID、C4覆盖预算与同质量A/B。
+- 在已有文件增加权威锚点、索引与定向路由，运行时知识净增0，保留八模块、模型/宿主/触发、最小启动、MIT及200文件预算。
+- 明确能力回退、OIT溢出、feedback边界、实际消费者同步、多View/generation退休与误差预算；公开参考/合成实验不冒充手机实测。
+- TRAN15新增20成对条件的注册/运行和原始实验证据留配对tests仓；各层独立计量，未执行项保留UNVERIFIED/BLOCKED，旧84题与原12题token基线不变。不自动合main或上架。
+
 ## v1.0.13 — Shader / Resource / GPU-driven Scale（2026-11-01）
 
 - 基于已合v1.0.12 skill d049afe / tests 9278d9b，五轴同版：Shader artifact/ABI/hot reload；pipeline/cache/build；streaming/budget；GPU-driven；LOD/Hi-Z/particles/multi-view。

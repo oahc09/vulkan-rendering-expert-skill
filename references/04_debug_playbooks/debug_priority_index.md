@@ -231,3 +231,8 @@ Image usage
 | 工具 / 主题 | Playbook |
 |---|---|
 | Validation Layer / RenderDoc / AGI / logcat 通用方法 | `tool_usage.md` |
+
+
+## v1.0.15 定向知识
+
+- [透明覆盖/排序/精度分流](06_performance_symptoms/bandwidth_fullscreen_cost.md#transparent-coverage-diagnostics)

@@ -25,7 +25,7 @@ v1.0.10 保留其与 v1.0.9 一致的最小启动契约，未改其他宿主配�
 | 字段 | 手填建议 |
 | --- | --- |
 | Title | Vulkan Rendering Expert Skill |
-| version | 1.0.14（必须与本次候选 `metadata.version` 相同） |
+| version | 1.0.15（必须与本次候选 `metadata.version` 相同） |
 | summary | Engineering-focused Vulkan guidance for rendering architecture, debugging, synchronization, Android integration, performance optimization, and source-level verification. |
 | tags | vulkan, rendering, android, graphics-engine, debugging, performance, synchronization |
 | use_cases | Diagnose black screens and validation errors; reason about synchronization and resource lifetimes; investigate Android surface/swapchain issues; assess performance bottlenecks; compare rendering architecture options. |
@@ -80,7 +80,7 @@ git status --short
 git rev-parse HEAD
 # 输出目录须已存在、位于 checkout 外；文件名不得已存在。
 python scripts/agensi_audit_and_pack.py . \
-  --out /absolute/path/outside-checkout/vulkan-rendering-expert-skill-1.0.14-agensi-free.zip
+  --out /absolute/path/outside-checkout/vulkan-rendering-expert-skill-1.0.15-agensi-free.zip
 ```
 
 把示例输出路径替换为自己的仓库外目录。保留 JSON 报告用于关联 commit、包内容和 SHA-256；
@@ -152,3 +152,10 @@ Static/Snapshot/Live/Device/真实宿主独立报告；无授权provider wrapper
 ## v1.0.14 候选边界
 
 基于 Skill main 8d62f861b4ead27699e2ff3d80a1a9f0e72a4968 与 tests main 9c4cba3a3985b709ccdbec182c79a6988bfc721e。197份知识文件不增不删，实际白名单200文件。VIS14新增20题不混入原12题token指标；最终候选SHA、确定性包与各层执行/未执行结果在配对tests仓。只交draft PR，不自动合并、上架或部署。
+
+
+## v1.0.15 候选边界
+
+前置已合入：Skill main `4a7ff82372648c4a9df91e76848cbc9c95de51a3`，配对 tests main 见 `docs/v1.0.15-sources.json`。透明、体积、Gaussian 与覆盖预算扩展现有知识路径；运行时净增0，白名单包≤200，保留最小启动及原宿主/模型配置。TRAN15新增20个成对条件，与旧84题哈希冻结和原12题token基线分开。
+
+CPU数值、Shader编译、指定软件Vulkan离屏实验、真实模型、真实宿主及Adreno/Mali画质/持续性能分别报告。指定实现通过不外推手机性能；未执行层明确未验证。最终SHA、源码/资产/产物hash、容差、原始输出和确定性包清单保存到配对tests仓。只交Draft PR，不自动合并、release、上架或部署。

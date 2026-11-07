@@ -147,3 +147,19 @@ Media3 `1.12.0-alpha01`（2026-10-21）加入Display P3标识与映射，只是A
 例：未含 jitter 的 current→previous pixel MV 转 UV 时除以对应定义尺寸，再加到 current UV；若 producer 为 previous→current 或 jittered 坐标，不可直接照搬。稠密 previous→current forward MV 必须反求对应位置/重采样或重新生成 backward MV，不能只在当前像素取负。用已知 1 pixel 平移和静止物体/移动相机分别验证符号与比例。[ENGINE]
 
 geometry MV=0 不说明光照静止；灯光、阴影和高亮变化需降低信任度。相机 previous matrix 不能替代动画物体 previous deformation。normal/depth confidence 与真实信号绑定同一 View/frame/generation；dump 元数据和原始资源一起检查。
+
+
+<a id="transparent-composition-contract"></a>
+## 透明合成合同（C1）
+
+适用：线性工作空间的表面、粒子与 Gaussian 合成；不把 alpha blend 当折射或任意互穿介质求解。先复用 [颜色合同](#color-output-contract)，输入记录 RGB/alpha 表示、transfer/primaries、opacity 或 transmittance、曝光、depth convention、sample coverage 与每 attachment 的 format/factors/op/write mask。[ENGINE]
+
+straight 输入应先解码到线性颜色，再乘 alpha 一次成为 premultiplied；若源已经 premultiplied，需遵守其编码域合同，不能把编码域乘法直接当线性乘法。source-over 的 `Cout = Csrc + (1-Asrc)*Cdst; Aout = Asrc + (1-Asrc)*Adst` 要求 Csrc 已预乘。对应 ADD、RGB ONE/ONE_MINUS_SRC_ALPHA、alpha ONE/ONE_MINUS_SRC_ALPHA。straight RGB 可用 SRC_ALPHA/ONE_MINUS_SRC_ALPHA，但 alpha 仍 ONE/ONE_MINUS_SRC_ALPHA，不能双乘。[SPEC][ENGINE]
+
+默认 back-to-front 排序、opaque depth test 开、透明 depth write 关，明确正/反 Z 和 tie-break stable ID。中心深度排序只是一条参考路线，交叉薄片未必有全局正确物体顺序。front-to-back 的另一种合同是 `C=0,T=1; C+=T*alpha*linearColor; T*=1-alpha; final=C+T*background; A=1-T`。若以 fixed blend 实现，必须根据目标存 opacity 还是 T 重新推导状态；不能复用上述 source-over 因子而不改顺序。sample coverage/MSAA alpha-to-coverage 不等同物理透明度，Android compositeAlpha 仍由颜色输出合同独立管理。
+
+能力见 [blend 能力](../03_api_manual/06_pipeline/graphics_pipeline.md#blend-format-capability)。输出同时记录颜色及 alpha/T 语义。跨 pass 的附件写→实际 shader 读、布局和每帧退休不可省略；资源回退必须等所有 GPU 消费者结束。算法回退为排序 blend；WBOIT 是近似，有界列表超限必须计数并确定性拒绝/退化，不能静默漏片段。
+
+验证先关光照/tone mapping：黑底红前蓝后、各 alpha=.5，线性结果 (.5,0,.25)，反序 (.25,0,.5)，alpha 均 .75；这是公式 oracle，不是 GPU 测量。CPU FP64 语义 oracle 与指定格式/舍入模拟分开，不声称逐位模拟硬件 blend。精度排查顺序：输入/SH/纹理量化及 cutoff → 表示/编码/因子 → 排序/遗漏 → 中间存储逐层量化/溢出 → tone mapping/输出/Android 合成。固定容差后测黑白底大量低 alpha、强 HDR、相交/近不透明层，FP16 不是零误差或免费优化。[ENGINE]
+
+[SPEC] [Blending](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/framebuffer.adoc)。

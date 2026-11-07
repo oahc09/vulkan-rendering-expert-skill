@@ -75,3 +75,9 @@ Android系统渲染设计案例（非真机事故报告）：[多输出代际](0
 - [GPU命令正确但独立count未同步](03_sync_layout/case_sync_layout.md#gpu-command-count-visibility)
 - [GPU-driven变慢不等于实现无价值](06_performance/case_performance.md#gpu-driven-fair-baseline)
 - [热更新与流式取消迟到污染新场景](07_engine_architecture/case_engine_architecture.md#shader-streaming-generation)
+
+
+## v1.0.15 定向知识
+
+- [合成覆盖实验（synthetic）](06_performance/case_performance.md#transparent-coverage-synthetic)
+- [多集合ID公开案例](02_descriptor_pipeline/case_descriptor_pipeline.md#gaussian-multi-set-id-case)

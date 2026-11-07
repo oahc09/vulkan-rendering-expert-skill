@@ -294,3 +294,34 @@ Previous Pass Output Image
 诊断图保存 motion 方向/单位、jitter、线性 depth、history weight/rejection、disocclusion、visibility、reflection hit/confidence；保留 raw noisy 和空间/时域后输出。静止与运动序列同时检验噪声、残影和细节损失；“增加模糊”不是反遮挡修复。[TOOL][ENGINE]
 
 组合顺序由具体 SDK 合同决定：信号→对应滤波→光照合成→所选 SR/FG→UI/显示；避免重复 TAA/锐化/曝光，见 [SR/FG 协调](mobile_neural_graphics.md#temporal-sdk-adapters)。首版精简 CPU/GLSL fixture 与运行状态在 tests 仓，不能把 shader 编译当画质通过。
+
+
+<a id="transparency-resolve"></a>
+## 透明 resolve：排序、WBOIT 与有界对照
+
+适用非折射透明近似；先读 [合成合同](../../02_core_mental_model/render_target_model.md#transparent-composition-contract) 和 [能力](../../03_api_manual/06_pipeline/graphics_pipeline.md#blend-format-capability)。输入是线性 straight color c、opacity a∈[0,1]、opaque depth 和有限正权重 w；输出为 premultiplied 颜色与 opacity，不能混作 transmittance。[ENGINE]
+
+可实现 WBOIT 基线（明确近似）：accum RGBA 清 0，revealage 单通道清 1；shader 写 `vec4(c*a*w,a*w)` 到 accum，用 ADD/ONE/ONE 累加。revealage 输出 a 到红通道，用 ADD、ZERO/ONE_MINUS_SRC_COLOR 得到 `R*=1-a`。该组合通常需要 independentBlend；不支持时两次几何 pass 或排序回退。opaque depth test 开、透明 depth write 关。选受支持 blend 格式，声明 w 的深度 convention、上下界与有限值处理，不能照搬未归一化深度权重。
+
+resolve：若 accum.a>epsilon，`mean=accum.rgb/accum.a`，否则 mean=0；`A=1-R; Cpremul=mean*A; out=Cpremul+R*background`。epsilon、权重与格式量化属于误差预算；accum 非有限、溢出或异常 R 必须诊断，不能单靠 clamp 掩盖。生产实现可调权重但先冻结 fixture 容差。高 opacity、深度交错与有色吸收容易偏差，WBOIT 不等于精确 source-over，不求解折射。
+
+附件写→fragment/compute resolve 实际读建立 barrier/layout；各 frame slot 独立累积目标，最后 resolve 完成后复用。小分辨率 bounded per-pixel list/depth peeling 可作精度对照：头/计数重置、全局 pool/每像素层数/resolve 上限、字节乘法与索引溢出均显式检查。超限计数+诊断视图，确定性拒绝质量档、预先声明 tail approximation 或回退；禁止静默丢片段后 PASS。interlock 不提供深度排序。
+
+验证：两层正反序 oracle、交叉/近不透明/低 alpha/HDR；同 fixture 比排序与 WBOIT 误差；故意超容量必须触发预定结果。CPU 模拟、shader 编译、实际 Vulkan 和手机画质/性能分别报告。
+
+[REF] [NVIDIA OIT sample](https://github.com/nvpro-samples/vk_order_independent_transparency)、[Kitware bounded deep framebuffer](https://www.kitware.com/better-transparency-with-vtk-and-webgpu/)（2026-11-06，WebGPU 参考，不是 Vulkan/Android 验收；其16层选择不是 Vulkan 上限）。
+
+<a id="local-volume-composite"></a>
+## 有界局部体积与软粒子合成（C2）
+
+适用均匀/程序密度局部雾，不承担完整多重散射或任意嵌套介质。输入：世界单位的 volume bounds、ray/opaque 线性深度、sigma_t≥0、源项、步长、最大 samples、最小 T、光照/曝光与 history metadata；输出积分颜色 C 和透射 T。[ENGINE]
+
+求 ray 与体积交区并截于 opaque depth。每段实际长度 ds（含末段）用 `Tseg=exp(-sigma_t*ds)`，在局部常量源颜色 S 的近似下 `C+=T*(1-Tseg)*S; T*=Tseg`。S 是明确的源函数/发光散射近似，不冒称完整物理光照；零消光与其他源模型需用对应极限。sigma_t 的单位必须与 ds 相容。步长减半应趋近同一积分，不把固定 alpha 重复两倍。
+
+最大步数不足时声明采样降档/失败，不悄悄截短 ray。T 早停需颜色误差上界，例如残余背景贡献由 T×背景亮度界约束，高亮背景不能无条件删尾。合成背景用 C+T*B；表面在雾前/后/内部时分别积分对应深度段，单个雾贡献不重复用于前景与背景。互穿体积/透明面需分段或明确近似，万能“先雾后透明”不成立。
+
+低分辨率雾+depth-guided upsample 作为条件质量档，测薄前景漏光和边缘。opaque depth 写→采样、积分目标写→合成读同步；history 复用 [时域工作流](#temporal-quality-workflow)，逐 View/generation 持有和退休。不存在可靠运动数据时降低 history 信任或关闭，不伪造零 MV。
+
+雨雪复用既有粒子模拟。soft intersection 在同一线性空间比较 scene depth 与 particle depth，用声明软化距离衰减 opacity，再按 straight/premultiplied 合同输出；与 alpha-cutout、sample coverage 分开。记录 near/far 尺度、排序与亚像素闪烁；软交界不是解决所有透明互遮挡。验证步长/深度反 Z、前后雾层、移动粒子/相机突变、低分辨率轮廓与持续序列。
+
+[REF] [GPU Gems 39 Volume Rendering](https://developer.nvidia.com/gpugems/gpugems/part-vi-beyond-triangles/chapter-39-volume-rendering-techniques)（积分背景，不是近期移动测量）。

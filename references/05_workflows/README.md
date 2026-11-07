@@ -157,3 +157,6 @@
 ```
 
 这 9 个 workflow 覆盖 Vulkan 工程最常见的正向开发任务。真实仓库分析使用 `01_renderer_setup/project_diagnosis.md`，负责把通用模型映射到实际文件 / 类 / 函数并输出 coding-agent handoff。
+
+
+v1.0.15 透明、体积与Gaussian增量见 [workflow_index.md](workflow_index.md) 的定向知识，仅按任务读取，不新增启动依赖。

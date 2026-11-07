@@ -42,3 +42,8 @@ vulkan-rendering-expert-skill/
 ## 当前状态
 
 这是结构化初版，可直接放入 skill 仓库继续迭代。
+
+
+## v1.0.15 定向知识
+
+- [v1.0.15透明/体积/GS按需路由](07_integration_pack/task_routing_rules.md#transparency-gaussian-topics)

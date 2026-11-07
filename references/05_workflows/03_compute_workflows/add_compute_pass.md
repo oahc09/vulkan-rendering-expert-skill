@@ -266,3 +266,52 @@ opaque 可以走快速路径。alpha-cutout 需以相同 UV/texture/cutoff 检�
 对照固定内容、ray 工作负载、构建偏好和质量；分别统计 OMM 构建、内存、query 与更新成本。无设备时状态 UNSUPPORTED/UNVERIFIED，不外推 Arm Mali G2 的公开数字。[VENDOR][ENGINE]
 
 依据：[Query traversal](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/raytraversal.adoc)、[KHR OMM](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/appendices/VK_KHR_opacity_micromap.adoc)、[EXT OMM](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/appendices/VK_EXT_opacity_micromap.adoc)。精简实验与真实编译/GPU结果存 tests 仓；CPU 状态机不是 AS GPU 执行。
+
+
+<a id="gaussian-preproject-sort"></a>
+## Gaussian 数据、投影与排序合同（C3）
+
+适用原生 Vulkan raster 3DGS 与 mesh 混合；训练/4D重建不是本链职责。复用 GPU Scene、资源驻留、排序与 instance/indirect 管理，不默认全 Compute、Mesh Shader、RT、interlock 或独立 compute queue。输入 profile、资源 hash/许可、view/instance transform/time/generation；输出可见列表、投影椭圆、排序键、稳定 ID 与诊断。[ENGINE]
+
+### 导入 profile 必须明确
+
+| 字段 | 必须验证/规范化 |
+|---|---|
+| position | 有限 xyz、坐标轴/手性、世界单位、局部或世界空间 |
+| scale/covariance | 线性或 log scale；covariance 表示与有效性；指数溢出/非有限拒绝 |
+| rotation | quaternion 的 xyzw/wxyz 与旋转方向；有限、非零范数后归一化 |
+| opacity | 已归一化概率或 logit；显式稳定 sigmoid，仅转换一次；范围检查 |
+| SH/color | degree、系数排列/基底、DC offset/scale、view direction 空间、线性或编码颜色 |
+| stable ID | (setID,localID,generation)，不以临时 compact/sort 索引作持久身份 |
+
+PLY 只是容器，字段同名不保证语义。最低自有合成 profile 可声明 xyz 世界单位、scale_x/y/z 为正线性标准差、qx/qy/qz/qw 为 xyzw、opacity 为[0,1]、red/green/blue 为线性浮点 RGB（SH degree 0、直接颜色，不套训练 SH DC 公式）。解析 header 类型/endianness/计数、字节长度、索引容量；未知 profile 拒绝或显式要求转换，不猜测 log/logit/SH。另一个训练导出 profile 必须逐项写转换，不能沿用这个例子。SPZ/glTF/4D 只作条件适配。训练 radiance 通常已含光照，没有可靠 normal/BRDF 不重复加 PBR 或承诺物理重照明。
+
+### 投影和绘制
+
+验证→规范化→上传/驻留→视空间深度/covariance→投影 ellipse→保守可见列表/keys→稳定排序→instanced quad raster blend→mesh/背景合成→诊断/退休。小规模 CPU 排序是正确性和缺功能回退，不保证大规模更快。[ENGINE]
+
+正 scale 与归一化 rotation 可构造 `Sigma=R diag(s²) Rᵀ`，经实例线性变换 A 后 `A Sigma Aᵀ`，再到 view。选择正定或允许半正定的 profile 并验证有限性/对称性/eigenvalue；退化不能盲目求逆。透视局部近似 `Sigma2=J Sigma_view Jᵀ`，J 是当前相机实际投影 Jacobian，含 viewport 缩放/Y方向；条件不良时拒绝/受控正则化并计数，不传播 NaN。fragment 以相应 inverse conic 计算 Gaussian 权重和 opacity，按 [合成合同](../../02_core_mental_model/render_target_model.md#transparent-composition-contract) 输出预乘线性色。
+
+near-plane/极小 z/跨 near 的大 covariance 不适合无条件中心 Jacobian；采用明确保守 clipping/特殊投影路径或拒绝该质量档并诊断。不能只因中心在屏外剔除仍覆盖屏内的 ellipse，也不能任意缩小全部 splats。有限 sigma 截断与 alpha cutoff 是质量选择；计算 bbox 后裁到 viewport，检查尺寸/整数乘法/分配上限。截断、近裁面策略和超大点预算应冻结后用极端视点验证。
+
+屏幕 covariance 加 AA filter 时，opacity 补偿需配对验证，例如在选定二维 Gaussian 积分模型下用 sqrt(det(old)/det(new)) 保持积分；它不是所有截断/采样器的普适保证。分别记录 projected-size buckets、clipped quad area、ellipse area、tile coverage，不能互换或当硬件 fragment invocations。[REF][ENGINE]
+
+### 顺序、身份与复用
+
+默认按声明的 view-space 深度 back-to-front，与相同深度稳定 ID tie-break；多集合一起排序或使用明确近似算法，逐 set 独立画完通常无法解决跨集合交错。Gaussian 中心深度只近似连续密度次序。mesh opaque depth 可测试遮挡，但中心/阈值 depth proxy 不等于不透明硬表面，不能用任意 splat depth 写成 opaque Hi-Z 挡住透射内容。
+
+| 状态变化 | 缓存处理 |
+|---|---|
+| camera/view/projection/viewport | 重算受影响投影/可见列表；排序键变化则重排 |
+| instance transform、动画时间、Gaussian position/covariance/opacity | 检查投影、可见性和顺序相关字段；动态场景不能因相机不动就复用 |
+| LOD/residency/visible set/index construction | 使相关列表/ID映射/keys失效 |
+| resource/set generation、第二View、独立实例 | key逐View/instance/generation绑定；旧异步结果不发布到新代 |
+| 完整输入与顺序证明均不变 | 可复用；误差容忍复用另列阈值/失效证书，不固定N帧无条件跳排 |
+
+颜色混合与 picked ID/material/depth proxy 必须声明一致的选择策略，例如选“最靠前且 alpha 超阈值的贡献者”并用其完整 tuple 查询对应材质/深度；不要声称混合色只属于一个物体。用专门可验证的 selection pass/存储算法实现，整数 attachment 没有自动 alpha blend 选择语义。多集合局部 ID 必须映射成全局身份，资源卸载/重载防止旧 ID 指向新数据。
+
+同步另读 [消费者依赖](compute_to_graphics_sync.md#gaussian-consumer-dependencies)，全部 scratch/list/属性/绘制/pick 消费完成才复用/退休。单 Surface 销毁只废弃其 view/history/sort，不能无证据重建共享 device。
+
+验证原创合成数据及显式 PLY profile、未知编码拒绝、非有限/非正尺度、near-plane/屏外中心但屏内 footprint、多集合交错材质/ID、相机静止而点移动、第二View变化、generation重载与容量超限。颜色/透射误差和移动相机 pop 一起测，不以单帧截图或 CPU oracle 当 Vulkan 运行。
+
+[REF] [Rasterization deep dive](https://nvpro-samples.github.io/vk_gaussian_splatting/deep-dives/rasterization_of_3d_gaussian_splatting/)、[NVIDIA 2026.2.9](https://github.com/nvpro-samples/vk_gaussian_splatting/blob/2026.2.9/README.md)、[Mobile-4DGS paper](https://arxiv.org/abs/2610.05289)。桌面 Vulkan / 移动 WebGL 的算法证据不证明 Android Vulkan 后端；Mobile-4DGS 排序复用前提不能泛化到任意 PLY。

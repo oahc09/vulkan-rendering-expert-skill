@@ -247,3 +247,17 @@ Linear buffer 或 buffer 资源不经过 image layout 机制。
 3. 同一 image 不同 subresource range 同时处于不同 layout 的合法性。
 4. Swapchain image 在 acquire/present 时的隐式 layout 假设。
 5. 驱动对 `GENERAL` layout 与专用 layout 的性能差异。
+
+
+<a id="refraction-read-write-boundary"></a>
+## 折射 scene-color 读写边界
+
+适用单层屏幕空间折射；输入为 opaque 完成后的颜色/深度 snapshot，输出为另一附件。默认分离 subresource 或 ping-pong，scene color 必须声明仅 opaque 还是含此前透明。GENERAL 只是布局，不使同一 subresource 的采样/附件写 feedback 自动合法，任意 barrier 也不能修复同一 draw 内未定义的依赖。[SPEC][ENGINE]
+
+opaque COLOR_ATTACHMENT_OUTPUT/COLOR_ATTACHMENT_WRITE → FRAGMENT_SHADER/SHADER_SAMPLED_READ；opaque EARLY/LATE_FRAGMENT_TESTS/DEPTH_STENCIL_ATTACHMENT_WRITE → 实际 shader 读取，限定正确 range/aspect。若经 copy/resolve 生成 snapshot，要包含真实 transfer/resolve producer/consumer，不以直接采样 barrier 替代。MSAA depth 的采样/resolve 策略、正反 Z 与线性化一致。不同 VkQueue 用 semaphore，exclusive 跨 queue family 才按路径做 ownership transfer；same family 不因此免同步。
+
+可选 `VK_EXT_attachment_feedback_loop_layout` 路径必须逐项证明 extension/attachmentFeedbackLoopLayout feature、feedback-loop image usage 与实际 attachment/sampled 用途、pipeline feedback 状态、ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT layout 和合法访问/同步范围；扩展允许的 feedback 不等于任意屏幕邻域读写具有稳定 snapshot。需要稳定背景时仍优先独立输入。snapshot/输出持有到所有读写完成，尺寸/Surface generation 各自失效。
+
+回退：复制/分离 pass，或关闭屏幕折射并使用已声明 probe/材质近似。验证独立读写成功与同 subresource 故意错误的诊断、屏外样本和 resize 退休；API 合法性与折射画质分别判定。
+
+[SPEC] [Feedback loop extension](https://docs.vulkan.org/refpages/latest/refpages/source/VK_EXT_attachment_feedback_loop_layout.html)、[Synchronization](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc)。

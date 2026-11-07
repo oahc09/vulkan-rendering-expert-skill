@@ -296,3 +296,19 @@ CPU Pixel Data
 3. `samplerAnisotropy` feature 与 `maxAnisotropy` 的实际限制。
 4. Descriptor indexing / bindless texture 在 Vulkan 1.2+ 中的启用与使用。
 5. Android 特定设备对 `OPTIMAL` tiling 与 `LINEAR` tiling 的采样限制差异。
+
+
+<a id="screen-space-refraction"></a>
+## 单层屏幕空间水/玻璃参考链
+
+适用单层或主导折射面；不是全流体、完整焦散或精确多层光学。输入 opaque scene color/depth snapshot、surface normal/space、折射参数、厚度/吸收单位、反射来源、颜色/曝光合同；输出到独立 target，之后按明示顺序处理透明/UI。[ENGINE]
+
+链：opaque 完成 → 分离可采样颜色/深度 → 水/玻璃表面 → 有界 screen-space offset/trace → 吸收与反射 → 另一附件。遵守 [读写边界](../../03_api_manual/07_rendering/render_target_layout.md#refraction-read-write-boundary)，含实际颜色/深度 producer barrier、sample count 与 snapshot 生命周期；GENERAL 不解决 feedback。
+
+厚度用有适用条件的几何 front/back 或同坐标系线性深度估计，不能直接用非线性 depth 相减；声明正/反 Z、near/far、投影与世界长度转换。缺背面/薄物体时使用声明的常量厚度/材质近似，不制造负厚度。Beer–Lambert 吸收 `T=exp(-sigma_a*distance)` 与 Fresnel 反射责任分开；避免透射颜色已经衰减后再被错误 alpha 重复衰减。若 shader 已算出含背景的最终颜色，不再把该颜色当未合成 source 重复 source-over。
+
+采样越屏、UV命中前景/深度不一致、无厚度或多折射层时，选择未偏移背景/probe/禁用折射等显式回退并输出 confidence。opaque-only snapshot 不含其他透明内容，UV 偏移不是精确光学。反射复用既有 SSR/probe/query 条件路径，不抬高最低功能门槛。
+
+验证固定水/玻璃薄片、屏外/遮挡边缘、原始与线性 depth 对照、多个透明层和 resize；先验颜色/厚度容差及相机序列，未运行 GPU/Android 不宣称视觉通过。天气软交界与局部雾见 [体积合成](add_postprocess_pass.md#local-volume-composite)。
+
+[SPEC] [Framebuffer](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/framebuffer.adoc)；[REF] [Volume absorption background](https://developer.nvidia.com/gpugems/gpugems/part-vi-beyond-triangles/chapter-39-volume-rendering-techniques)。

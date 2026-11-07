@@ -1045,3 +1045,12 @@ CPU单物体draw与GPU compact相比很快，但合理CPU instancing反而更快
 参考：[Arm OMM](https://developer.arm.com/community/arm-community-blogs/b/mobile-graphics-and-gaming-blog/posts/reducing-ray-traced-shadow-costs-for-foliage-with-omm-moku-results-on-arm-mali-g2)、[AMD BVH](https://gpuopen.com/learn/how-tetrahedral-cages-significantly-reduce-bvh-memory-usage/)、[NVRHI #165](https://github.com/NVIDIA-RTX/NVRHI/issues/165)。原始日期/更新日期/本轮核验状态在配对 tests ledger；网页更新不是功能首次发布。
 
 本地 Hybrid Quality Lab 设计：简化庭院、动画物体、alpha-cutout、反射表面、屏外投影者、移动灯光与第二 View；固定静止/平移/cut/曝光/scale/pause/销毁恢复序列。[质量协议](../../05_workflows/07_optimization/optimize_frame_time.md#quality-budget-tiers) 将 CPU 状态、Shader 编译、真实 Vulkan、Live 模型、Android 图像/持续热/功耗分开。缺设备/模型记录 BLOCKED/UNSUPPORTED，不填虚构 PASS。
+
+
+<a id="transparent-coverage-synthetic"></a>
+## Synthetic：点数下降但覆盖与误差上升
+
+这是设计的可复现实验，不是已发生的手机事故或性能结果。[ENGINE]
+输入两份同场景合成 GS：A 多个小点，B 点数更少但投影更大；固定 camera/曝光/质量，输出 visible count、clipped quad/ellipse area、layer histogram、projection/sort/raster/resolve 时间和线性颜色/T误差。另设大量低 alpha 层比较 RGBA8/受支持FP16，分别模拟输入量化和逐层存储。
+
+预期判断不是固定加速比例：B 可能排序更便宜而 raster 更贵；FP16 改善某些误差但不是零误差。若合并损伤前景/轮廓/移动视差则拒绝该LOD；远背景低视差可候选但必须多视点验证。能力、同步、退休与回退依 [覆盖预算](../../05_workflows/07_optimization/optimize_mobile_bandwidth.md#coverage-budget)。CPU oracle、shader 编译、Vulkan 与移动设备各自记录实际状态，未运行不称 PASS。

@@ -124,3 +124,10 @@ v1.0.12 增量覆盖Android多Engine/多Surface、Camera/MediaCodec→AHB帧leas
 ## v1.0.14: Mobile Hybrid Lighting & Temporal Quality
 
 Baseline shadows and reflection fallback; optional query-only AS engineering; temporal input/history contracts and non-neural filtering; evidence-based quality tiers. Keeps eight modules, zero new runtime knowledge files and the 200-file package ceiling. Paired tests register the frozen previous64 plus VIS14-01..20. Static, shader, software Vulkan, Live, host and Android evidence are independent; no unmeasured performance or power claim. See [conditional topic routing](references/07_integration_pack/task_routing_rules.md#hybrid-quality-topics).
+
+
+## v1.0.15：移动端透明、体积与 3DGS 渲染
+
+新增透明alpha/精度合同、条件WBOIT与溢出回退、单层水玻璃折射、有界局部雾/软粒子、Gaussian数据/保守投影/排序缓存/多集合ID，以及屏幕覆盖和同质量持续A/B。原有资源、光照与history路径保持复用，八模块和最小启动不变，运行时知识文件净增0，白名单包上限200。
+
+[按需主题路由](references/07_integration_pack/task_routing_rules.md#transparency-gaussian-topics)。TRAN15新增20题和实验源码/原始运行记录位于配对tests仓；Static、host/shader、Vulkan、Live/Host、移动画质/性能分别报告，文档不代表设备通过或功耗改善。
