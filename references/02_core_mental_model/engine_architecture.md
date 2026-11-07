@@ -708,3 +708,25 @@ Vulkan Mapping：A → 状态写入 `VkGraphicsPipelineCreateInfo` 各状态结�
 - 持续性能同时看画质、热状态、帧耗时与延迟；生成帧不是逻辑/真实渲染帧。[ENGINE]
 
 只读对应 [移动主题](../07_integration_pack/task_routing_rules.md#mobile-topics)，架构决定仍按既有D1–D6与Evidence Map输出。
+
+<a id="hybrid-lighting-decisions"></a>
+## 移动混合光照决策
+
+本段为架构权威；最低设备集不因 v1.0.14 提高。先需求→约束→Candidate→Trade-off→Decision。[ENGINE]
+
+| 档位 | 路径 | 进入 / 退出条件 |
+|---|---|---|
+| Baseline | Shadow Map / CSM、环境探针、可选既有 SSR | 所有项目最低支持设备；始终保留 |
+| Hybrid | 指定阴影或单次反射用 Ray Query，传统时空滤波 | 实测启用能力、驻留、内存和成本/质量均满足，否则回退 |
+| Enhanced | 独立验证的 OMM、更多采样或既有 upscaler | 不是品牌白名单，分别评估内容适用性和持续热预算 |
+
+三种集合各有 owner、生成规则和失效条件：
+- 主视图集合：相机 frustum / LOD / Hi-Z，只用于该 View。
+- 阴影投射集合：光源及受光区域扩展范围内的遮挡者；屏外投影者仍保留。
+- 反射/AS 集合：ray 范围、可反射区域及明确的距离/代理策略，不能只复用相机可见列表。
+
+各集合记录 mesh/material/animation/LOD/resource generation 与消费者引用。共享不可变 BLAS 不共享 camera-specific history；销毁一个 Engine 不回收其他 TLAS 仍引用的资源。投影者/反射代理 LOD 是可观察画质策略，不是无损优化。[ENGINE]
+
+光照在 v1.0.12 线性工作颜色域内计算。普通 alpha blend、alpha-cutout 与 opaque 分开，双面/几何法线/着色法线和粗糙度语义先固定。SSR 的屏外/遮挡失配通过 confidence 回退探针，不制造缺失信息。Query 阴影和单次反射不是完整 GI。[ENGINE]
+
+实现依赖：[输入合同](render_target_model.md#lighting-temporal-data-contract) → [阴影](../05_workflows/02_render_pass_effects/add_depth_pass.md#stable-shadow-workflow) → [可选查询](../03_api_manual/06_pipeline/compute_pipeline.md#ray-query-capability-contract) → [时域](../05_workflows/02_render_pass_effects/add_postprocess_pass.md#temporal-quality-workflow)。保留现有 ResourceManager、allocator、retirement 和 GPU Scene；重新评估条件是实际瓶颈或质量回归，不为新版本重建引擎。

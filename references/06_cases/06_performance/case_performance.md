@@ -1032,3 +1032,16 @@ CPU单物体draw与GPU compact相比很快，但合理CPU instancing反而更快
 ### 12. 关联工作流
 
 [权威合同](../../05_workflows/07_optimization/optimize_frame_time.md#scaled-rendering-ab)。
+
+<a id="hybrid-quality-evidence"></a>
+## 移动混合画质证据案例边界
+
+本段是公开资料的工程解读与待验证设计，不是本地事故复现或性能实测。[VENDOR][ENGINE]
+
+- Arm 2026-10-22 的 Moku/Mali G2 foliage OMM 文章强调 alpha-masked 内容及匹配负载。它支持设计 OMM A/B，但不能推导所有 RT 手机、query-only 路径或透明混合均加速。
+- AMD 2026-09-17 tetrahedral cage 文章讨论动态 BVH 内存/更新成本；桌面负载不外推手机。本版先做 conventional rebuild/update、静态共享和动画 LOD，不移植 cage。
+- NVRHI #165 是 query-only 被引入 SBT/RT stage 的公开问题报告，不能当本地复现或已修复事实。合法性由固定 Spec/Registry 判断。
+
+参考：[Arm OMM](https://developer.arm.com/community/arm-community-blogs/b/mobile-graphics-and-gaming-blog/posts/reducing-ray-traced-shadow-costs-for-foliage-with-omm-moku-results-on-arm-mali-g2)、[AMD BVH](https://gpuopen.com/learn/how-tetrahedral-cages-significantly-reduce-bvh-memory-usage/)、[NVRHI #165](https://github.com/NVIDIA-RTX/NVRHI/issues/165)。原始日期/更新日期/本轮核验状态在配对 tests ledger；网页更新不是功能首次发布。
+
+本地 Hybrid Quality Lab 设计：简化庭院、动画物体、alpha-cutout、反射表面、屏外投影者、移动灯光与第二 View；固定静止/平移/cut/曝光/scale/pause/销毁恢复序列。[质量协议](../../05_workflows/07_optimization/optimize_frame_time.md#quality-budget-tiers) 将 CPU 状态、Shader 编译、真实 Vulkan、Live 模型、Android 图像/持续热/功耗分开。缺设备/模型记录 BLOCKED/UNSUPPORTED，不填虚构 PASS。

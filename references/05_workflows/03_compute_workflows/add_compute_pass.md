@@ -238,3 +238,31 @@ LOD 决策使用 view-space projected size/error 与上下不同的阈值形成 
 - `../../04_debug_playbooks/04_resource_sync/compute_no_output.md`
 - `../../04_debug_playbooks/04_resource_sync/compute_graphics_sync_error.md`
 - `../../04_debug_playbooks/03_validation_errors/descriptor_pipeline_layout_errors.md`
+
+<a id="hybrid-ray-query-workflow"></a>
+## 可选混合 Ray Query 工作流
+
+先读 [独立能力](../../03_api_manual/06_pipeline/compute_pipeline.md#ray-query-capability-contract)、[AS 资源](../../03_api_manual/04_buffer_image_memory/memory_allocation.md#acceleration-structure-resource-contract)、[依赖表](../../03_api_manual/08_synchronization/pipeline_barrier.md#as-build-query-dependencies)。复用现有 Pipeline/Descriptor/Queue/ResourceManager。[ENGINE]
+
+链路：驻留 geometry / skinning→BLAS→barrier→TLAS→barrier→绑定 AS descriptor 与必要材质数据→普通 compute dispatch 或 graphics fragment query→明确语义的结果→时域/合成→跨帧退休。缺能力时先选 shadow-map/probe，不能先创建非法 pipeline 再捕获错误当回退。[SPEC][ENGINE]
+
+| 信号 | 查询/输出合同 | 失败/缺失处理 |
+|---|---|---|
+| 阴影 visibility | 在合法内容条件下 terminate-on-first-hit；区分 blocked/visible 与 radiance | 合法 shadow-map 或明确保守策略 |
+| 单次反射 radiance | 遍历并确认合法 candidate，最终 committed 最近命中；返回 hit distance/normal/confidence | miss 或无驻留材质回退 probe；非完整 GI |
+| SSR | 屏幕空间深度厚度与命中置信度 | 屏外/遮挡不匹配回退 probe，不补造数据 |
+
+opaque 可以走快速路径。alpha-cutout 需以相同 UV/texture/cutoff 检查 candidate 并确认或继续；二值 cutout 不能当普通 alpha blending，反射不能用“第一个 candidate”替代最近有效命中。ray origin offset、tMin/tMax、法线空间与 transform 由尺度决定；用接触、薄片和大小场景测试自交/漏光。[ENGINE]
+
+<a id="opacity-micromap-fallback"></a>
+## OMM 条件增强与失效
+
+能力矩阵分别记录 `VK_KHR_opacity_micromap` 与 `VK_EXT_opacity_micromap` 的 Registry 依赖、feature/property、对象/命令/结构/shader 控制。KHR/EXT 不是可随意替换后缀的 ABI。在本次固定 Registry，EXT 依赖 AS + (synchronization2 或 Vulkan1.3)，使用 VkMicromapEXT 及专用 build/copy/query；KHR 依赖 AS + VK_KHR_device_address_commands，以 VkAccelerationStructureKHR 和 AS 命令承载 micromap。KHR 不包含 EXT 的 hostMicromapCommands。query-only 仅启用 KHR 时，shader 需 SPV_KHR_opacity_micromap 的 OpacityMicromapIdKHR execution mode 且 specialization operand=true；启用 EXT 时 micromap 数据总被消费，两者同时启用遵循 EXT。实际分支未核对就关闭 OMM，保留材质 candidate alpha test。[SPEC][ENGINE]
+
+关闭 OMM 必须真正禁用其遍历：在原 build 允许 `VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_DISABLE_OPACITY_MICROMAPS_BIT_KHR`（对应 EXT 路径按其符号核对）时，用 instance 的 `VK_GEOMETRY_INSTANCE_DISABLE_OPACITY_MICROMAPS_BIT_KHR`，否则重建无 OMM 的 AS，并保证 cutout 使用 non-opaque candidate 路径。不能仅省略 KHR shader execution mode 后遍历仍带 OMM 的 AS；该路径行为未定义，旧 opaque/transparent 分类也不能靠后续 alpha test 补救。[SPEC]
+
+烘焙 key 至少含 mesh/index/UV/alpha texture/cutoff/材质表达与版本。静态 alpha-mask 适合研究；alpha/UV/拓扑改变使 key 失效，须重建或回退。unknown-opacity 必须走对应 query/material 判定，不能一律当透明，OMM 不是通用半透明混合/折射算法。baker 来源、许可与输入 hash 保留，不打包厂商引擎分支。[ENGINE]
+
+对照固定内容、ray 工作负载、构建偏好和质量；分别统计 OMM 构建、内存、query 与更新成本。无设备时状态 UNSUPPORTED/UNVERIFIED，不外推 Arm Mali G2 的公开数字。[VENDOR][ENGINE]
+
+依据：[Query traversal](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/raytraversal.adoc)、[KHR OMM](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/appendices/VK_KHR_opacity_micromap.adoc)、[EXT OMM](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/appendices/VK_EXT_opacity_micromap.adoc)。精简实验与真实编译/GPU结果存 tests 仓；CPU 状态机不是 AS GPU 执行。

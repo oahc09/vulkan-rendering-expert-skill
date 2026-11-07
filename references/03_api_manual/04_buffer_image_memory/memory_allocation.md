@@ -259,3 +259,21 @@ VkImage / VkBuffer
 2. Dedicated allocation 在目标 GPU 上的收益。
 3. `LAZILY_ALLOCATED` 在目标设备上的支持情况。
 4. Non-coherent memory 的 alignment 和 flush 规则。
+
+<a id="acceleration-structure-resource-contract"></a>
+## Acceleration Structure 资源与退休合同
+
+复用 allocator、generation、驻留/取消与完成点，不创建第二套资源管理器。[ENGINE]
+
+1. 固定 geometry/index/instance 格式、范围、地址、owner 和 generation；调用 `vkGetAccelerationStructureBuildSizesKHR`，分别预算 AS、buildScratchSize、updateScratchSize、几何输入及 compaction 新旧并存峰值。[SPEC]
+2. AS backing buffer 使用 `ACCELERATION_STRUCTURE_STORAGE`；build input 使用 `ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY` 与需要的 `SHADER_DEVICE_ADDRESS`，scratch 使用 `STORAGE_BUFFER` / device address。按实际 device-address 分配路径启用 allocation 标志，不能把所有 AS backing buffer 的 buffer address 与 AS address 混为一谈。[SPEC]
+3. `vkCreateAccelerationStructureKHR` 后取得 AS device address；scratch **地址**按 `minAccelerationStructureScratchOffsetAlignment` 对齐，整个所需范围有效，不能只对齐 buffer offset。并行 build 的 scratch 区间不得重叠；串行复用必须建立 AS build 读写依赖。[SPEC]
+4. 一次 `vkCmdBuildAccelerationStructuresKHR` 内多项 build 不隐含排序。BLAS→依赖该 BLAS 的 TLAS 分开并显式同步；TLAS instance buffer 与引用 BLAS 分别有效。[SPEC]
+5. UPDATE 要求原 build 的 ALLOW_UPDATE 与规范约束。刚体变化常只更新 TLAS instance transform；几何变化须检查 geometry type/count、primitive count、格式、flags、active/inactive 与 topology 等完整约束，不满足就 BUILD。不把允许 update 等同于一定快。[SPEC][ENGINE]
+6. compaction 仅对允许压缩的 build 查询大小；build→property query→读结果→新目标分配→compact copy→依赖→发布新 BLAS 地址→更新 TLAS。旧 AS/descriptor/TLAS 保留到全部 in-flight 引用完成；压缩不是原地改地址。[SPEC]
+7. build 完成后按规范释放/复用输入和 scratch；query hit-shading 仍读的顶点/索引/材质/纹理单独保持驻留。活跃 TLAS 仍引用的 BLAS 不因主相机剔除、取消加载或单个 Engine 退出而销毁。[SPEC][ENGINE]
+8. 新代构建失败/预算超限时不发布半成品；保留旧合法代或切换基础档。完整退休跟踪所有 queue 的消费者，CPU 回调返回不是 GPU 完成。[ENGINE]
+
+[同步表](../08_synchronization/pipeline_barrier.md#as-build-query-dependencies)。最小验证含 scratch 重叠拒绝、无 ALLOW_UPDATE 拒绝、拓扑变化 rebuild、compaction 后 pending TLAS 保留旧地址，以及共享 BLAS 的两个 View 先后销毁。[ENGINE]
+
+依据：[固定 AS 规范](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/accelstructures.adoc)。上限/更新约束随选用扩展变化，以上清单不是完整 VUID 替代品。

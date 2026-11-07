@@ -254,3 +254,9 @@ Debug Playbook §3 全量决策表化（18 个 playbook 文件 / 24 个小节）
 
 - `MODULE_SUMMARY.md`：00_expert_entry 9 → 10、02_core_mental_model 14 → 15、07_integration_pack 8 → 9。
 - `00_expert_entry/README.md`、`02_core_mental_model/README.md` 文件列表同步。
+
+## v1.0.14（2026-11-07）：Mobile Hybrid Lighting & Temporal Quality
+
+新增基础光照/阴影/反射回退、独立 query-only 能力、AS 生命周期/同步、alpha/OMM 条件边界、时域语义/失效/非神经滤波与画质预算分档。修正 modern_patterns 的 timeline WSI 示例、过宽版本保证、add_depth_pass 的普通 depth present 与阶段/layout 说明，以及 compute 卡片命中的 subpass 旧说法。
+
+八模块、197个知识文件、200文件白名单、硬规则、启动/宿主配置保持；新权威锚点按需读取。配对 tests 保留旧64并新增20个VIS14题及精简实验。文档/静态/编译/软件Vulkan与真实模型/宿主/Android/OMM/功耗分开，不预宣称全能力验收。

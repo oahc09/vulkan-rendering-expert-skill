@@ -25,7 +25,7 @@ v1.0.10 保留其与 v1.0.9 一致的最小启动契约，未改其他宿主配�
 | 字段 | 手填建议 |
 | --- | --- |
 | Title | Vulkan Rendering Expert Skill |
-| version | 1.0.12（必须与本次候选 `metadata.version` 相同） |
+| version | 1.0.14（必须与本次候选 `metadata.version` 相同） |
 | summary | Engineering-focused Vulkan guidance for rendering architecture, debugging, synchronization, Android integration, performance optimization, and source-level verification. |
 | tags | vulkan, rendering, android, graphics-engine, debugging, performance, synchronization |
 | use_cases | Diagnose black screens and validation errors; reason about synchronization and resource lifetimes; investigate Android surface/swapchain issues; assess performance bottlenecks; compare rendering architecture options. |
@@ -80,7 +80,7 @@ git status --short
 git rev-parse HEAD
 # 输出目录须已存在、位于 checkout 外；文件名不得已存在。
 python scripts/agensi_audit_and_pack.py . \
-  --out /absolute/path/outside-checkout/vulkan-rendering-expert-skill-1.0.12-agensi-free.zip
+  --out /absolute/path/outside-checkout/vulkan-rendering-expert-skill-1.0.14-agensi-free.zip
 ```
 
 把示例输出路径替换为自己的仓库外目录。保留 JSON 报告用于关联 commit、包内容和 SHA-256；
@@ -147,3 +147,8 @@ Static/Snapshot/Live/Device/真实宿主独立报告；无授权provider wrapper
 
 继承已合v1.0.11 main `1f85b8b752e7008c73bc3af9a3c1f56969680bef` 与tests `3a8ea8b0f2f848d7b5380bc334633786c01e9248`。运行时知识净增0，实际白名单不超过200文件；不删旧知识换预算。源码文件数与包文件数分别计数。
 原28题冻结，新增12 SYS题总40；原12题token基线不变。Static/Snapshot/Live/Device/宿主分开，Media Surface Lab隔离模拟和CPU颜色公式不等于Android编译、设备导入或面板HDR正确。最终SHA/完整manifest/hash及未运行矩阵在配对tests仓。只交DraftPR，不自动上架/发布/合并。
+
+
+## v1.0.14 候选边界
+
+基于 Skill main 8d62f861b4ead27699e2ff3d80a1a9f0e72a4968 与 tests main 9c4cba3a3985b709ccdbec182c79a6988bfc721e。197份知识文件不增不删，实际白名单200文件。VIS14新增20题不混入原12题token指标；最终候选SHA、确定性包与各层执行/未执行结果在配对tests仓。只交draft PR，不自动合并、上架或部署。

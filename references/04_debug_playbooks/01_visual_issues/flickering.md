@@ -143,3 +143,20 @@ Android 上 resize / pause / resume 后要重新验证 per-frame resources 是�
 - uniform update 代码
 - descriptor 分配/更新代码
 - frame index / image index 日志
+
+<a id="hybrid-temporal-diagnostics"></a>
+## 阴影 / 反射 / history 闪烁定位
+
+先建立 pass/resource/generation 证据，逐个关闭可选效果作对照，不直接归咎 GPU。[TOOL][ENGINE]
+
+| 现象 | 第一份证据 | 下一步 |
+|---|---|---|
+| 慢平移阴影抖动 | cascade / light-space depth / texel grid | 检查稳定投影、snapping、分割、bias 与 atlas guard |
+| 屏内漏影 | camera/shadow/AS 三集合 ID 与驻留 | 检查屏外投影者，不靠增 blur 掩盖缺物体 |
+| 运动物体拖影 | raw MV、previous deformation、depth/normal rejection | 核对方向、pixel/UV、jitter，只读相机矩阵不足 |
+| 相机静止、灯光移动残影 | visibility/radiance 与 history weight | 光照变化降权，不因 MV=0 持续累积 |
+| 曝光变化发亮 | raw linear/pre-exposure 值和曝光比值 | 在同一颜色尺度累积，异常 reset |
+| resize/第二 View 串影 | view/engine/frame/history generation、完成点 | 隔离 owner，重建/重采样及旧代退休 |
+| query/滤波偶发旧值 | AS/结果/history 的实际 producer-consumer | 查 barrier、layout、跨 queue 和 ping-pong WAR |
+
+按 [时域工作流](../../05_workflows/02_render_pass_effects/add_postprocess_pass.md#temporal-quality-workflow) 保存固定动态序列与诊断资源，不用单张截图或 Validation clean 代替画质与生命周期结论。

@@ -125,3 +125,25 @@ Media3 `1.12.0-alpha01`（2026-10-21）加入Display P3标识与映射，只是A
 
 数值测试先固定色条/灰阶/透明边缘的源数值、工作空间与容差，再跑离屏检查；不能看结果后改阈值。屏幕合成另测，截图/回读不证明面板绝对亮度、系统tone mapping或色准。无HDR设备/校准时仅报告实际覆盖和未验证项。
 来源：[Media3 release](https://developer.android.com/jetpack/androidx/releases/media3#1.12.0-alpha01)、[compositeAlpha](https://docs.vulkan.org/refpages/latest/refpages/source/VkCompositeAlphaFlagBitsKHR.html)、[HDR metadata](https://docs.vulkan.org/refpages/latest/refpages/source/VK_GOOGLE_hdr_smpte_st_209450_metadata.html)。
+
+<a id="lighting-temporal-data-contract"></a>
+## 光照与时域输入合同
+
+以下是 ENGINE 数据合同，不是 Vulkan 新结构体；颜色仍服从 [颜色输出合同](#color-output-contract)。每个消费者单独声明编码，不能强制所有 SDK 接受相同纹理。[ENGINE]
+
+| 字段 | 必须匹配的语义 |
+|---|---|
+| viewId / engineId / frameId | 逻辑真实渲染帧，不是 frame slot、swapchain image index 或生成/呈现帧号 |
+| scene/geometry/material/light/historyGeneration | 数据版本、owner 和失效原因；资源 ID 不复用为新代内容 |
+| inputSize / outputSize / viewport / historySize | 尺寸、原点、Y方向、动态分辨率和有效区域 |
+| depthConvention | [0,1] 映射、正/反 Z、near/far/无限远、投影、clear、compare 相符 |
+| normalSpace / material | normal 编码和空间；几何/着色法线、roughness/metallic、alpha/双面规则 |
+| motionDirection / motionUnits | current→previous 或相反；pixel/UV；参照尺寸；Y 方向 |
+| jitterConvention | 是否含 jitter；当前/前帧 sample offset 及矩阵；只消除一次 |
+| current/previous transforms | camera、rigid object、skin/deformation 和程序动画的上一帧状态 |
+| colorEncoding / exposureOrPreExposure | 线性或显示域；曝光因子定义、alpha convention、历史换算方向 |
+| confidence / resetReason / completedUse | 信号可信度、history age、显式失效事件及最后 GPU 使用完成点 |
+
+例：未含 jitter 的 current→previous pixel MV 转 UV 时除以对应定义尺寸，再加到 current UV；若 producer 为 previous→current 或 jittered 坐标，不可直接照搬。稠密 previous→current forward MV 必须反求对应位置/重采样或重新生成 backward MV，不能只在当前像素取负。用已知 1 pixel 平移和静止物体/移动相机分别验证符号与比例。[ENGINE]
+
+geometry MV=0 不说明光照静止；灯光、阴影和高亮变化需降低信任度。相机 previous matrix 不能替代动画物体 previous deformation。normal/depth confidence 与真实信号绑定同一 View/frame/generation；dump 元数据和原始资源一起检查。

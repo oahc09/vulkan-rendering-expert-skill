@@ -290,6 +290,19 @@
 | GPU particles / alive compact | `../05_workflows/03_compute_workflows/add_compute_pass.md#gpu-particles` |
 | Mesh/task / meshlet / 传统fallback | `../03_api_manual/06_pipeline/mesh_shader.md#mesh-path-fallback` |
 | 规模渲染A/B / 软件Vulkan与MobileScale | `../05_workflows/07_optimization/optimize_frame_time.md#scaled-rendering-ab` |
+| 混合光照 / 不同可见集合 | `../02_core_mental_model/engine_architecture.md#hybrid-lighting-decisions` |
+| MV / depth / jitter / exposure / normal | `../02_core_mental_model/render_target_model.md#lighting-temporal-data-contract` |
+| Ray Query / query-only / SBT误用 | `../03_api_manual/06_pipeline/compute_pipeline.md#ray-query-capability-contract` |
+| BLAS / TLAS / scratch / compaction退休 | `../03_api_manual/04_buffer_image_memory/memory_allocation.md#acceleration-structure-resource-contract` |
+| AS build / fragment query 同步 | `../03_api_manual/08_synchronization/pipeline_barrier.md#as-build-query-dependencies` |
+| Shadow Map / CSM / bias / atlas | `../05_workflows/02_render_pass_effects/add_depth_pass.md#stable-shadow-workflow` |
+| query阴影 / 单次反射 / alpha candidate | `../05_workflows/03_compute_workflows/add_compute_pass.md#hybrid-ray-query-workflow` |
+| OMM / KHR与EXT / alpha失效 | `../05_workflows/03_compute_workflows/add_compute_pass.md#opacity-micromap-fallback` |
+| 重投影 / history / 去噪 / disocclusion | `../05_workflows/02_render_pass_effects/add_postprocess_pass.md#temporal-quality-workflow` |
+| SR / FG输入尺寸与UI | `../05_workflows/02_render_pass_effects/mobile_neural_graphics.md#temporal-sdk-adapters` |
+| 阴影抖动 / 曝光残影 / 多View串影 | `../04_debug_playbooks/01_visual_issues/flickering.md#hybrid-temporal-diagnostics` |
+| Hybrid分档 / 画质ROI / AS成本 | `../05_workflows/07_optimization/optimize_frame_time.md#quality-budget-tiers` |
+| OMM/BVH公开案例证据 | `../06_cases/06_performance/case_performance.md#hybrid-quality-evidence` |
 
 <a id="mobile-topics"></a>
 ## 移动端主题（既有主类型的按需分支）
@@ -323,3 +336,9 @@
 仍按原 API/debug/performance/implementation/architecture 主类型，只命中加载上表对应锚点。先读一个权威合同，再按缺口补 workflow；真实项目叠加 Evidence Map、Architecture Map 与回归影响面，不把此主题变成全库启动包。C1/C2/C3/C4/C5 的 shader、pipeline、streaming、GPU-driven、LOD/Hi-Z/particles/multi-view 同属本版本，不把 GPU-driven 延后。
 
 ENG13 新24题按 primary/contrast 成对输入评估，实际 path/anchor/hash/read trace/provider usage 单列；旧40题不变，原12题 v1.0.8 token分母与30%目标不被新题稀释。Source/build/HostShaderUnit/Static/Snapshot/Live/VulkanIntegration/MobileScale 分层报告，未运行保留 BLOCKED，不以关键词或软件GPU代替真实模型/移动设备验收。
+
+<a id="hybrid-quality-topics"></a>
+## 移动混合光照与时域画质（VIS14）
+
+仍按既有 API/debug/performance/implementation/architecture 主类型，只按命中症状读一个权威合同，再补缺口。真实项目叠加 Evidence/Architecture Map、R1–R5、影响面及适用 G1–G6；本专题不加入强制启动集合。
+旧64题 prompt bytes 冻结，VIS14-01..20 独立计分，总84；原12题 v1.0.8 provider input-token 分母不变，无新增30%目标。Static/Snapshot/Host Unit/Shader Unit/Vulkan Integration/Live/Android Device/Visual Quality 独立报告；未运行不继承旧 SHA PASS。

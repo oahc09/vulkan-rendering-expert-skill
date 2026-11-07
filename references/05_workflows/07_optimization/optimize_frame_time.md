@@ -301,3 +301,16 @@ A/B保持视觉标准与输入一致，分别记录工具开启的诊断运行�
 记录 CPU update/cull/record/submit、GPU reset+cull+compact+Hi-Z+draw 与全帧时间、VRAM/host/staging/old-new峰值、upload bytes、overflow/fallback 和可见ID/图像一致性。GPU query 先验证 queue timestampValidBits、timestampPeriod、availability/完成与 wrap；不支持则明确缺失，不用 CPU wall time 冒充 GPU 时间。排除 warmup、报告样本数/分位数/误差和测量开销。[ENGINE]
 
 软件 Vulkan 的 source/build/validation/图像结果，与真实 Android MobileScale 的 GPU型号/driver/API/features、热状态、功耗/带宽、分辨率、持续时长分别报告。桌面或 llvmpipe 不证明移动端60FPS。没有授权设备则 MobileScale BLOCKED，保留可运行命令和所缺证据；不得填入估算成绩。mesh/task、Binary/GPL、async queue、前帧Hi-Z 为独立条件路径；未支持或未测不算通过。[ENGINE]
+
+<a id="quality-budget-tiers"></a>
+## 画质预算与持续分档
+
+沿用 [持续热性能](#sustained-mobile-performance)。Baseline/Hybrid/Enhanced 选择见 [架构决策](../../02_core_mental_model/engine_architecture.md#hybrid-lighting-decisions)。分别计 CPU、AS build/update/compact、query、filter、带宽和新旧驻留峰值；降采样/降低更新频率/减少 ray 范围是明确质量取舍，不悄悄删除投影者。[ENGINE]
+
+降档由预设阈值、优先级、滞回和冷却期决定，恢复需连续稳定窗口。新代资源准备好再切换，失效 history 重置，旧代延迟退休；不要温度一变就重建 Device 或反复开关所有效果。
+
+A/B 预注册 scene seed、camera/light/animation 轨迹、分辨率/render scale、质量、driver/tool、预热、采样窗口及可比热状态。冷创建/稳态/压力恢复分别报告；保存输入/产物/输出 hash 与最终 Skill/tests SHA。[ENGINE]
+
+至少记录 frame/pass median 与 P95/P99、AS/trace/filter 成本、内存峰值、native-rendered/generated/presented frames 和可取得的真实延迟。ROI 覆盖阴影边缘、薄片、反射轮廓、disocclusion、运动/高亮，HDR 在固定域/容差比较。PSNR/SSIM 不替代时序观察或物理正确；看完结果不改阈值。[TOOL]
+
+必须拒绝悬垂 AS、非法 query-only stage、过期 history 和缺投影者，即使平均 FPS 更高。温度/FPS 不能换算节电比例；没有可靠能量测量来源就不报功耗收益，桌面或软件 Vulkan 不等于 Android 性能。原12题 token 30% 是独立冻结指标，VIS14 无新30%目标。

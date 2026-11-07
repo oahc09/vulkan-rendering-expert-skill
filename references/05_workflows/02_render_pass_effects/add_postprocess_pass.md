@@ -271,3 +271,26 @@ Previous Pass Output Image
 3. Dynamic Rendering 中后处理 pass 的 input image layout 限制。
 4. 不同 GPU 对 multiple fullscreen pass 合并为 single pass 的 tile memory 影响。
 5. Android  compositor 对 swapchain image 做后处理直接写入时的额外约束。
+
+<a id="temporal-quality-workflow"></a>
+## 非神经时域稳定与滤波
+
+使用 [输入合同](../../02_core_mental_model/render_target_model.md#lighting-temporal-data-contract)，每个 View/Engine/generation 独立 history。shadow visibility / AO 标量与 HDR reflection radiance 不共享无语义的“通用 blur”。[ENGINE]
+
+基线：current 信号和真实 MV/depth/normal→重投影→越界/反遮挡/深度/法线/材质校验→history 限制与权重→边缘感知空间滤波→独立 history 写回→合成。每个 pass 明确 descriptor、格式、push constants、dispatch 范围与 write→read barrier；ping-pong 及 frames-in-flight 还需跨帧 RAW/WAR 依赖和完成点。
+
+| 事件 | 最小策略 | 不可接受 |
+|---|---|---|
+| 第一帧 / camera cut / Device 重建 | 全部 reset；新代合法初始化 | 读取未初始化历史 |
+| resize / viewport / render-scale / 投影变更 | 仅在算法支持且坐标转换验证后 resample，否则 reset/recreate | 旧尺寸直接寻址 |
+| pause / 跳帧 / 长间隔恢复 | 依据连续性与算法约束 reset 或显著降权 | 用 frame slot 冒充前一逻辑帧 |
+| 资源/材质/LOD/动画代际变化 | affected pixel 局部拒绝，无法定位则全重置 | 混合两代 geometry 数据 |
+| 光源/阴影变化 / effect switch | 降 confidence 或拒绝；语义变化 reset | MV=0 就永远信任 history |
+| exposure / pre-exposure | 按已定义比值重标定 history，异常因子 reset | 不同曝光尺度直接混合 |
+| 第二 View 销毁/重建 | 独立 key 和 completedUse，旧代退休 | 跨 View 共用 history slot |
+
+例如存储颜色 C=linearRadiance×exposure 时，历史乘 currentExposure/previousExposure；反向 pre-exposure 定义不能照搬。拒绝非有限/非正因子。visibility 限制在 [0,1]，radiance 不截成 [0,1]；按当前邻域/方差限制 history，normal/depth 边缘保护，roughness/hit distance 是否参与由信号算法声明。[ENGINE]
+
+诊断图保存 motion 方向/单位、jitter、线性 depth、history weight/rejection、disocclusion、visibility、reflection hit/confidence；保留 raw noisy 和空间/时域后输出。静止与运动序列同时检验噪声、残影和细节损失；“增加模糊”不是反遮挡修复。[TOOL][ENGINE]
+
+组合顺序由具体 SDK 合同决定：信号→对应滤波→光照合成→所选 SR/FG→UI/显示；避免重复 TAA/锐化/曝光，见 [SR/FG 协调](mobile_neural_graphics.md#temporal-sdk-adapters)。首版精简 CPU/GLSL fixture 与运行状态在 tests 仓，不能把 shader 编译当画质通过。

@@ -119,3 +119,8 @@ v1.0.12 增量覆盖Android多Engine/多Surface、Camera/MediaCodec→AHB帧leas
 五轴同版：Shader产物/接口/热重载，pipeline缓存与有界编译调度，资源流式/驻留/预算，GPU-driven固定槽/Count，以及LOD/当前帧Hi-Z/粒子/多视图。运行时知识文件净增0，八模块、启动/触发规则、MIT与200文件包上限不变。
 
 配对tests仓保存精确计划、来源/要求追踪、24个新增ENG13正反条件题（共64，原40冻结）及原创C++/GLSL Engine Scale Lab。源码/编译、软件Vulkan运行、Live模型/宿主、Android MobileScale分别报告；不把软件GPU结果冒充移动性能。本版本为提交审查的候选，不自动发布或合main。
+
+
+## v1.0.14: Mobile Hybrid Lighting & Temporal Quality
+
+Baseline shadows and reflection fallback; optional query-only AS engineering; temporal input/history contracts and non-neural filtering; evidence-based quality tiers. Keeps eight modules, zero new runtime knowledge files and the 200-file package ceiling. Paired tests register the frozen previous64 plus VIS14-01..20. Static, shader, software Vulkan, Live, host and Android evidence are independent; no unmeasured performance or power claim. See [conditional topic routing](references/07_integration_pack/task_routing_rules.md#hybrid-quality-topics).

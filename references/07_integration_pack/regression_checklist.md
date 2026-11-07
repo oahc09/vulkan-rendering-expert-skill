@@ -62,3 +62,15 @@
 2. 存在无法执行的条目 → 显式列出"未验证项"与原因，不得默认通过。
 3. 存在失败条目 → 修改未完成，回到定位 / 修复循环。
 4. Validation clean 只是 Correctness 回归的一部分，不能单独作为完成依据。
+
+<a id="hybrid-quality-regression"></a>
+## VIS14 回归范围
+
+- [ ] Query-only 禁止误引 SBT/RT shader stage，缺能力走光栅/probe。
+- [ ] 正/反 Z、bias、屏外投影者、反射集合、alpha 三类和 OMM 失效。
+- [ ] upload/skin→BLAS→TLAS→实际 query stage；scratch 范围、update 条件、compaction 地址/退休。
+- [ ] MV 符号/单位/jitter、previous deformation、灯光变化、曝光比值、disocclusion。
+- [ ] camera cut、resize/scale、pause、LOD/材质替换、多 View 隔离与 GPU 完成点。
+- [ ] visibility/radiance 分离滤波、SR/FG 尺寸和 UI，匹配轨迹 ROI 与持续分档滞回。
+- [ ] 旧64与新增20独立检查；原12 token基线、读取隔离、安全打包与200文件上限保留。
+- [ ] 原始图像/序列、设备/driver/features、编译器、最终SHA/hash、未运行层明确记录。

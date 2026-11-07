@@ -119,3 +119,8 @@ v1.0.12 extends Android multi-instance/surface ownership, media-frame leases and
 Shader artifact/interface/hot reload, pipeline cache and bounded build scheduling, streaming residency/budgets, GPU-driven fixed slots/Count, LOD/current-frame Hi-Z/particles/multi-view are delivered together. Runtime knowledge adds no files; the 8 modules, startup/trigger rules, MIT license and 200-file package ceiling remain.
 
 The paired tests repository contains the exact plan, 24 new ENG13 paired-condition cases (64 total, original 40 frozen), source traceability and an original C++/GLSL Engine Scale Lab. Build, software Vulkan execution, Live model/host and Android MobileScale are separate evidence layers. This candidate is not an automatically published release and does not claim mobile performance from software Vulkan.
+
+
+## v1.0.14: Mobile Hybrid Lighting & Temporal Quality
+
+Baseline shadows and reflection fallback; optional query-only AS engineering; temporal input/history contracts and non-neural filtering; evidence-based quality tiers. Keeps eight modules, zero new runtime knowledge files and the 200-file package ceiling. Paired tests register the frozen previous64 plus VIS14-01..20. Static, shader, software Vulkan, Live, host and Android evidence are independent; no unmeasured performance or power claim. See [conditional topic routing](references/07_integration_pack/task_routing_rules.md#hybrid-quality-topics).
