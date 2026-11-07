@@ -127,3 +127,25 @@ GPU Scene 是带版本与寿命的数据契约，不是把所有对象塞进一�
 实例 transform 用最大奇异值的上界放大球半径（一般 affine 可用 Frobenius 范数上界，含 shear）；AABB 可用 abs(linearMatrix)*extent。不可只取有符号最大 scale。平面测试包含 epsilon 与半径；near-plane 相交或无可靠投影 bounds 的对象保守保留。CPU/GPU ID 可见集逐项对照，同时渲染比较，不能仅比较数量。[ENGINE]
 
 入口：`05_workflows/03_compute_workflows/add_compute_pass.md#gpu-driven-rendering`；参数 ABI 与 fallback：`03_api_manual/03_command_buffer/indirect_commands.md#indirect-capability-fallback`。
+
+<a id="simulation-state-contract"></a>
+## 仿真状态合同（C1，v1.0.16 candidate）
+
+适用：把绳索、规则布料、受限高度场和交互粒子作为已有 Vulkan renderer 的数据生产者；不建立通用物理引擎。输入为带时间戳/单位/坐标空间的事件、模型配置和资源代际；输出为已完成的不可变 snapshot。以下字段是应用合同，不是 Vulkan API 字段。[ENGINE]
+
+| 状态 | 必须定义的语义 |
+|---|---|
+| simulationTick / simulationTime | 实际完成的离散更新进度；提交但未完成的 tick 单独记账 |
+| fixedStep / substeps / solverIterations | 外层 tick 时间、每 tick 的时间细分、每子步的约束迭代次数；不可互换 |
+| accumulator / droppedTime | 待推进时间与主动丢弃时间；长暂停不可默默吞时间或无限追赶 |
+| inputTimestamp / eventId | 映射到 simulation time 的输入时刻与本 world generation 内唯一事件身份 |
+| worldGeneration / topologyGeneration | 世界重置、约束拓扑改变时递增；过期事件/回调/输出拒绝发布 |
+| snapshotId / completion | 同一 tick 的 position/normal/bounds、拓扑/LOD与资源代际，以及 GPU 完成证据 |
+
+共享世界只有一个调度 owner；第二 view、shadow、预览或壁纸只是 consumer，不按 callback 数推进。Surface 暂停不等于世界暂停：可见性策略决定是否计算，停止一个输出不能销毁其他输出仍引用的 state。模拟 A/B、不可变 render snapshot 和每输出 previous-render snapshot 是不同寿命，不因都叫“双缓冲”就可复用。[ENGINE]
+
+持续 force（力或明确标为 acceleration）与一次 impulse（动量增量）分开；驱动固定点同时给上一/当前子步目标位置和速度规则，inverseMass=0 本身不足以定义运动。输入单位、坐标空间、插值方式、迟到事件政策和容量必须明确。拒绝非正 dt、负/非有限 inverse mass、NaN/Inf、异常幅度及容量越界，计数诊断；故障时冻结最后有效 snapshot 或受控 reset，不用无界速度裁剪掩盖问题。
+
+确定性只声明固定输入的算法可复现、同实现容差重复或跨设备容差可接受中的实际验证层；固定 seed、消除写竞争不证明跨 GPU 逐位一致。验收比较相同 ticks/事件在30/60/120Hz呈现、长暂停及双 view 下的进度/事件消费；数值、Shader编译、Vulkan执行、Live和Android持续性能分别报告。v1.0.15透明外观尚未集成时，用不透明wireframe/高度可视化验证，不宣称前置能力存在。[ENGINE]
+
+关联规则：hard_rules 2/3/17–19，修改时保留 Evidence Map、Architecture Map、R1–R5 与适用 G1–G6。按需继续读 [调度](../05_workflows/03_compute_workflows/add_compute_pass.md#simulation-scheduling)、[渲染交接](../05_workflows/03_compute_workflows/compute_to_graphics_sync.md#simulation-render-handoff)、[退休](../05_workflows/05_resource_management/manage_frame_resources.md#simulation-snapshot-retirement)。时间细分的数值边界依据 [Small Steps, 2019](https://matthias-research.github.io/pages/publications/smallsteps.pdf)，不是新近 API 特性。

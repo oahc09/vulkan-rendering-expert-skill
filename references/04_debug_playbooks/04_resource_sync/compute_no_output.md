@@ -180,3 +180,8 @@ Android 上额外检查：
 - barrier 代码
 - output buffer/image 创建参数
 - RenderDoc / AGI capture
+
+<a id="simulation-output-diagnosis"></a>
+## 仿真输出异常的定向检查
+
+先保留原始tick/generation、dispatch、descriptor和读回证据；按 [调度](../../05_workflows/03_compute_workflows/add_compute_pass.md#simulation-scheduling) 查未推进/重复事件，按 [kernel](../../03_api_manual/06_pipeline/compute_pipeline.md#simulation-kernel-portability) 查尾线程、barrier参与、跨workgroup误用与feature，再查 [交接](../../05_workflows/03_compute_workflows/compute_to_graphics_sync.md#simulation-render-handoff) 的实际consumer/同代normal/bounds。图像不动可能是发布旧snapshot，数值爆炸也不自动等于同步错；CPU oracle与GPU读回分开定位，不用Validation clean或clamp代替根因证据。

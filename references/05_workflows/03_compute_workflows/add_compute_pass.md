@@ -315,3 +315,20 @@ near-plane/极小 z/跨 near 的大 covariance 不适合无条件中心 Jacobian
 验证原创合成数据及显式 PLY profile、未知编码拒绝、非有限/非正尺度、near-plane/屏外中心但屏内 footprint、多集合交错材质/ID、相机静止而点移动、第二View变化、generation重载与容量超限。颜色/透射误差和移动相机 pop 一起测，不以单帧截图或 CPU oracle 当 Vulkan 运行。
 
 [REF] [Rasterization deep dive](https://nvpro-samples.github.io/vk_gaussian_splatting/deep-dives/rasterization_of_3d_gaussian_splatting/)、[NVIDIA 2026.2.9](https://github.com/nvpro-samples/vk_gaussian_splatting/blob/2026.2.9/README.md)、[Mobile-4DGS paper](https://arxiv.org/abs/2610.05289)。桌面 Vulkan / 移动 WebGL 的算法证据不证明 Android Vulkan 后端；Mobile-4DGS 排序复用前提不能泛化到任意 PLY。
+
+<a id="simulation-scheduling"></a>
+## 固定 tick、输入消费与有界调度（C1）
+
+输入：fixedStep>0、合法 substeps/iterations、最大 backlog/ticks-per-update、带 eventId 的输入、暂停政策、world/topology generation 和已完成 snapshot。输出：已完成 tick、保留 backlog、droppedTime、事件消费记录、下一可发布 snapshot；合同见 [状态](../../02_core_mental_model/compute_graphics_relationship.md#simulation-state-contract)。适用已有 compute/资源管理器，不因新增模拟重建 RenderGraph。[ENGINE]
+
+1. 单 owner 接收单调时间，按暂停政策把 wall time 映射到 simulation time。默认后台时间不积分；有限追赶、暂停世界时间或 reset 三者明确选择。先限制 backlog，把丢弃量累加 droppedTime，再限制本次 tick 数；未处理的合法 backlog 保留，不能通过巨大 render dt 补步。
+2. 为一个 tick 选择输入区间与稳定排序，例如 `(tickStart,tickEnd]`，迟到/重复事件分别拒绝或按声明政策转下个 tick。持续输入按子步时刻重采样；同一次 impulse 只在约定子步消费一次，不按 view、render frame 或每个子步重放。拒绝队列溢出并计数，不能静默丢事件。
+3. 每 tick 用 h=fixedStep/substeps；每子步执行预测→初始化本子步 λ→constraint iterations→碰撞/速度更新。graph colors 或 contribution→gather 每个全局阶段分 dispatch；绑定对应 VkPipeline、VkDescriptorSet 与 tick/h/generation 参数，vkCmdDispatch 后表达真实依赖。
+4. solver 完成后构造 normal/bounds，发布统一 snapshotId 和 completion；CPU 若只完成提交，记录 submittedTick，不能冒充 completedTick。后续 tick 可按 GPU 依赖流水推进，不要求每 tick 阻塞 CPU 回读。
+5. 渲染只选择已完成或具有合法 GPU 等待依赖的 snapshot；可在有效相邻姿态间插值，插值姿态的 normal/bounds/history也需匹配。下一更新前处理上轮消费者读后写依赖。
+
+预算不足先降低经过验证的规模/非必要输出或延后工作；不能把 substeps 砍到已知不稳定区间。改 fixedStep/substeps 必须重验 compliance α/h²、阻尼、固定点速度和脉冲单位；iterations 不能当 substeps。[ENGINE][REF]
+
+粒子继续复用 [存活池/compact/indirect](#gpu-particles)。只新增 force/impulse、有限寿命与解析碰撞、eventId→水面扰动的有界转换。雨滴命中一次产生一个事件，默认单向视觉耦合；没有质量/动量交换方程与对照，不宣称双向守恒。PBF的密度约束、SPH的核邻域流体力、MPM的粒子/背景网格传输属于不同模型，生产级实现与通用自碰撞后置，不能靠外观推断物理正确。[ENGINE]
+
+最小验证：不同呈现频率相同 tick/event 日志；双view一次消费；暂停几十秒不无限追赶；重复/迟到/超容量输入、reset旧事件、坏dt可拒绝。保存输入序列与误差阈值；host调度测试不证明 GPU 执行。关联 hard_rules 3/6/17，按需 [XPBD](compute_write_storage_buffer.md#xpbd-deformation-contract)、[高度场](compute_write_storage_image.md#heightfield-simulation-contract)、[预算](../07_optimization/optimize_frame_time.md#simulation-cost-quality-budget)。数值依据：[XPBD, 2016](https://matthias-research.github.io/pages/publications/XPBD.pdf)、[Small Steps, 2019](https://matthias-research.github.io/pages/publications/smallsteps.pdf)。

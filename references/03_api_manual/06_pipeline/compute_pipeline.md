@@ -151,7 +151,7 @@ Compute Shader (SPIR-V)
 
 - `VUID-VkComputePipelineCreateInfo-*`：stage、layout 合法性。
 - `VUID-vkCmdBindPipeline-*`：bind point 与 pipeline 类型匹配。
-- `VUID-vkCmdDispatch-*`：group count 非零、descriptor 可访问。
+- `VUID-vkCmdDispatch-*`：group count 上限、descriptor与执行作用域合法；零group无工作，不自动构成违规。
 - `VUID-vkCmdDraw-*` / dispatch hazard：synchronization hazard 提示。
 
 ### RenderDoc / AGI
@@ -297,3 +297,25 @@ Query-only **不需要** Ray Tracing Pipeline、SBT、`vkCmdTraceRaysKHR` 或 `R
 AS 生命周期见 [资源合同](../04_buffer_image_memory/memory_allocation.md#acceleration-structure-resource-contract)，同步见 [AS 依赖表](../08_synchronization/pipeline_barrier.md#as-build-query-dependencies)。
 
 依据：[Ray Query](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/appendices/VK_KHR_ray_query.adoc)、[Registry](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/xml/vk.xml)。文档/编译成功不证明目标驱动或 Android 设备可执行。
+
+<a id="simulation-kernel-portability"></a>
+## 仿真 kernel 可移植性（C4）
+
+输入：SPIR-V目标/能力、local size/dispatch维度、shared字节数、每kernel读写集合、设备features/limits与queue能力。输出：已选择的合法pipeline变体、逐阶段依赖和明确禁用/回退原因；不以GPU品牌、API版本或桌面运行成功推断支持。[SPEC][ENGINE]
+
+四个范围分别验证：invocation独占写、workgroup内shared通信、dispatch间依赖、queue间信号/必要ownership。GLSL barrier()只能协调要求范围内的workgroup，不是全dispatch barrier；memoryBarrier/coherent/volatile也不会使所有workgroup集合等待。全局阶段拆成vkCmdDispatch并用Vulkan barrier连接，禁止busy-wait全局计数器作为通用全局barrier。Validation clean不证明无race。[SPEC]
+
+尾线程：无协同barrier时可bounds-check后return；后续存在统一barrier时用active mask，所有要求参与的invocation先初始化各自shared槽（中性值或明确halo边界值），共同到达barrier，再只让active线程写有效输出。不能让部分线程提前返回而其他线程等待。分别检查maxComputeWorkGroupSize各维、maxComputeWorkGroupInvocations乘积、maxComputeWorkGroupCount、maxComputeSharedMemorySize、buffer range和所有索引乘法溢出；N=0可跳过dispatch，零group无工作并非自动非法。local size/specialization与编译产物实际一致。
+
+| 能力 | 必查支持与启用 | 基线/不支持处理 |
+|---|---|---|
+| Compute + SSBO | compute queue、limits、layout/descriptor与编译target | 缺失则禁用GPU模拟，或项目已有小规模CPU状态生产+Vulkan绘制/静态姿态；不换渲染后端 |
+| float atomic add | VK_EXT_shader_atomic_float及依赖，VkPhysicalDeviceShaderAtomicFloatFeaturesEXT的shaderBufferFloat32AtomicAdd、shaderSharedFloat32AtomicAdd或shaderImageFloat32AtomicAdd按实际域选择；64位另查对应buffer/shared字段，image另查format原子能力 | graph coloring或contribution→gather；整数atomic、Float32Atomics字段不等于Float32AtomicAdd |
+| subgroup | VkPhysicalDeviceSubgroupProperties的supportedStages、supportedOperations和subgroupSize；size-control另查feature/property | workgroup或多dispatch归约，不固定32/64，不混淆subgroup与workgroup |
+| FP16 | shaderFloat16算术与storageBuffer16BitAccess等存储/IO特性分别查询启用，目标SPIR-V匹配 | 默认积分/约束/残差FP32；只有误差评估通过字段才降精度，不强制FP64 |
+| storage image | 实际format/tiling/usage及shader访问feature | SSBO状态/合法输出转换 |
+| Sync2 / 独立queue / Ray Query | 三种独立条件，不捆绑启用 | legacy正确映射/单queue/传统绘制与阴影 |
+
+结构化流水线：查询vkGetPhysicalDeviceFeatures2/properties/queue/format→仅启用选择路径的feature→编译并验证SPIR-V→创建descriptor/pipeline→受限dispatch→同算法CPU/GPU读回。支持、启用、编译、运行、收益分别报告。负向测试优先host配置拒绝、着色写集合检查或SPIR-V验证，不在真实设备运行已知死锁/OOB shader。关联hard_rules 2/3/9/17，单queue [交接](../../05_workflows/03_compute_workflows/compute_to_graphics_sync.md#simulation-render-handoff) 为正确性基线。
+
+规范：[Compute/Workgroup](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/shaders.adoc)、[features](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/features.adoc)、[Registry](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/xml/vk.xml)；辅助解释 [Subgroups Guide](https://docs.vulkan.org/guide/latest/subgroups.html)、[Android reduced precision](https://developer.android.com/games/optimize/vulkan-reduced-precision)。固定规范revision为API依据，动态官方页面不当作90天新特性。
