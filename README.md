@@ -131,3 +131,11 @@ Baseline shadows and reflection fallback; optional query-only AS engineering; te
 新增透明alpha/精度合同、条件WBOIT与溢出回退、单层水玻璃折射、有界局部雾/软粒子、Gaussian数据/保守投影/排序缓存/多集合ID，以及屏幕覆盖和同质量持续A/B。原有资源、光照与history路径保持复用，八模块和最小启动不变，运行时知识文件净增0，白名单包上限200。
 
 [按需主题路由](references/07_integration_pack/task_routing_rules.md#transparency-gaussian-topics)。TRAN15新增20题和实验源码/原始运行记录位于配对tests仓；Static、host/shader、Vulkan、Live/Host、移动画质/性能分别报告，文档不代表设备通过或功耗改善。
+
+## v1.0.16：GPU仿真与动态几何增量（未发布）
+
+本分支增加C1固定tick/输入/共享世界、C2轻量XPBD绳索与规则布料、C3受限高度场/单向粒子事件、C4kernel能力/同步/快照退休/移动预算知识。八个权威锚点见 [按需索引](references/05_workflows/workflow_index.md)；保持八模块、197个知识文件与最小启动，不新增运行时路径。
+
+前置 Skill v1.0.15 已合入 main；配套测试最终成果在本地保留，其发布同步状态独立记录。本增量复用v15合同，不宣称移动仿真完整验收。原GPU-driven、混合光照与时域路径继续保留。文档、数值host、Shader编译、Vulkan执行、Live/宿主与Android持续质量必须分层报告，实际结果由配对tests证据确定。
+
+变更记录（2026-11-07）：在既有八处知识文件追加C1–C4合同并增加短导航；纠正同主题旧段中把workgroup barrier当全局同步、dynamic indexing当atomic能力、Surface销毁等同compute queue失效及强制采样layout transition的说法。原段落位置保留并就地修正，无硬规则迁移。本候选不自动合并或发布。

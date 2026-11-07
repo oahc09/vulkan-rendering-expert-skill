@@ -861,3 +861,14 @@ barrier dstAccess = SHADER_STORAGE_READ | SHADER_STORAGE_WRITE
 
 
 ---
+
+<a id="simulation-correctness-cases"></a>
+## 仿真数值与并行合同案例入口
+
+以下是待验证设计/反例，不是已发生的本地事故或已测GPU结果：[ENGINE]
+
+- [XPBD](../../05_workflows/03_compute_workflows/compute_write_storage_buffer.md#xpbd-deformation-contract)：每iteration清λ导致错误刚度；拓扑改变后旧着色让两约束同时写一粒子。用两粒子oracle和写集合检测分别验证数值与竞争，不能混为一项PASS。
+- [高度场](../../05_workflows/03_compute_workflows/compute_write_storage_image.md#heightfield-simulation-contract)：缩小dx但不调整步长使线性基线超稳定界；clamp画面平稳不证明模型正确。
+- [交接](../../05_workflows/03_compute_workflows/compute_to_graphics_sync.md#simulation-render-handoff)：上一solver子步不是上一渲染姿态；两个ping-pong buffer不证明双view/shadow消费者安全。验证读回/姿态/退休轨迹，缺GPU证据保持未验证。
+
+[XPBD-Cloth固定README](https://github.com/steampower33/XPBD-Cloth/blob/c7019d35414e75c77ede2c3500a762837bcab6a6/README.md) 的2026-08-23/08-27文档更新只支持实现路径研究，不代表算法首发或Android验收。[Nebula固定README](https://github.com/20niship/nebula/blob/13a3f5cbd4d16713f6435b4305b029e7fdef194d/README.md) 的2026-11-06演示更新可启发headless数值测试，不证明移动实时、完整solver审计或Vulkan优于CUDA。算法合法性仍依论文，API依规范，不复制许可未核查代码。

@@ -314,3 +314,20 @@ A/B 预注册 scene seed、camera/light/animation 轨迹、分辨率/render scal
 至少记录 frame/pass median 与 P95/P99、AS/trace/filter 成本、内存峰值、native-rendered/generated/presented frames 和可取得的真实延迟。ROI 覆盖阴影边缘、薄片、反射轮廓、disocclusion、运动/高亮，HDR 在固定域/容差比较。PSNR/SSIM 不替代时序观察或物理正确；看完结果不改阈值。[TOOL]
 
 必须拒绝悬垂 AS、非法 query-only stage、过期 history 和缺投影者，即使平均 FPS 更高。温度/FPS 不能换算节电比例；没有可靠能量测量来源就不报功耗收益，桌面或软件 Vulkan 不等于 Android 性能。原12题 token 30% 是独立冻结指标，VIS14 无新30%目标。
+
+<a id="simulation-cost-quality-budget"></a>
+## 仿真成本、质量与移动预算（C4）
+
+输入：固定算法/输入轨迹、h/substeps/iterations、colors或gather策略、规模/碰撞器、输出质量、设备driver/features、热状态与采样窗口。输出：数值误差、分项/全帧成本、内存、回退及各验证层状态；不能只给FPS或粒子数量。[ENGINE]
+
+分别记录积分/constraint、normal/bounds、事件处理、上传/回读、同步等待、可选AS、draw和全帧；同时记录substeps × iterations × colors/dispatches与scratch/snapshot新旧驻留峰值。Jacobi贡献/邻接带宽和color串行dispatch成本独立测量；增加substeps不能由CPU等待延迟直接驱动。
+
+GPU timestamp按实际queue的timestampValidBits、设备timestampPeriod、timestampComputeAndGraphics及命令约束核查；合法时用VkQueryPool与vkCmdWriteTimestamp2或legacy入口，异步获取availability/结果，处理有效位wrap与query slot退休，不用每帧WAIT阻塞制造“GPU时间”。CPU fence等待wall time含排队/调度，不是纯kernel耗时；缺timestamp就明确未知，读 [query卡](../../03_api_manual/04_buffer_image_memory/query_pool.md)。[SPEC]
+
+质量档先降低链/网格规模、碰撞器复杂度、独立增强或非必要输出频率；不省略正确性依赖，不把dt/substeps降到已知不稳定范围。改h需复验XPBD α/h²、damping、固定点速度、impulse和高度场稳定界；规模变化还要更新dx/dy、代际、normal/bounds/history。采用预设阈值、滞回、恢复窗口和显式回退，输出数值质量与视觉差异。[ENGINE]
+
+A/B顺序：同算法CPU小oracle→软件/桌面Vulkan正确性→目标手机基线→单项优化→持续负载。预注册模型单位误差/残差/穿透、图像序列、P50/P95/P99、样本量、预热/测量开销、热中止条件；保持场景、步长、solver/collider/视觉负载一致，不在看到结果后改容差。Adreno/Mali分别记录型号、OS/API、driver、features、workgroup/subgroup、格式、APK/Shader hash、温度与时长；软件Vulkan不代表Android性能，没能量测量不报功耗收益。
+
+分层验收：Static/Host合同、Numerical Host、Shader编译/SPIR-V、真实Vulkan dispatch/draw/readback、Live/宿主、Android持续质量分开。缺设备、能力或授权标BLOCKED/UNSUPPORTED/UNVERIFIED；可选atomic/FP16/async/软体不测就不算通过。文档完成不等于移动仿真完整验收，SIM16独立计量不新增原12题token目标。关联hard_rules 8/10/17与G1–G6；[持续性能](#sustained-mobile-performance) 继续适用。
+
+来源：[规范查询与timestamp](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/queries.adoc)、[Small Steps精度限制](https://matthias-research.github.io/pages/publications/smallsteps.pdf)、[Arm shader profiling](https://support.arm.com/documentation/102693/2026-5/Analyze-your-frames/Analyze-shader-programs)。社区复盘中的等待时间/性能数字只能提出测量假设，不替代目标设备数据。

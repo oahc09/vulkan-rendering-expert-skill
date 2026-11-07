@@ -240,6 +240,14 @@
 | image layout / sync hazard 报错 | `../04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md` |
 | 显存 / 内存泄漏 | `../04_debug_playbooks/03_validation_errors/memory_leak.md` |
 | compute 无输出 | `../04_debug_playbooks/04_resource_sync/compute_no_output.md` |
+| 仿真世界 / 时间单位 / 状态代际合同 | `../02_core_mental_model/compute_graphics_relationship.md#simulation-state-contract` |
+| 仿真时钟 / 多view重复推进 / 输入脉冲 / 暂停追赶 | `../05_workflows/03_compute_workflows/add_compute_pass.md#simulation-scheduling` |
+| XPBD / 绳索 / 布料 / λ / graph coloring / Jacobi gather | `../05_workflows/03_compute_workflows/compute_write_storage_buffer.md#xpbd-deformation-contract` |
+| 高度场 / 涟漪 / 波动稳定性 / 雨滴事件 | `../05_workflows/03_compute_workflows/compute_write_storage_image.md#heightfield-simulation-contract` |
+| 仿真kernel / 尾线程barrier / float atomic能力 | `../03_api_manual/06_pipeline/compute_pipeline.md#simulation-kernel-portability` |
+| 动态几何 / 仿真snapshot / normal bounds history交接 | `../05_workflows/03_compute_workflows/compute_to_graphics_sync.md#simulation-render-handoff` |
+| 仿真多消费者 / 快照提前复用 / 共享世界退休 | `../05_workflows/05_resource_management/manage_frame_resources.md#simulation-snapshot-retirement` |
+| 仿真substep成本 / 移动数值质量预算 | `../05_workflows/07_optimization/optimize_frame_time.md#simulation-cost-quality-budget` |
 | compute ↔ graphics 同步错误 | `../04_debug_playbooks/04_resource_sync/compute_graphics_sync_error.md` |
 | Android surface 生命周期 / 前后台切换 | `../04_debug_playbooks/05_android_specific/android_surface_lifecycle.md` |
 | GPU 帧耗时高 | `../04_debug_playbooks/06_performance_symptoms/gpu_frame_time_high.md` |
@@ -364,3 +372,8 @@ ENG13 新24题按 primary/contrast 成对输入评估，实际 path/anchor/hash/
 仍按既有主类型/触发/宿主与模型规则；只读取命中权威锚点，不加入最小启动。优先合成或数据合同，再按缺口补能力、同步、效果或覆盖预算。真实项目仍先 Evidence/Architecture Map，保持影响面、R1–R5 和适用 G1–G6。
 
 旧84题与原12题token基线不变；TRAN15-01..20成对条件独立登记/计分，实际总数和运行状态以tests registry为准，不把计划104题当执行结果。逐任务记录相对最终v1.0.14的path/anchor/hash/读取量；文件净增0不等于token零增长。Static/host_unit/shader_unit/vulkan_integration/Live/Host/mobile_visual/mobile_performance/Package各自报告；缺设备/模型不继承历史PASS。
+
+<a id="simulation-dynamic-geometry-topics"></a>
+## GPU 仿真与动态几何（SIM16）
+
+沿用既有主类型、硬规则与最小启动集合。只命中加载上表一个合同，再按缺口补充；不把仿真文档整组预加载。旧104题与原12题token基线冻结，SIM16-01..16成对条件单列；新总数120是registry规模，不是已执行Live结果。数值Host、Shader、Vulkan、Live/Host、移动持续质量各自报告。Skill v1.0.15已合并不代表配套tests证据已发布，也不代表水面透明集成已验收。

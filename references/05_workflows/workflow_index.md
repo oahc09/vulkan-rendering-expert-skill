@@ -132,3 +132,18 @@ v1.0.12仅按章节扩展既有Android Surface、媒体采样与颜色输出内�
 - [Gaussian投影排序](03_compute_workflows/add_compute_pass.md#gaussian-preproject-sort)
 - [GS消费者同步](03_compute_workflows/compute_to_graphics_sync.md#gaussian-consumer-dependencies)
 - [覆盖预算](07_optimization/optimize_mobile_bandwidth.md#coverage-budget)
+
+## GPU仿真与动态几何按需索引（v1.0.16 candidate）
+
+仅命中该主题时按既有唯一任务路由读取，不新增启动预读或API问答必读项。
+
+| 问题 | 权威入口 |
+|---|---|
+| 状态/代际/共享世界 | [C1状态](../02_core_mental_model/compute_graphics_relationship.md#simulation-state-contract) |
+| 固定tick/输入/暂停 | [C1调度](03_compute_workflows/add_compute_pass.md#simulation-scheduling) |
+| XPBD/绳索/布料/碰撞 | [C2求解](03_compute_workflows/compute_write_storage_buffer.md#xpbd-deformation-contract) |
+| 高度场/边界/扰动 | [C3波动](03_compute_workflows/compute_write_storage_image.md#heightfield-simulation-contract) |
+| kernel/tail/能力回退 | [C4可移植性](../03_api_manual/06_pipeline/compute_pipeline.md#simulation-kernel-portability) |
+| normal/bounds/history/同步 | [C4交接](03_compute_workflows/compute_to_graphics_sync.md#simulation-render-handoff) |
+| 多消费者退休 | [C4寿命](05_resource_management/manage_frame_resources.md#simulation-snapshot-retirement) |
+| 分项成本/持续质量 | [C4预算](07_optimization/optimize_frame_time.md#simulation-cost-quality-budget) |

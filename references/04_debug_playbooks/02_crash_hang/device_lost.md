@@ -257,3 +257,8 @@ KHR 不是把 EXT 函数改后缀：不存在应当照抄的 `vkGetDeviceFaultIn
 [KHR reports](https://docs.vulkan.org/refpages/latest/refpages/source/vkGetDeviceFaultReportsKHR.html)、
 [KHR debug info](https://docs.vulkan.org/refpages/latest/refpages/source/vkGetDeviceFaultDebugInfoKHR.html)、
 [地址绑定 feature](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceAddressBindingReportFeaturesEXT.html)。
+
+<a id="simulation-fault-boundary"></a>
+## 仿真故障的安全缩小范围
+
+保存world/topology/snapshot、queue提交、容量/overflow、最后成功kernel与原始fault。先用host配置拒绝/写集合检查、SPIR-V验证和有界输入测试 [kernel合同](../../03_api_manual/06_pipeline/compute_pipeline.md#simulation-kernel-portability)，再查 [全消费者退休](../../05_workflows/05_resource_management/manage_frame_resources.md#simulation-snapshot-retirement)。不要为证明检测有效在用户设备运行已知死锁、无限busy-wait或越界shader；host模拟失败须标fixture，不叫真实GPU fault。
