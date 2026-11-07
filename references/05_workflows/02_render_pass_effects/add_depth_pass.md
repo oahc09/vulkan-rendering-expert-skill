@@ -114,11 +114,11 @@ Depth Attachment Image
 
 | Shader set/binding | Vulkan Descriptor | 资源 | Stage |
 |---|---|---|---|
-| 无 | `VkPipelineDepthStencilStateCreateInfo.depthTestEnable` | 是否启用 depth test | Fragment output |
-| 无 | `VkPipelineDepthStencilStateCreateInfo.depthWriteEnable` | 是否写入 depth | Fragment output |
-| 无 | `VkPipelineDepthStencilStateCreateInfo.depthCompareOp` | depth 比较函数 | Fragment output |
-| 无 | `VkPipelineDepthStencilStateCreateInfo.minDepthBounds` / `maxDepthBounds` | depth bounds test（可选） | Fragment output |
-| 无 | `VkPipelineDepthStencilStateCreateInfo.stencilTestEnable` / `front` / `back` | stencil 测试（可选） | Fragment output |
+| 无 | `VkPipelineDepthStencilStateCreateInfo.depthTestEnable` | 是否启用 depth test | Early / Late fragment tests |
+| 无 | `VkPipelineDepthStencilStateCreateInfo.depthWriteEnable` | 是否写入 depth | Early / Late fragment tests |
+| 无 | `VkPipelineDepthStencilStateCreateInfo.depthCompareOp` | depth 比较函数 | Early / Late fragment tests |
+| 无 | `VkPipelineDepthStencilStateCreateInfo.minDepthBounds` / `maxDepthBounds` | depth bounds test（可选） | Early / Late fragment tests |
+| 无 | `VkPipelineDepthStencilStateCreateInfo.stencilTestEnable` / `front` / `back` | stencil 测试（可选） | Early / Late fragment tests |
 
 设计说明：
 
@@ -136,14 +136,15 @@ Depth Attachment Image
 |---|---|---|---|
 | previous frame / undefined | depth image | `UNDEFINED` → `DEPTH_STENCIL_ATTACHMENT_OPTIMAL` | graphics pipeline depth write [SPEC] |
 | graphics pipeline depth write | depth image | `DEPTH_STENCIL_ATTACHMENT_WRITE` → shader read / transfer | shadow sampling / debug visualization [SPEC] |
-| graphics pipeline depth write | depth image | `DEPTH_STENCIL_ATTACHMENT_OPTIMAL` → `PRESENT_SRC_KHR`（仅当 depth 直接 present，极少见） | present engine [SPEC] |
+| depth sampling / visualization | 可呈现的 color image | color write → WSI 呈现所需依赖与 `PRESENT_SRC_KHR` | present engine [SPEC] |
 
 必须说明：
 
-- depth image 在 pass 开始时需转换到 `VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL` [SPEC]。
+- depth image 使用与 aspect、访问和启用特性匹配的合法 attachment layout；`DEPTH_STENCIL_ATTACHMENT_OPTIMAL` 是一种路径，不是唯一枚举。普通 depth attachment 不能直接 present；先采样可视化到可呈现的 color image。[SPEC]
 - RenderPass 路径中，attachment 的 `initialLayout` / `finalLayout` 与 subpass layout 必须匹配 [SPEC]。
-- Dynamic Rendering 路径中，`VkRenderingInfo.pDepthAttachment.imageLayout` 必须为 `VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL`（写入时） [SPEC]。
-- 若后续需要采样 depth，需 barrier 从 `DEPTH_STENCIL_ATTACHMENT_WRITE` 到 `SHADER_READ`，layout 转为 `DEPTH_STENCIL_READ_ONLY_OPTIMAL` 或 `SHADER_READ_ONLY_OPTIMAL`（视 format 与 usage） [SPEC]。
+- Dynamic Rendering 的 `pDepthAttachment.imageLayout` 须与实际 layout 一致；按路径可用 `DEPTH_STENCIL_ATTACHMENT_OPTIMAL`、满足 separateDepthStencilLayouts 条件的 `DEPTH_ATTACHMENT_OPTIMAL`、满足 synchronization2 条件的 `ATTACHMENT_OPTIMAL`，或允许的 `GENERAL`。读写/只读、stencil 和特性条件逐项核对。[SPEC]
+- depth 写入的 producer 采用真实 `EARLY_FRAGMENT_TESTS` / `LATE_FRAGMENT_TESTS`（保守同时覆盖）与 `DEPTH_STENCIL_ATTACHMENT_WRITE`；consumer 是实际采样 shader stage 与 `SHADER_SAMPLED_READ`。同时执行合法只读 layout transition，核对采样 usage、format 和 descriptor；不能写成 COLOR_ATTACHMENT_OUTPUT。[SPEC]
+- `UNDEFINED` 只丢弃内容，不消除旧访问依赖；复用 in-flight depth image 必须先满足同步与生命周期。[SPEC]
 
 ---
 
@@ -168,7 +169,7 @@ Depth Attachment Image
    - 在 pipeline 创建时通过 `VkPipelineRenderingCreateInfo` 指定 `depthAttachmentFormat` [SPEC]。
 7. **配置 pipeline depth-stencil state**：
    - 填写 `VkPipelineDepthStencilStateCreateInfo`：`depthTestEnable`、`depthWriteEnable`、`depthCompareOp`、`depthBoundsTestEnable`、`stencilTestEnable` 等 [SPEC]。
-   - `depthCompareOp` 与场景坐标系/剔除策略匹配：右手坐标系看向 -Z 常用 `LESS` [HEUR]。
+   - `depthCompareOp` 由实际深度映射确定，不由左右手坐标系决定；正 Z 常用 clear=1 / LESS，反 Z 常用 clear=0 / GREATER。[ENGINE]
 8. **配置 dynamic state**：建议启用 `VK_DYNAMIC_STATE_VIEWPORT`、`VK_DYNAMIC_STATE_SCISSOR`；如需动态 depth bias，启用 `VK_DYNAMIC_STATE_DEPTH_BIAS` [SPEC]。
 9. **创建 graphics pipeline**：使用对应 RenderPass 或 `VkPipelineRenderingCreateInfo`，调用 `vkCreateGraphicsPipelines` [SPEC]。
 10. **录制 command buffer**：
@@ -265,3 +266,17 @@ Depth Attachment Image
 3. Dynamic Rendering 中 `VkPipelineRenderingCreateInfo` 与 `VkRenderingInfo` 的 depth attachment 一致性规则。
 4. 含 stencil 的 depth format 在 image view aspect mask 与 shader 采样时的限制。
 5. Android 特定设备在 rotation 后 depth attachment 重建的最佳实践。
+
+<a id="stable-shadow-workflow"></a>
+## 稳定 Shadow Map / CSM 基线
+
+不依赖 Ray Query。先固定 [深度与材质合同](../../02_core_mental_model/render_target_model.md#lighting-temporal-data-contract)，再选择方向光单 map/CSM 或局部灯 atlas；不要求所有引擎同时实现所有选项。[ENGINE]
+
+1. 从光源影响范围和受光体生成投影者集合，包含屏外遮挡者。不要直接复用相机剔除列表；记录动画、cutout、LOD 和资源 generation。
+2. 固定正/反 Z、光源投影与比较方向；clear=1/LESS 与 clear=0/GREATER 是常见对应，不由坐标手性推断。检查 attachment/sample format features；compare sampler 的 filter 支持单独查询。
+3. CSM 明确分割距离、每 cascade 分辨率、稳定投影范围与 light-space texel snapping；跨级联过渡区域避免跳变。移动灯光/内容仍会使缓存失效，稳定化不能冻结错误阴影。[ENGINE]
+4. depth/slope/normal bias 由场景尺度、投影与采样足迹决定，验证 acne 与 peter-panning；反 Z 的符号按实际映射核对，禁止全场景固定魔数。atlas 划区、guard texel 和 PCF 范围避免跨 tile 渗漏。
+5. depth-only graphics pipeline / alpha-cutout fragment、depth attachment/view、sampler/descriptor→draw caster→EARLY/LATE_FRAGMENT_TESTS 写→实际 shading shader 采样。保留 sampled usage 与 store 内容；若使用 transient/lazy 路径不得假设深度仍可跨 pass 采样。[SPEC]
+6. 按灯光/材质/alpha/动画/LOD/相机分割改变失效缓存；新尺寸、新 generation 准备好再切换，旧 image 等所有消费者完成后退休。
+
+固定序列：静止、慢平移、移动灯光、薄片、远近尺度、屏外投影者与第二视图。输出线性 depth、cascade ID、bias、visibility、atlas 边界，分别记录漏光、自阴影、悬浮阴影与闪烁。通过真实 depth→color 可视化/读回，不将普通 depth image 转 PRESENT。源规范：[深度测试](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/fragops.adoc)。

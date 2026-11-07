@@ -166,3 +166,17 @@ Vulkan 1.4 被当作 tensor 支持；feature 查询结果被当作 Device 启用
 - [许可分层说明](https://github.com/arm/neural-graphics-sdk-for-game-engines/blob/019e99a62ea3a331fe112516190d77befc779a53/README.md#license)
 
 1.1.1 的新增采集/诊断与 ABI 改动不意味着 NSS/NFRU 均首次出现于 2026 年 10 月。本文不附第三方文档整包或模型权重。
+
+<a id="temporal-sdk-adapters"></a>
+## SR / FG 辅助输入协调
+
+通用 [时域语义](../../02_core_mental_model/render_target_model.md#lighting-temporal-data-contract) 不取代具体 SDK ABI。按每个 SDK commit/tag 分别记录 SR 和 FG 的 color/depth/MV 尺寸、jitter、曝光、UI、history owner；不新建另一套神经 SDK 框架。[REF][ENGINE]
+
+| 路径 | 需要核对 | 负向对照 |
+|---|---|---|
+| ANF SR | jittered scene color/depth、MV 不包含 projection jitter；匹配 render/output 尺寸和模式 | 重复去 jitter、只提供 camera MV |
+| ANF FG | 所有输入/输出同 declared FG size，color/depth/MV 不 jitter，frame pairing 与 UI 分离 | 将 SR 低分辨率 depth/MV 与高分辨率颜色直接透传 |
+| Arm NSS/NFRU | 继续遵守本文已固定 revision 的 §5–8 | 用 ANF 数字 flag/尺寸规则替代 Arm 合同 |
+| 无可用 SDK | 原生分辨率/传统缩放、关闭 FG | 为启用效果提高全项目最低版本 |
+
+ANF 行是该指南的特定约束，不是所有时域算法的共同格式；接入前核验目标 revision 并可视化真实输入。来源：[ANF 集成指南](https://github.com/SnapdragonGameStudios/adreno-neural-fusion/blob/2f29921da1453acd2fa428cfa05db15e9ef39a85/INTEGRATION-GUIDE.md)，固定 revision/hash 与核验范围存配对 tests source ledger。未运行厂商 SDK/模型/目标设备，不声称已集成或原生路径通过。

@@ -177,7 +177,7 @@ Compute Shader (SPIR-V)
 
 ### 使用时机
 
-- 在 command buffer 中绑定后调用 dispatch；compute pipeline 不能在 render pass 内使用（render pass 内 compute shader 可在 subpass 中作为 secondary 使用，但通常单独提交）。[SPEC]
+- 普通 `vkCmdDispatch` 在 render pass instance 外执行；secondary command buffer 不豁免作用域。扩展专用路径须另查其规则。[SPEC]
 
 ### 销毁时机
 
@@ -277,3 +277,23 @@ compute 与 graphics 混合的后处理、粒子、剔除、GPU culling 等场�
 3. Compute 与 graphics 在同一 queue 与不同 queue 的同步语义差异。
 4. `vkCmdDispatchIndirect` 的 buffer usage 与 alignment 要求。
 5. 普通 `vkCmdDispatch` 必须在 render pass instance 外执行；如使用 tile shading 等扩展的特殊执行路径，应逐项核对该扩展的命令作用域，不能把普通 compute dispatch 当作通用 subpass 操作。[SPEC]
+
+<a id="ray-query-capability-contract"></a>
+## Ray Query 独立能力合同
+
+Query 可在现有 graphics（如 fragment）或 compute shader 中执行；本卡位置不限制为 compute。查询 `vkEnumerateDeviceExtensionProperties`、`vkGetPhysicalDeviceFeatures2` 与所用 limits，依据固定 Registry 解析完整依赖并在 `vkCreateDevice` 启用所需 feature：[REGISTRY][SPEC]
+
+- `VK_KHR_ray_query` / `VkPhysicalDeviceRayQueryFeaturesKHR.rayQuery`。
+- `VK_KHR_acceleration_structure` / `VkPhysicalDeviceAccelerationStructureFeaturesKHR.accelerationStructure`，所选 API 版本对应的 deferred host operations 等依赖。
+- buffer device address 的 core/extension 路径及 `bufferDeviceAddress`，输入/scratch 的正确 usage、地址和内存分配标志。
+- 查询 AS properties（含 scratch 对齐、geometry/instance/primitive 上限），shader target / SPIR-V RayQuery 能力与设备一致。
+
+固定 Registry 的最小依赖展开：Vulkan 1.2 路径为 ray_query + acceleration_structure + deferred_host_operations（BDA 的 core feature 仍须启用）；Vulkan 1.1 路径另需 EXT_descriptor_indexing、KHR_buffer_device_address、KHR_spirv_1_4 及其 KHR_shader_float_controls。这里 descriptor_indexing 是扩展依赖，不强制启用非均匀索引/update-after-bind 等未使用特性，也不要求 bindless 架构。继续按所用符号/feature 检查传递依赖。[REGISTRY]
+
+Query-only **不需要** Ray Tracing Pipeline、SBT、`vkCmdTraceRaysKHR` 或 `RAY_TRACING_SHADER` stage。其 descriptor 使用 `VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR`，`VkWriteDescriptorSetAccelerationStructureKHR` 挂到写入链，stageFlags 是实际 compute/fragment 消费阶段。Bindless、Mesh Shader、独立 compute queue 与 OMM 各自独立门控。[SPEC]
+
+正例：支持 query/AS/BDA，RT pipeline 不支持，仍可验证 fragment query。反例：只发现扩展字符串、未启用 feature，或缺任一必要依赖就创建 query pipeline；应关闭此变体并选 shadow-map/probe 基线，不反复初始化失败。[ENGINE]
+
+AS 生命周期见 [资源合同](../04_buffer_image_memory/memory_allocation.md#acceleration-structure-resource-contract)，同步见 [AS 依赖表](../08_synchronization/pipeline_barrier.md#as-build-query-dependencies)。
+
+依据：[Ray Query](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/appendices/VK_KHR_ray_query.adoc)、[Registry](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/xml/vk.xml)。文档/编译成功不证明目标驱动或 Android 设备可执行。

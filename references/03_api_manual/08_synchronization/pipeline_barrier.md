@@ -261,3 +261,29 @@ Vulkan 1.4 对 Pipeline Barrier 的主要变更：
 3. Queue family ownership transfer 的 release/acquire barrier 顺序及 family index 规则。
 4. `VK_ACCESS_MEMORY_READ_BIT` / `VK_ACCESS_MEMORY_WRITE_BIT` 与具体 access flag 的等价关系。
 5. Vulkan 1.3 / synchronization2 中 `VkMemoryBarrier2` / `VkBufferMemoryBarrier2` 的扩展 access flag 语义。
+
+<a id="as-build-query-dependencies"></a>
+## AS build 与 Query 的真实依赖
+
+下表为 Sync2 的 stage/access 简写；完整枚举分别加 `VK_PIPELINE_STAGE_2_` / `VK_ACCESS_2_` 及对应 `_BIT`/`_BIT_KHR`。仅在支持并启用的路径使用；legacy 做等价映射。[SPEC]
+
+| Producer | Consumer | src stage / access | dst stage / access |
+|---|---|---|---|
+| copy geometry/instances | build 读取输入 | COPY / TRANSFER_WRITE | ACCELERATION_STRUCTURE_BUILD_KHR / SHADER_READ |
+| compute 蒙皮 | BLAS 读取顶点 | COMPUTE_SHADER / SHADER_WRITE | ACCELERATION_STRUCTURE_BUILD_KHR / SHADER_READ |
+| BLAS build | TLAS 读取 BLAS | ACCELERATION_STRUCTURE_BUILD_KHR / ACCELERATION_STRUCTURE_WRITE_KHR | ACCELERATION_STRUCTURE_BUILD_KHR / ACCELERATION_STRUCTURE_READ_KHR |
+| build/compact copy | compute query | ACCELERATION_STRUCTURE_BUILD_KHR / ACCELERATION_STRUCTURE_WRITE_KHR | COMPUTE_SHADER / ACCELERATION_STRUCTURE_READ_KHR |
+| build/compact copy | fragment query | ACCELERATION_STRUCTURE_BUILD_KHR / ACCELERATION_STRUCTURE_WRITE_KHR | FRAGMENT_SHADER / ACCELERATION_STRUCTURE_READ_KHR |
+| compute/fragment query 读取旧 AS | 原地 UPDATE / rebuild | 实际 COMPUTE_SHADER / FRAGMENT_SHADER 与 ACCELERATION_STRUCTURE_READ_KHR | ACCELERATION_STRUCTURE_BUILD_KHR / ACCELERATION_STRUCTURE_READ_KHR + ACCELERATION_STRUCTURE_WRITE_KHR |
+| AS build 写入 | compact-size property query | ACCELERATION_STRUCTURE_BUILD_KHR / ACCELERATION_STRUCTURE_WRITE_KHR | ACCELERATION_STRUCTURE_BUILD_KHR / ACCELERATION_STRUCTURE_READ_KHR |
+| compact copy 新 BLAS | TLAS build 引用新地址 | ACCELERATION_STRUCTURE_BUILD_KHR / ACCELERATION_STRUCTURE_WRITE_KHR | ACCELERATION_STRUCTURE_BUILD_KHR / ACCELERATION_STRUCTURE_READ_KHR |
+| scratch build 读写 | 后继 build 复用 | ACCELERATION_STRUCTURE_BUILD_KHR / ACCELERATION_STRUCTURE_READ_KHR + ACCELERATION_STRUCTURE_WRITE_KHR | ACCELERATION_STRUCTURE_BUILD_KHR / ACCELERATION_STRUCTURE_READ_KHR + ACCELERATION_STRUCTURE_WRITE_KHR |
+| compute query 结果写入 | 时域 / 合成采样 | COMPUTE_SHADER / SHADER_WRITE | 实际 COMPUTE_SHADER / FRAGMENT_SHADER 与 SHADER_SAMPLED_READ |
+
+上表 compact copy 使用基础 AS 扩展的阶段归属；若启用 ray tracing maintenance1 等改变可用专用 copy stage 的路径，须按实际规范配置，不编造通用 COPY 归属。build-input buffer 读取是 SHADER_READ；不是 AS 对象读取的 AS_READ。query 不统一使用 RT pipeline 的 RAY_TRACING_SHADER stage。[SPEC]
+
+旧 query→原地 AS 修改需要 WAR 执行顺序（表中给保守访问范围），仅有下一次 build→query 的前向 barrier 不足；跨 queue 用 semaphore，或使用新代 AS 并退休旧代。[SPEC][ENGINE]
+
+buffer 无 image layout；结果图和 history 要另填 old/new layout、subresource、descriptor layout。ping-pong 的两张图不自动保证跨帧 RAW/WAR 安全。不同 queue 即使同 family 也要 semaphore；exclusive sharing 跨 family 另作 release/acquire ownership。完成点同时覆盖 scratch、TLAS 和 hit-shading 数据，不能用全局 waitIdle 掩盖每帧错误依赖。[SPEC][ENGINE]
+
+依据：[同步范围](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc)、[AS 命令](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/accelstructures.adoc)。

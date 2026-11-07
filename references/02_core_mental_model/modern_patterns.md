@@ -1,6 +1,6 @@
 # 现代 Vulkan 工程模式
 
-本文件补充 Vulkan 1.2/1.3 时代在商业引擎和实际项目中广泛使用的工程模式。这些模式不是 Vulkan 1.0 核心对象链路的替代品，而是在默认 Vulkan 1.3+/1.4 环境下。Vulkan 1.4 设备保证支持 push descriptors / dynamic rendering local read / scalar block layout，无需运行时查询，应优先考虑的实现策略。
+本文件补充 Vulkan 1.2/1.3 时代在商业引擎和实际项目中广泛使用的工程模式。这些模式不是 Vulkan 1.0 核心对象链路的替代品，而是在默认 Vulkan 1.3+/1.4 环境下。版本提升不替代实际 API version、扩展依赖、子属性、格式/limits 与 feature enable 核对；能力边界见 [设备能力](../03_api_manual/01_instance_device_queue/physical_device.md) 与 [local read](../03_api_manual/07_rendering/mobile_tile_rendering.md#tile-capability-matrix)。
 
 ---
 
@@ -96,7 +96,7 @@ VkPhysicalDeviceDescriptorIndexingFeatures
 
 ### 一句话定位
 
-Timeline Semaphore（Vulkan 1.2 core）用 64-bit 单调递增计数器替代 binary semaphore，统一 acquire / render / present、compute queue / graphics queue、frames-in-flight 之间的同步。[SPEC][GUIDE]
+Timeline Semaphore（Vulkan 1.2 core 或相应扩展）用 64-bit 单调递增计数器表达队列提交和资源完成点；必须支持并启用 timelineSemaphore。WSI acquire / present 保留 binary semaphore 边界，不能用 timeline 直接替换。[SPEC]
 
 ### 核心收益
 
@@ -109,10 +109,10 @@ Timeline Semaphore（Vulkan 1.2 core）用 64-bit 单调递增计数器替代 bi
 ### 标准帧模型
 
 ```text
-每帧提交时 signal 一个 timeline value：
-→ acquire image（wait timeline N - 1）
-→ render / compute submit（signal timeline N）
-→ present（wait timeline N）
+vkAcquireNextImageKHR signal binary imageAvailable（或合法 fence 路径）
+→ render submit wait binary imageAvailable
+→ render submit signal binary renderFinished[imageIndex]，另 signal timeline N
+→ vkQueuePresentKHR wait binary renderFinished[imageIndex]
 
 CPU 侧：
 → 通过 vkGetSemaphoreCounterValue 或 vkWaitSemaphores 判断某 frame resource 是否可复用。
@@ -126,7 +126,7 @@ CPU 侧：
 
 ### 不适用情况
 
-- 仅支持 Vulkan 1.1 或旧驱动。[SPEC]
+- 所选 API/扩展路径不支持或未启用 timelineSemaphore。[SPEC]
 - 简单单 queue 渲染，binary semaphore + fence 已足够清晰。[HEUR]
 
 ### 关键对象链路
@@ -141,7 +141,9 @@ VkSemaphoreTypeCreateInfo (VK_SEMAPHORE_TYPE_TIMELINE)
 
 1. timeline value 必须单调递增，不能回退。[SPEC]
 2. CPU 侧 `vkWaitSemaphores` 需要设置合理超时，避免永久阻塞。[SPEC]
-3. 与 swapchain acquire / present 的 semaphore 交互需确认驱动支持。[SPEC][ANDROID]
+3. vkAcquireNextImageKHR 的 semaphore 和 vkQueuePresentKHR 的 wait semaphore 必须为 binary；不是驱动可选规则。timeline / submit fence 完成不证明 present wait 已消费，按 [呈现退役合同](../03_api_manual/02_surface_swapchain/swapchain_recreate.md#present-retirement-contract) 回收。[SPEC]
+
+依据：[固定 WSI 规范](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/VK_KHR_surface/wsi.adoc)。
 
 ---
 
