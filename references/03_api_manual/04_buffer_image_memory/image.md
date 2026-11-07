@@ -278,3 +278,17 @@ vkCreateImage(..., &createInfo, ..., &image)
 3. 多采样 image 作为 storage / sampled image 的限制。
 4. Queue family ownership transfer 的规则。
 5. Android 外部 memory 扩展的具体使用。
+
+
+<a id="transparent-target-precision"></a>
+## 透明中间目标精度
+
+适用：多层 blend/WBOIT/体积/GS；输入为颜色动态范围、最大层数、alpha 最小量级、format/usage/sample count，输出为经能力与误差验证的附件组合。先查 [blend-format-capability](../06_pipeline/graphics_pipeline.md#blend-format-capability)，不可由 FP16 shader 算术支持推断 FP16 blend 或 storage image 支持。[SPEC][ENGINE]
+
+RGBA8 UNORM 每次存储会量化且范围有限，低 alpha 累积可能丢失；FP16 提升范围/精度仍有舍入、下溢和溢出。WBOIT 加权颜色/权重和必须控制有限值、范围与层数；revealage 连乘另有下溢误差。清除值和存储含义见 [resolve](../../05_workflows/02_render_pass_effects/add_postprocess_pass.md#transparency-resolve)。不能简单要求 RGBA8/FP16 逐位相同后归咎驱动。
+
+生命周期：尺寸/format/sample count 变化重建相关 view/descriptor/pipeline；旧代附件与 snapshot/history 等最后读者完成后回收。预算按 width×height×samples×每像素存储以及 frames-in-flight、OIT pool/scratch、新旧代并存计算，实际分配/压缩/带宽需工具证据。高精度不保证节带宽。
+
+回退按误差与能力选择另一受支持格式、层数/效果质量档或排序路线，不能静默裁剪亮度。验证固定线性输入和 FP64 oracle，单独量化输入与逐层存储，输出颜色/alpha 热图和有限值检查；记录 GPU 实现而非假定硬件舍入。[ENGINE]
+
+[SPEC] [Format properties](https://docs.vulkan.org/refpages/latest/refpages/source/vkGetPhysicalDeviceFormatProperties2.html)、[Image format properties](https://docs.vulkan.org/refpages/latest/refpages/source/vkGetPhysicalDeviceImageFormatProperties2.html)。

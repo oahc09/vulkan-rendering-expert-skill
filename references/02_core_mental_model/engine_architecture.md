@@ -730,3 +730,16 @@ Vulkan Mapping：A → 状态写入 `VkGraphicsPipelineCreateInfo` 各状态结�
 光照在 v1.0.12 线性工作颜色域内计算。普通 alpha blend、alpha-cutout 与 opaque 分开，双面/几何法线/着色法线和粗糙度语义先固定。SSR 的屏外/遮挡失配通过 confidence 回退探针，不制造缺失信息。Query 阴影和单次反射不是完整 GI。[ENGINE]
 
 实现依赖：[输入合同](render_target_model.md#lighting-temporal-data-contract) → [阴影](../05_workflows/02_render_pass_effects/add_depth_pass.md#stable-shadow-workflow) → [可选查询](../03_api_manual/06_pipeline/compute_pipeline.md#ray-query-capability-contract) → [时域](../05_workflows/02_render_pass_effects/add_postprocess_pass.md#temporal-quality-workflow)。保留现有 ResourceManager、allocator、retirement 和 GPU Scene；重新评估条件是实际瓶颈或质量回归，不为新版本重建引擎。
+
+
+<a id="transparent-gaussian-budget-decision"></a>
+## 透明、体积与 Gaussian 方案决策
+
+适用移动透明/水玻璃/局部雾/GS 需求；不另建资源/排序/history 系统。输入内容语义、最低能力、精度/覆盖预算与多View生命周期；输出 Candidate→Trade-off→Decision、回退和重新评估条件。[ENGINE]
+
+- 合成首先读 [透明合同](render_target_model.md#transparent-composition-contract)：排序为参考，WBOIT 是近似，有界列表容量可观测；不承诺任意交叉层精确。
+- 水/玻璃选 [独立 snapshot 折射](../05_workflows/02_render_pass_effects/add_texture_sampling_pass.md#screen-space-refraction)，多层/屏外明示近似；雾用 [距离积分](../05_workflows/02_render_pass_effects/add_postprocess_pass.md#local-volume-composite)，深度分段而非万能 pass 顺序。
+- GS 选 [数据/投影/排序合同](../05_workflows/03_compute_workflows/add_compute_pass.md#gaussian-preproject-sort)，标准 instance/raster 起步，CPU小样例对照，RT/mesh/interlock 非必需。ID与材质/深度代理使用相同身份规则。
+- 用 [覆盖预算](../05_workflows/07_optimization/optimize_mobile_bandwidth.md#coverage-budget) 决定精度、低分辨率、背景LOD，不因点数少或 Compute 更新而预言提速。
+
+所有 pass 挂既有 RenderGraph/同步、ResourceManager/retirement、逐View history/generation。格式/层数/内存/误差超限、相机/实例/时间/资源变化重估；单输出关闭只废弃该输出数据。先能力门控，再验证数值、动态序列与同负载持续 A/B。缺设备时保留未验证结论，回滚关闭新增 pass 并等已提交消费者完成，不立即释放新对象。

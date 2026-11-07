@@ -72,3 +72,9 @@ VUID
 代码片段
 Validation Error 对照
 ```
+
+
+## v1.0.15 定向知识
+
+- [透明合成合同](render_target_model.md#transparent-composition-contract)
+- [透明/GS方案决策](engine_architecture.md#transparent-gaussian-budget-decision)

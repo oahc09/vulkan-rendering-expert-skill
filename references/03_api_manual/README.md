@@ -111,3 +111,6 @@
 - [Descriptor Heap](05_descriptor/descriptor_heap.md)：真实 EXT API、slot stride / write bytes、能力与工具边界。
 - [Physical Device](01_instance_device_queue/physical_device.md)：SDK、loader、API、extensions、supported/enabled features、profile 分账。
 - [Validation](09_debug_validation/validation_layer.md)：按版本确认覆盖，不以 clean 代替 GPU 正确性证据。
+
+
+v1.0.15 透明、体积与Gaussian增量见 [api_index.md](api_index.md) 的定向知识，仅按任务读取，不新增启动依赖。

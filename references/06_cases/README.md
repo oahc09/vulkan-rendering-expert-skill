@@ -140,3 +140,6 @@ GPU frame time 高
 - 相关 Workflow
 - 关键工具证据
 - 可复用预防规则
+
+
+v1.0.15 透明、体积与Gaussian增量见 [case_index.md](case_index.md) 的定向知识，仅按任务读取，不新增启动依赖。

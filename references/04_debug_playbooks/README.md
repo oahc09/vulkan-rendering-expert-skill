@@ -159,3 +159,6 @@
 ```
 
 这些 Playbook 覆盖黑屏、闪烁、Crash、GPU Hang、Device Lost、Validation Error、Descriptor、Image Layout、Sync Hazard、Compute 无输出、Android 生命周期和常见性能症状。
+
+
+v1.0.15 透明、体积与Gaussian增量见 [debug_priority_index.md](debug_priority_index.md) 的定向知识，仅按任务读取，不新增启动依赖。

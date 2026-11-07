@@ -303,6 +303,20 @@
 | 阴影抖动 / 曝光残影 / 多View串影 | `../04_debug_playbooks/01_visual_issues/flickering.md#hybrid-temporal-diagnostics` |
 | Hybrid分档 / 画质ROI / AS成本 | `../05_workflows/07_optimization/optimize_frame_time.md#quality-budget-tiers` |
 | OMM/BVH公开案例证据 | `../06_cases/06_performance/case_performance.md#hybrid-quality-evidence` |
+| 透明 / straight / premultiplied / opacity / transmittance | `../02_core_mental_model/render_target_model.md#transparent-composition-contract` |
+| independentBlend / MRT blend / MSAA透明 | `../03_api_manual/06_pipeline/graphics_pipeline.md#blend-format-capability` |
+| 低alpha多层 / RGBA8与FP16精度 | `../03_api_manual/04_buffer_image_memory/image.md#transparent-target-precision` |
+| WBOIT / revealage / OIT溢出 | `../05_workflows/02_render_pass_effects/add_postprocess_pass.md#transparency-resolve` |
+| 折射feedback / scene-color读写 | `../03_api_manual/07_rendering/render_target_layout.md#refraction-read-write-boundary` |
+| 水 / 玻璃 / screen-space refraction / 厚度 | `../05_workflows/02_render_pass_effects/add_texture_sampling_pass.md#screen-space-refraction` |
+| 局部雾 / 体积 / 雨雪软交界 | `../05_workflows/02_render_pass_effects/add_postprocess_pass.md#local-volume-composite` |
+| 3DGS / Gaussian / PLY / splat排序 / 多集合ID | `../05_workflows/03_compute_workflows/add_compute_pass.md#gaussian-preproject-sort` |
+| Gaussian indirect与属性同步 | `../05_workflows/03_compute_workflows/compute_to_graphics_sync.md#gaussian-consumer-dependencies` |
+| footprint / coverage / 背景LOD / 透明层数预算 | `../05_workflows/07_optimization/optimize_mobile_bandwidth.md#coverage-budget` |
+| 透明/GS方案选择 | `../02_core_mental_model/engine_architecture.md#transparent-gaussian-budget-decision` |
+| 透明高覆盖/排序/精度分流 | `../04_debug_playbooks/06_performance_symptoms/bandwidth_fullscreen_cost.md#transparent-coverage-diagnostics` |
+| 多splat set材质ID公开案例 | `../06_cases/02_descriptor_pipeline/case_descriptor_pipeline.md#gaussian-multi-set-id-case` |
+
 
 <a id="mobile-topics"></a>
 ## 移动端主题（既有主类型的按需分支）
@@ -342,3 +356,11 @@ ENG13 新24题按 primary/contrast 成对输入评估，实际 path/anchor/hash/
 
 仍按既有 API/debug/performance/implementation/architecture 主类型，只按命中症状读一个权威合同，再补缺口。真实项目叠加 Evidence/Architecture Map、R1–R5、影响面及适用 G1–G6；本专题不加入强制启动集合。
 旧64题 prompt bytes 冻结，VIS14-01..20 独立计分，总84；原12题 v1.0.8 provider input-token 分母不变，无新增30%目标。Static/Snapshot/Host Unit/Shader Unit/Vulkan Integration/Live/Android Device/Visual Quality 独立报告；未运行不继承旧 SHA PASS。
+
+
+<a id="transparency-gaussian-topics"></a>
+## 移动透明、体积与 Gaussian（TRAN15）
+
+仍按既有主类型/触发/宿主与模型规则；只读取命中权威锚点，不加入最小启动。优先合成或数据合同，再按缺口补能力、同步、效果或覆盖预算。真实项目仍先 Evidence/Architecture Map，保持影响面、R1–R5 和适用 G1–G6。
+
+旧84题与原12题token基线不变；TRAN15-01..20成对条件独立登记/计分，实际总数和运行状态以tests registry为准，不把计划104题当执行结果。逐任务记录相对最终v1.0.14的path/anchor/hash/读取量；文件净增0不等于token零增长。Static/host_unit/shader_unit/vulkan_integration/Live/Host/mobile_visual/mobile_performance/Package各自报告；缺设备/模型不继承历史PASS。

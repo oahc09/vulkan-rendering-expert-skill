@@ -234,3 +234,30 @@ Vulkan 1.4 不保证全部 depth/MSAA local read，QCOM tile heap 也不等于�
 
 A/B 固定输入、分辨率、画质、刷新率与热状态；比较图像误差、GPU时间分布、显存与实际可用带宽counter。
 计数器不可得就写未测，不从“Compute”“subpass”“local read”名称预填收益。缺少能力或回归失败立即选标准路径，不要求更换GPU或提高项目最低Vulkan版本。[ENGINE]
+
+
+<a id="coverage-budget"></a>
+## 透明与 Gaussian 屏幕覆盖预算（C4）
+
+适用透明/局部雾/GS 的质量与性能选择，不用点数代替实际工作。输入固定资源 hash、seed、camera path、曝光/分辨率/质量档、设备/OS/driver/features 与热状态；输出分阶段时耗、覆盖估计、内存峰值、误差和有条件回退。[ENGINE]
+
+先用低侵入 timestamp 和计算估计，再按需启用原子重诊断。查询 queue family timestampValidBits、timestampPeriod 和可用阶段；处理计数 wrap、availability、CPU/GPU 时域区别。并行 queue 的区间不能相加伪装帧时间。不可用的硬件 counter 标 UNMEASURED。
+
+| 记录 | 解释与边界 |
+|---|---|
+| visible primitives/GS、projected-size buckets | 数量与分布，不是着色成本 |
+| clipped quad/ellipse footprint、tile coverage | 不同估计量，不能叫硬件 fragment invocation |
+| unique covered pixels、层数 histogram/p95/max | 方法、sample/cutoff、原子开销与饱和/溢出单列 |
+| projection、sort、raster、resolve GPU time；CPU submit/upload | 优化主攻方向，包含生产路径的同步等待 |
+| intermediate images/OIT pool/sort scratch/upload/驻留峰值 | 含 frames-in-flight 与新旧 generation 并存 |
+| linear color、alpha/T error 与相机序列 pop/闪烁 | 先冻结容差；单帧 PSNR 不足 |
+
+基础档为合法排序 blend、单层折射、有限局部雾与 instanced splats，不强制 RGBA8。平衡档在 format/误差/内存允许时启用 FP16、WBOIT、低分辨率雾和保守背景 LOD。增强档的 bounded lists/interlock/条件排序复用逐项能力和证据门控，不按 GPU 品牌硬编码。失去能力/容量/质量预算立即回退并记录原因，旧资源按最后完成点退休。[ENGINE]
+
+背景 LOD/合并只在远景低视差、高重叠且内容证据支持时研究；保留前景、轮廓、运动、视差结构。点数下降但剩余 footprint 变大可更慢。参数简单平均不保持 radiance/transmittance，需相同相机序列、视点变化和背景颜色下对照，分别报告点数、coverage、排序/光栅成本、误差与内存。
+
+A/B 固定可见内容、曝光、实际分辨率、质量、camera、seed 与持续热状态；记录 cold/warm、p50/p95/p99、内存峰值与真实渲染/呈现/生成帧。删内容、降低层数或改曝光是另一个实验，不算等质量加速；重诊断帧时间不冒充生产帧时间。无功耗工具不称节电，无 Adreno/Mali 实机只称已测实现。容量/采样/内存/时间安全阈值预设，中止保留结果，不无限压力运行。
+
+验证两个独立轴：固定点数改变 footprint、固定覆盖改变点数；再比较低/高层数、RGBA8/受支持 FP16、背景/前景 LOD。细分 Static/host_unit/shader_unit/vulkan_integration/Live/Host/mobile_visual/mobile_performance/Package；未执行不继承旧 PASS。
+
+[REF] [Gaussian rasterization](https://nvpro-samples.github.io/vk_gaussian_splatting/deep-dives/rasterization_of_3d_gaussian_splatting/)；[SPEC] [Queries](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/queries.adoc)。

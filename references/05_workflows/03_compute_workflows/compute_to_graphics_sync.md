@@ -205,3 +205,23 @@ legacy reset 用 TRANSFER/TRANSFER_WRITE，vertex 与 index fetch 用 VERTEX_INP
 - `../../04_debug_playbooks/04_resource_sync/compute_no_output.md`
 - `../../04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md`
 - `../../04_debug_playbooks/03_validation_errors/layout_sync_hazard_errors.md`
+
+
+<a id="gaussian-consumer-dependencies"></a>
+## Gaussian producer 与实际消费者
+
+适用预投影/排序/indirect raster/ID resolve；输入为实际资源范围、queue/family、sharing mode 与读写者，输出为可审计依赖链。数据语义见 [Gaussian 合同](add_compute_pass.md#gaussian-preproject-sort)，基础路线不要求独立 compute queue。[SPEC][ENGINE]
+
+| Producer | Consumer | synchronization2 范围（实际使用阶段） |
+|---|---|---|
+| compute key/list 写 | 下次 sort dispatch | COMPUTE_SHADER/SHADER_STORAGE_WRITE → COMPUTE_SHADER/SHADER_STORAGE_READ，若再写同时覆盖写访问 |
+| compute indirect/count 写 | draw indirect fetch | COMPUTE_SHADER/SHADER_STORAGE_WRITE → DRAW_INDIRECT/INDIRECT_COMMAND_READ |
+| compute projected attributes/IDs 写 | vertex/fragment SSBO 读 | COMPUTE_SHADER/SHADER_STORAGE_WRITE → VERTEX_SHADER 或 FRAGMENT_SHADER/SHADER_STORAGE_READ |
+| compute vertex/index buffer 写 | 固定功能 fetch | COMPUTE_SHADER/SHADER_STORAGE_WRITE → VERTEX_ATTRIBUTE_INPUT/VERTEX_ATTRIBUTE_READ 或 INDEX_INPUT/INDEX_READ |
+| fragment list/head/counter 原子或写 | resolve shader 读 | FRAGMENT_SHADER/SHADER_STORAGE_WRITE → 实际 FRAGMENT_SHADER 或 COMPUTE_SHADER/SHADER_STORAGE_READ |
+
+表中阶段/access 使用 `VK_PIPELINE_STAGE_2_*_BIT`、`VK_ACCESS_2_*_BIT` 对应符号，并按目标 Vulkan/synchronization2 支持核对；不能把 DRAW_INDIRECT barrier 当 shader 属性可见性。reset/copy/upload 含真实 transfer/host producer，shader 内 workgroup barrier 不能同步多个 dispatch。
+
+跨 VkQueue 必须实际 semaphore 依赖，wait stage 覆盖最早 consumer；ownership 由 queue family 与 exclusive/concurrent 决定，same family 或 concurrent 不取消内存依赖。每个 frame/view/generation 的 scratch、sort output 与选择 ID buffer 维持到所有消费者完成，尺寸/资源变化拒收旧异步输出。回退同 queue、CPU sort/upload 或直接 instance draw 仍保留对应依赖。
+
+验证分别只写 indirect、再写 vertex SSBO、再用固定 vertex fetch；sync validation、结果对照和跨View/退休压力分开，不能以 barrier 数量或 Validation clean 代替正确性。[SPEC] [Synchronization](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc)。

@@ -847,3 +847,13 @@ index 0 正常常会掩盖 stride 错误。可见字节正确不证明 shader �
 ### 13. 关联 Workflow
 
 [项目能力诊断](../../05_workflows/01_renderer_setup/project_diagnosis.md)。
+
+
+<a id="gaussian-multi-set-id-case"></a>
+## 公开参考：多个 splat set 的材质 ID 选择
+
+[REF] NVIDIA [2026.2.9 README](https://github.com/nvpro-samples/vk_gaussian_splatting/blob/2026.2.9/README.md)、[发布说明](https://nvpro-samples.github.io/vk_gaussian_splatting/release-notes/)与 [2026-09-03 讨论](https://github.com/nvpro-samples/vk_gaussian_splatting/discussions/38) 描述 raster/hybrid 多集合材质 ID 选择修复；不据此声称本地 Android 已复现或必须采用其 interlock 路线。
+
+本地 synthetic 复现设计：两个 localID 重叠但材质/transform 不同的 set，另加 opaque mesh/第二View；记录颜色、picked tuple、材质与 depth proxy。故意把 sorted index 或 localID 当 global ID 应暴露错配；颜色正确不证明整数ID附件正确。选定贡献者规则必须同步用于 picked ID、材质和深度，颜色本身仍可能由多个贡献者混合。[ENGINE]
+
+修复边界：[Gaussian合同](../../05_workflows/03_compute_workflows/add_compute_pass.md#gaussian-preproject-sort) 的 (setID,localID,generation) 与完整状态失效；所有属性消费者同步且资源最后使用后退休。缺 interlock 仍可用明确 selection pass/排序基线。验证多集合交错、资源重载、单View关闭；本节是公开问题映射与未执行实验设计，不是本地 PASS 记录。

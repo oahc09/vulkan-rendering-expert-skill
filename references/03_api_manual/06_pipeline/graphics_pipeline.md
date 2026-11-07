@@ -292,3 +292,18 @@ VkRenderPass / Dynamic Rendering 格式信息
 4. Multisample / sample shading 的 feature 要求。
 5. 不同 primitive topology 与 tessellation / mesh shader 的交互。
 6. 具体 GPU 的 pipeline cache 行为与持久化限制。
+
+
+<a id="blend-format-capability"></a>
+## 透明 blend / format 能力
+
+适用：排序 blend、MRT WBOIT、MSAA 透明附件；不是所有 Vulkan format 都支持 blending。输入是候选 VkFormat、tiling、usage、sample count 与每附件 blend 状态；输出为可创建的路径或明确 UNSUPPORTED 回退。[SPEC]
+
+1. 查询 `vkGetPhysicalDeviceFormatProperties2` 的实际 tiling features：color attachment、COLOR_ATTACHMENT_BLEND、sampled、storage 各按用途独立检查；需要时用 `VkFormatProperties3`/format feature flags2。再以 `vkGetPhysicalDeviceImageFormatProperties2` 检查完整 format/type/tiling/usage/flags 的 image 支持、extent 与 sampleCounts。仅能创建 image 不等于能 blend/sample/storage。
+2. 检查并启用 `independentBlend`：不同 color attachments 的 blend 状态需要此 feature；未启用时相应 attachment 状态必须相同。WBOIT accumulation/revealage 通常不同，缺能力可用两次几何 pass（各自单附件）或排序回退，不能直接启用非法 MRT。检查 maxColorAttachments、颜色附件格式/sample count 与 pipeline/rendering 一致。
+3. 整数 ID 目标不能靠颜色 blending 得到正确 ID，ID 选择另有算法。MSAA 样本数、per-sample/per-pixel resolve、sample shading/alpha-to-coverage 独立声明；不能把 multisample resolve 当透明排序。
+4. fragment interlock 仅在扩展/feature/shader 支持时使用，保护重叠访问不自动按几何深度排序；标准 raster 路线不依赖它。缺失能力必须在创建 pipeline 前选择合法路径。
+
+具体 factors 见 [合成合同](../../02_core_mental_model/render_target_model.md#transparent-composition-contract)；写入后的 resolve 仍需内存依赖和生命周期管理。验证能力开/关、不同附件状态、unsupported format、MSAA 与 ID 负例；Validation clean 不证明数学正确。[SPEC][ENGINE]
+
+[SPEC] [Framebuffer](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/framebuffer.adoc)、[Formats](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/formats.adoc)、[Interlock](https://docs.vulkan.org/refpages/latest/refpages/source/VK_EXT_fragment_shader_interlock.html)。

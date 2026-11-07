@@ -124,3 +124,10 @@ The paired tests repository contains the exact plan, 24 new ENG13 paired-conditi
 ## v1.0.14: Mobile Hybrid Lighting & Temporal Quality
 
 Baseline shadows and reflection fallback; optional query-only AS engineering; temporal input/history contracts and non-neural filtering; evidence-based quality tiers. Keeps eight modules, zero new runtime knowledge files and the 200-file package ceiling. Paired tests register the frozen previous64 plus VIS14-01..20. Static, shader, software Vulkan, Live, host and Android evidence are independent; no unmeasured performance or power claim. See [conditional topic routing](references/07_integration_pack/task_routing_rules.md#hybrid-quality-topics).
+
+
+## v1.0.15: Mobile Transparency, Volumetrics & Gaussian Rendering
+
+Adds alpha/precision contracts, conditional WBOIT and observable overflow, single-layer refraction, bounded local volumes and soft particles, Gaussian data/projection/sort-cache/multi-set identity contracts, and coverage-based quality budgets. Reuses existing resource, lighting and history systems. Eight modules, minimal startup, zero new runtime knowledge paths and the 200-file package ceiling remain unchanged.
+
+See [conditional topic routing](references/07_integration_pack/task_routing_rules.md#transparency-gaussian-topics). The paired tests repository owns 20 new TRAN15 cases, experiment source and raw evidence. Static, host/shader, Vulkan, Live/Host and mobile visual/performance results are separate; documentation does not establish device validation or power savings.

@@ -122,3 +122,13 @@ v1.0.12仅按章节扩展既有Android Surface、媒体采样与颜色输出内�
 | 多视图剔除/独立HiZ与完成点 | `../05_workflows/03_compute_workflows/add_compute_pass.md#multi-view-culling` |
 | GPU particles / alive compact | `../05_workflows/03_compute_workflows/add_compute_pass.md#gpu-particles` |
 | 规模渲染A/B / 软件Vulkan与MobileScale | `../05_workflows/07_optimization/optimize_frame_time.md#scaled-rendering-ab` |
+
+
+## v1.0.15 定向知识
+
+- [透明resolve](02_render_pass_effects/add_postprocess_pass.md#transparency-resolve)
+- [局部体积/软粒子](02_render_pass_effects/add_postprocess_pass.md#local-volume-composite)
+- [屏幕折射](02_render_pass_effects/add_texture_sampling_pass.md#screen-space-refraction)
+- [Gaussian投影排序](03_compute_workflows/add_compute_pass.md#gaussian-preproject-sort)
+- [GS消费者同步](03_compute_workflows/compute_to_graphics_sync.md#gaussian-consumer-dependencies)
+- [覆盖预算](07_optimization/optimize_mobile_bandwidth.md#coverage-budget)
