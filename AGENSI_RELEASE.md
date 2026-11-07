@@ -25,7 +25,7 @@ v1.0.10 保留其与 v1.0.9 一致的最小启动契约，未改其他宿主配�
 | 字段 | 手填建议 |
 | --- | --- |
 | Title | Vulkan Rendering Expert Skill |
-| version | 1.0.14（必须与本次候选 `metadata.version` 相同） |
+| version | 1.0.15（必须与本次候选 `metadata.version` 相同） |
 | summary | Engineering-focused Vulkan guidance for rendering architecture, debugging, synchronization, Android integration, performance optimization, and source-level verification. |
 | tags | vulkan, rendering, android, graphics-engine, debugging, performance, synchronization |
 | use_cases | Diagnose black screens and validation errors; reason about synchronization and resource lifetimes; investigate Android surface/swapchain issues; assess performance bottlenecks; compare rendering architecture options. |
@@ -80,7 +80,7 @@ git status --short
 git rev-parse HEAD
 # 输出目录须已存在、位于 checkout 外；文件名不得已存在。
 python scripts/agensi_audit_and_pack.py . \
-  --out /absolute/path/outside-checkout/vulkan-rendering-expert-skill-1.0.14-agensi-free.zip
+  --out /absolute/path/outside-checkout/vulkan-rendering-expert-skill-1.0.15-agensi-free.zip
 ```
 
 把示例输出路径替换为自己的仓库外目录。保留 JSON 报告用于关联 commit、包内容和 SHA-256；
