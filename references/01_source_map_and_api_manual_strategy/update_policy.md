@@ -91,7 +91,7 @@ X演示只作发现入口，无可核验原始资料则watch。网页修改日�
 SDK/headers声明、驱动支持、device显式启用、路径运行和实测收益是五种不同证据。
 
 本轮新增知识按移动诊断、tile/interop、可选神经路径分别映射到现有文档。ADPF、Swappy、local read不是本月首发。
-`VK_ARM_cooperative_matrix_layouts`、`VK_GOOGLE_hdr_SMPTE_ST_2094_50_metadata`、`VK_KHR_maintenance12`
+`VK_ARM_cooperative_matrix_layouts`、`VK_GOOGLE_hdr_smpte_st_209450_metadata`、`VK_KHR_maintenance12`
 本轮只列watch；无目标设备/案例不扩展为完整HDR或模型训练模块。
 来源规范冻结 [Vulkan-Docs b94f8bd](https://github.com/KhronosGroup/Vulkan-Docs/tree/b94f8bd2d004d2949469d8a5071ee10eb7d23566)
 及其中Registry；SDK/模型各自固定，不将该修订号当已安装SDK。

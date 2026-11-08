@@ -121,7 +121,7 @@ CPU Data / Compute Output
 
 ## 8. 实现步骤
 
-1. **确认特性与限制**：查询 `maxStorageBufferRange`、`minStorageBufferOffsetAlignment`、`maxComputeSharedMemorySize`（如使用 shared memory）；启用 `VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES::storageBuffer16BitAccess` 等若需要 [SPEC]。
+1. **确认特性与限制**：查询 `maxStorageBufferRange`、`minStorageBufferOffsetAlignment`、`maxComputeSharedMemorySize`（如使用 shared memory）；如确需16-bit storage，查询并启用 `VkPhysicalDevice16BitStorageFeatures.storageBuffer16BitAccess`（或相应核心聚合结构字段，不能重复混链）；它与 shaderFloat16 算术能力不同 [SPEC]。
 2. **定义数据结构**：按 std430 布局，注意数组元素对齐；GLSL 中 `layout(std430, binding=0) buffer` [SPEC]。
 3. **创建 buffer**：`VkBufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT`；若需 CPU 上传加 `TRANSFER_DST_BIT`；若作为 indirect draw buffer 加 `INDIRECT_BUFFER_BIT`。
 4. **分配内存**：device-local 用于性能；host-visible 仅用于调试或 CPU 流式写入 [ENGINE]。

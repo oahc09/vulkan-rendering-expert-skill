@@ -75,7 +75,7 @@ Shader Module
 - Pipeline cache 是否在 `vkCreateDevice` 后创建并在 `vkDestroyDevice` 前保存。`[SPEC]`
 - `VkPipelineCacheCreateInfo::initialDataSize` / `pInitialData` 是否正确读取上次持久化数据。`[SPEC]`
 - 是否所有 shader 变体组合在运行期才被首次发现。`[ENGINE]`
-- 是否启用了 `VK_PIPELINE_CREATE_DELAY_CREATE_BIT_EXT` 或异步创建扩展。`[SPEC]`
+- 是否把允许的pipeline创建移到后台线程，并正确同步共享cache？如已启用pipelineCreationCacheControl，可用VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT避免该调用触发编译；这不是异步创建或延迟创建flag。[SPEC][ENGINE]
 - Graphics Pipeline Library 是否将 vertex input、fragment output、pre-rasterization、fragment shader 拆分为独立 library pipeline。`[SPEC]`
 - Pipeline 创建是否集中在单线程，导致 CPU 核心未充分利用。`[ENGINE]`
 
@@ -408,3 +408,15 @@ Android 上启动时间受 APK 大小、存储速度、Surface 生命周期影�
 
 
 ---
+
+<a id="pipeline-compile-control-lexical-contract"></a>
+
+## 编译控制不是异步创建
+
+条件：Vulkan1.3或VK_EXT_pipeline_creation_cache_control路径，查询并启用pipelineCreationCacheControl。正常路径：FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT若需要编译，返回VK_PIPELINE_COMPILE_REQUIRED且对应pipeline为VK_NULL_HANDLE；应用继续使用已就绪fallback，并把允许的创建工作移到后台，完成后再发布有效handle。
+
+失败/回退：EARLY_RETURN_ON_FAILURE_BIT仅控制批量创建在某项非SUCCESS时提早返回，不创建后台任务，也不保证原子性；清理实际成功返回的handles。VK_KHR_deferred_host_operations只适用于明确接收deferredOperation参数的命令，不让普通graphics/compute pipeline创建自动异步。没有cache-control feature时按原创建语义在应用管理的worker执行，满足cache和对象host同步。
+
+验证：区分cache命中、compile-required返回、批量部分失败、后台完成前继续fallback；不能把VK_PIPELINE_COMPILE_REQUIRED当作成功可绑定pipeline。未执行编译器/设备测试。
+
+固定依据：[pipeline flags](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/pipelines.adoc#pipelines-creation-flags)、[multiple creation](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/pipelines.adoc#pipelines-multiple)。[SPEC]

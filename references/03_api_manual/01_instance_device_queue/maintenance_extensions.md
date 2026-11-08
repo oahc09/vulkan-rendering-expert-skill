@@ -197,3 +197,26 @@ VkInstance → VkPhysicalDevice
 - [兼容 present modes 查询及 EXT 别名](https://docs.vulkan.org/refpages/latest/refpages/source/VkSurfacePresentModeCompatibilityKHR.html)、[逐次呈现模式](https://docs.vulkan.org/refpages/latest/refpages/source/VkSwapchainPresentModeInfoKHR.html)。
 - [Present fence 的精确回收保证](https://docs.vulkan.org/refpages/latest/refpages/source/VkSwapchainPresentFenceInfoKHR.html)。
 - [设备创建 feature 链规则](https://docs.vulkan.org/refpages/latest/refpages/source/VkDeviceCreateInfo.html)。
+
+
+<a id="maintenance-promotion-contract"></a>
+
+## 18. 固定1.4.368的promotion与后续maintenance合同
+
+**条件**：按固定Registry区分promotion、扩展依赖、feature启用与properties。maintenance1–3→1.1，4→1.3，5/6→1.4；maintenance7–12仍为独立扩展，编号更高不会自动开启前序feature。核心路径不以是否枚举KHR字符串作为唯一条件，feature聚合结构与其独立别名结构不能重复放入创建链。[SPEC]
+
+**正常路径**：记录有效核心版本和所需具体行为；扩展路径解析depends并启用字符串，查询对应features/properties，仅启用用到的feature，再加载所选core/KHR入口。maintenance8依赖1.1；9–12依赖properties2扩展或1.1，不应统一强行要求Vulkan1.4。既有1–7使用流程保留，后续差异逐项选择：[SPEC]
+
+- maintenance8：ownership stage范围与额外access flags；pipeline cache内部同步merge、匹配depth/stencil-color copy、SPIR-V整数余数/Offset等是不同改动。新位/链结构必须满足相应命令条件，不整体替换Sync2。
+- maintenance9：允许零queue device用于离线pipeline/shader编译，不允许因此提交GPU工作；query RESET创建flag只免首次reset，复用仍须reset；非对称event按 [event合同](../08_synchronization/event.md#event-generation-contract)；同device implicit ownership按 [ownership合同](../08_synchronization/synchronization2.md#maintenance-ownership-contract)。3D slice barrier范围与sparse 2D-view属性独立核对。
+- maintenance10：非graphics queue depth/stencil copy须检查新增format feature；vkCmdEndRendering2KHR、input attachment与resolve控制不是一般rendering支持的替身。sRGB默认resolve查询与可选override能力分别验证，不因扩展名推断可强制选择。
+- maintenance11：CONCURRENT的queueFamilyIndexCount可为1；transfer-only的minImageTransferGranularity变为(1,1,1)，optimalImageTransferGranularity是性能提示，不是合法性门槛；buffer-image copy取消特定4字节限制不取消texel/block等剩余对齐。shader/descriptor单层alias与independent sets需遵守各自接口规则。
+- maintenance12：启用时pQueuePriorities可NULL，等效同一创建数组内优先级相等，但具体值implementation-defined，不能假定0或1，也不保证对其他queue相对优先级；还包括push-constant非均匀索引、单aspect深度模板操作与独立input attachment index limit。
+
+**失败/回退**：未启用对应feature继续旧规则：显式queue priorities、显式query首次reset、匹配event dependency、显式ownership、原transfer限制。不支持后续rendering能力时保留受支持的旧流程，不把扩展枚举当完整运行验证。[SPEC]
+
+**验证**：以core-only且不枚举同名扩展、extension-only、feature=false、别名重复、缺失传递依赖分别测试选择器；对9/11/12新放宽条件加入正反用例。此节审查promotion/初始化及已列差异，不声称每个maintenance shader/rendering子功能已独立L2或设备通过。
+
+固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[features#features-maintenance8](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/features.adoc#features-maintenance8)；[features#features-maintenance9](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/features.adoc#features-maintenance9)；[features#features-maintenance10](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/features.adoc#features-maintenance10)；[features#features-maintenance11](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/features.adoc#features-maintenance11)；[features#features-maintenance12](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/features.adoc#features-maintenance12)；[devsandqueues#devsandqueues-queue-creation](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/devsandqueues.adoc#devsandqueues-queue-creation)。[SPEC]
+
+依赖与promotion原始清单：[固定 vk.xml](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/xml/vk.xml)。

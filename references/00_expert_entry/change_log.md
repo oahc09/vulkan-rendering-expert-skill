@@ -1,5 +1,12 @@
 # Change Log
 
+## v1.0.17 candidate — Vulkan Coverage & Consolidation（2026-11-08）
+
+- 冻结标准 Vulkan1.0–1.4 / 规范1.4.368，配套tests生成Registry、章节、域候选和来源审计；清单登记不计作L1/L2完成。
+- 纠正push descriptor计数/寿命、版本/dispatch、命令状态、host/device同步、event/fence、映射atom、maintenance、RT/DGC、Video codec等实际冲突；现有API卡按条件/正常/失败/回退补合同，保持知识文件净增0。
+- 18域按需导航，旧120题字节冻结，CORE17任务复用与新缺口分开；K/B/P失败关闭，Static/Host/软件Vulkan/Live/实际宿主/目标设备分层。
+- 候选尚未达到全域覆盖目标。稳定扩展深层语义、真实Live/宿主和设备矩阵未完成项保留，不自动合并/上架；文字专题仍为v1.0.18。
+
 ## v1.0.15 — Mobile Transparency, Volumetrics & Gaussian Rendering（2026-11-07）
 
 - 基于已合v1.0.14（4a7ff82），增加C1透明合成/精度/WBOIT、C2单层折射/局部体积/天气、C3 GS数据/投影/排序/ID、C4覆盖预算与同质量A/B。

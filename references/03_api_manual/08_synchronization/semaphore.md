@@ -184,7 +184,7 @@
 
 - Binary semaphore 被 submit 引用后，在对应 signal 完成且被消费前不能复用或销毁。[SPEC]
 - present 等待的 binary semaphore 不能仅凭 submit fence 完成就再次 signal。常用方案按 swapchain image 分配，由 acquire 的 imageIndex 索引；再次 acquire 同一 image 并等待 acquire 同步后，才保证此前 present 已不再使用对应 semaphore。[SPEC][GUIDE]
-- Timeline semaphore 的 value 被 wait 引用后，在 wait 完成前不能 reset 或销毁。[SPEC]
+- Timeline semaphore 的 value 被 wait 引用后，不能reset其counter；销毁前需全部已提交signal/wait引用完成。[SPEC]
 
 ---
 
@@ -228,7 +228,7 @@
 ### 移动端
 
 - 移动端 GPU 对跨 queue 同步敏感；尽量减少独立 compute/graphics queue 间的频繁同步。[ENGINE][ANDROID]
-- Swapchain acquire semaphore 的等待 stage 设为 `COLOR_ATTACHMENT_OUTPUT_BIT` 即可，避免 `ALL_COMMANDS_BIT` 造成不必要阻塞。[HEUR]
+- 若首次swapchain访问是color attachment写，acquire semaphore 的等待 stage 可设为 `COLOR_ATTACHMENT_OUTPUT_BIT` ；copy/compute等首次访问须选择对应最早消费者stage，不能一律套用。避免 `ALL_COMMANDS_BIT` 造成不必要阻塞。[HEUR]
 
 ---
 
