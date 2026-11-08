@@ -155,7 +155,7 @@ Swapchain
 
 ## 9. Android 注意点
 
-- `ANativeWindow` 创建后必须在 Java/Kotlin 层跟踪 `surfaceCreated` / `surfaceChanged` / `surfaceDestroyed`；`surfaceDestroyed` 后不得再 submit 任何命令 [ANDROID]。
+- `ANativeWindow` 创建后由平台层跟踪 `surfaceCreated` / `surfaceChanged` / `surfaceDestroyed`；销毁后不得再访问该Surface的失效资源。共享世界的独立compute按owner/可见性政策继续或暂停，不禁止其他输出的合法提交 [ANDROID][ENGINE]。
 - pause / resume 时通常销毁 swapchain 并停止 render thread；resume 后重新创建 surface 与 swapchain。
 - rotation / resize 会改变 `ANativeWindow` 尺寸，触发 `VK_ERROR_OUT_OF_DATE_KHR` 或 `VK_SUBOPTIMAL_KHR`，必须重建 swapchain 与尺寸相关资源 [ANDROID]。
 - `extent.width == 0 || extent.height == 0` 时暂停渲染循环，等待 surface 恢复非零尺寸 [ANDROID]。
@@ -190,7 +190,7 @@ Swapchain
 5. **command buffer 未 reset 就录制**：旧命令残留或 validation error [SPEC]。
 6. **fence 初始未 signaled**：第一帧 `vkWaitForFences` 永久阻塞 [ENGINE]。
 7. **present 与 submit 使用不同 semaphore**：present 等待的 semaphore 未被 submit signal [SPEC]。
-8. **Android surface destroy 后继续 submit**：导致 `VK_ERROR_DEVICE_LOST` [ANDROID]。
+8. **Android surface destroy 后提交仍引用已销毁资源**：有生命周期风险；独立compute与其他有效输出不因该Surface销毁自动失效 [ANDROID][ENGINE]。
 
 ---
 
@@ -225,3 +225,26 @@ Swapchain
 - recreate 触发条件与处理顺序。
 - Validation Layer 完整报错。
 - Android lifecycle 日志（surfaceCreated/Changed/Destroyed、pause/resume）。
+
+<a id="simulation-snapshot-retirement"></a>
+## 仿真快照的全消费者退休（C4）
+
+输入：world/topology/resource generation、每资源writer/readers、实际提交及完成token、取消/销毁请求；输出：可发布/可重用/可释放的明确集合。适用共享world多view/Surface和多帧在途，也适用headless模拟；不把模拟tick、frame slot和swapchain imageIndex混为同一索引。[ENGINE]
+
+| 资源 | writer → readers | 最早重用/销毁条件 |
+|---|---|---|
+| state A/B | tick积分/约束→后续solver或tick | 最后读取与写入依赖满足；A/B名字不是安全证明 |
+| λ/constraint scratch | solver→同子步后续iteration | 当前子步所有引用完成；每子步初始化非每iteration清零 |
+| contribution/adjacency | constraint独占writer→particle gather | gather及相关引用完成，拓扑新代需新邻接 |
+| height/velocity | stencil输出→下一更新/normal生成 | 所有读者结束，旧/新场不可无证明别名 |
+| render snapshot | 发布pass→view/shadow/reflection/可选AS | 发布完成且**所有实际消费者**的提交完成 |
+| previous-render snapshot | 输出历史owner→motion vectors | 该输出历史消费完结；其他输出仍引用则不可释放 |
+| feedback/readback | GPU统计/copy→CPU | 真实completion，GPU→host依赖和必要non-coherent invalidate |
+
+复用既有allocator/descriptor/retirement manager，给snapshot登记消费者并在提交时关联queue与完成值。不同timeline的数值不可直接比较取max；等待每个token或经明确join提交归并。关闭view阻止新引用，取消未提交引用并确认不会再提交；已提交工作不能因取消而假装完成。新代资源准备就绪再切换，旧代延迟退休；失效回调按owner/generation拒绝发布。[ENGINE]
+
+两个state ping-pong不自动覆盖三帧在途/双view；可用独立snapshot ring、只读引用或有证明的串行等待策略，容量由完整使用图和延迟预算决定。host写/descriptor更新也必须等待对应引用安全；barrier不是CPU提前覆写许可证。读回只取调试样本/周期统计，避免每帧全顶点同步。VkMappedMemoryRange的invalidate按nonCoherentAtomSize对齐且不越allocation范围。
+
+Surface销毁只退休该输出，不自动停止其他view或使device/compute queue失效；仍不得访问已失效Surface相关资源。共享world是否暂停由可见性政策决定，present semaphore/swapchain退休独立遵守既有规则。设备lost进入既有恢复，不伪造完成信号回收后继续使用旧对象。
+
+最小验证：主view完成而shadow未完成不可复用；两view其一暂停/销毁另一个继续；topology重建中旧快照仍安全；取消未提交与已提交分别测试；延迟readback；state ring耗尽按声明等待/复用最后完整快照而非覆盖。host模拟token只证明合同，不替代Vulkan多队列执行。关联hard_rules 4/6/15/17，依赖表见 [交接](../03_compute_workflows/compute_to_graphics_sync.md#simulation-render-handoff)，API见 [buffer](../../03_api_manual/04_buffer_image_memory/buffer.md)、[memory](../../03_api_manual/04_buffer_image_memory/memory_allocation.md)。权威：[同步与host访问](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc)。

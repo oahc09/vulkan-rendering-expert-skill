@@ -131,3 +131,11 @@ Baseline shadows and reflection fallback; optional query-only AS engineering; te
 Adds alpha/precision contracts, conditional WBOIT and observable overflow, single-layer refraction, bounded local volumes and soft particles, Gaussian data/projection/sort-cache/multi-set identity contracts, and coverage-based quality budgets. Reuses existing resource, lighting and history systems. Eight modules, minimal startup, zero new runtime knowledge paths and the 200-file package ceiling remain unchanged.
 
 See [conditional topic routing](references/07_integration_pack/task_routing_rules.md#transparency-gaussian-topics). The paired tests repository owns 20 new TRAN15 cases, experiment source and raw evidence. Static, host/shader, Vulkan, Live/Host and mobile visual/performance results are separate; documentation does not establish device validation or power savings.
+
+## v1.0.16: GPU simulation and dynamic geometry (unreleased)
+
+Additive C1 fixed-tick/input/shared-world, C2 lightweight XPBD rope/regular-cloth, C3 bounded heightfield/one-way particle-event, and C4 kernel/synchronization/snapshot-retirement/mobile-budget contracts are available through the [existing workflow index](references/05_workflows/workflow_index.md). Eight modules, 197 knowledge files and the minimal startup remain unchanged; no runtime paths are added.
+
+The candidate entry version is **1.0.16**. Skill v1.0.15 was merged in PR #11; publication of its paired test evidence remains pending. Transparent water/glass integration and sustained mobile acceptance remain unverified. This is candidate content, not a completed release. Documentation, host numerics, Shader compilation, Vulkan execution, Live/host behavior and sustained Android quality require separate evidence in the paired tests repository.
+
+Change record (2026-11-07): extend eight existing authority anchors and short navigation; correct directly conflicting legacy advice on cross-workgroup barriers, atomic capability, Surface-independent compute and sampled-image layouts in place. No hard rules are moved. This candidate is not automatically merged or published.

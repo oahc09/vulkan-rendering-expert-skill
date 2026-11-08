@@ -92,7 +92,7 @@ Compute Shader (imageStore)
 设计说明：
 
 - storage image 写入时必须处于 `VK_IMAGE_LAYOUT_GENERAL` [SPEC]。
-- 若后续 graphics pass 需采样，必须加 `VK_IMAGE_USAGE_SAMPLED_BIT` 并在 barrier 后 transition 到 `VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL` [SPEC]。
+- 后续采样需 `VK_IMAGE_USAGE_SAMPLED_BIT`、支持的格式与写→采样依赖；可以保持合法GENERAL或在barrier中transition到SHADER_READ_ONLY_OPTIMAL，descriptor匹配实际layout [SPEC]。
 - 若 compute 后续继续读写，可保持 `GENERAL` 布局，只需同步 access mask [HEUR]。
 
 ---
@@ -128,7 +128,7 @@ Compute Shader (imageStore)
 - producer stage / access：compute shader 写入为 `VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT` + `VK_ACCESS_SHADER_WRITE_BIT`。
 - consumer stage / access：graphics fragment 采样为 `VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT` + `VK_ACCESS_SHADER_READ_BIT` [SPEC]。
 - image barrier 的 `subresourceRange` 应精确到目标 mip / layer；3D image 作为 storage image 时 `baseArrayLayer=0, layerCount=1` [SPEC]。
-- 若使用 `imageStore` + `imageLoad` 在同一 image 上（in-place compute），必须用 ping-pong 或 event 精确同步，否则触发 write-after-read hazard [SPEC]。
+- 邻域stencil采用不同输入/输出存储，跨阶段用Vulkan依赖；同dispatch的跨workgroup竞争不能用event修复。单invocation独占像素的原位操作另按读写集合判断 [SPEC]。
 - 跨 queue（compute queue → graphics queue）必须使用 semaphore，不能仅靠 pipeline barrier [SPEC]。
 
 ---
@@ -157,12 +157,12 @@ Compute Shader (imageStore)
 
 ## 9. Android 注意点
 
-- 创建 storage image 的 device 必须在 `ANativeWindow` 绑定到 surface 后获取，queue 才稳定 [ANDROID]。
-- 移动端 Mali / Adreno 对 `imageStore` 的 tile memory 写入路径敏感；若输出 image 后续被 fragment shader 采样，确保 barrier 到 `SHADER_READ_ONLY_OPTIMAL` 后再采样，否则 cache 不一致 [ANDROID]。
+- storage image和compute device/queue不要求绑定Surface；呈现路径另查Surface支持，保留独立模拟的生命周期 [SPEC][ANDROID]。
+- 移动端同样必须提供storage write→sampled read依赖与合法layout；合法GENERAL采样无需强制transition，带宽/tile影响按目标设备测量 [SPEC][ENGINE]。
 - TBDR 架构下 compute storage image 与 graphics sampled image 频繁切换会增加 external memory traffic；若 compute 输出直接用于 fullscreen fragment pass，需评估是否真的比 fragment shader 直接写更高效 [ANDROID]。
   - 适用条件：compute 需要 shared memory tile 优化、subgroup 操作、或跨 workgroup 聚合时收益明显 [HEUR]。
 - rotation / resize 触发 swapchain recreate，若 storage image 与 surface extent 绑定，需重建并重新 transition [ANDROID]。
-- pause / resume 时，避免在 surface destroy 后提交含 storage image 的 compute 命令 [ANDROID]。
+- pause / resume期间禁止访问已退休的Surface相关资源；共享world的独立storage image按可见性政策和全消费者完成条件管理 [ANDROID][ENGINE]。
 - logcat 验证：`adb logcat -s vulkan` 检查 `VUID-vkCmdDispatch-None-04547`（storage image layout 错误）、`VUID-vkCmdDispatch-None-08612`（format qualifier 不匹配）等 [TOOL]。
 
 ---
@@ -187,11 +187,11 @@ Compute Shader (imageStore)
 1. **未加 `STORAGE_BIT`**：image usage 缺失导致 descriptor update 失败 [SPEC]。
 2. **compute 写布局错误**：storage image 写入时未在 `GENERAL` 布局，触发 validation error [SPEC]。
 3. **format qualifier 不匹配**：GLSL `layout(rgba8)` 与 image format 不一致 [SPEC]。
-4. **compute → graphics 同步缺失**：output image 未 barrier 到 `SHADER_READ_ONLY_OPTIMAL`，fragment shader 采样读到旧数据 [TOOL]。
+4. **compute → graphics 同步缺失**：未建立写→采样依赖，或descriptor与实际layout不一致；不以是否transition判断同步正确 [TOOL]。
 5. **multisample storage image**：创建 image 时 `samples > 1`，compute pipeline 无法绑定 [SPEC]。
 6. **subresource range 错误**：barrier 范围与实际 image 维度不匹配，导致部分区域未同步 [SPEC]。
 7. **in-place read/write hazard**：同一 image 既读又写未做 ping-pong，产生 artifact [SPEC]。
-8. **Android surface recreate 期间提交 compute**：queue 关联的 surface 已 destroy，导致 device lost [ANDROID]。
+8. **Surface重建期间引用旧代输出**：访问已销毁的image/view/descriptor；独立compute不会仅因Surface销毁而失效 [ANDROID][ENGINE]。
 
 ---
 
@@ -236,3 +236,23 @@ Compute Shader (imageStore)
 - Validation Layer 完整报错。
 - RenderDoc / AGI 中 storage image layout 与内容。
 - Android lifecycle 日志。
+
+<a id="heightfield-simulation-contract"></a>
+## 有界高度场与事件注入（C3）
+
+输入：世界尺寸、Nx/Ny与dx/dy、常波速c、h、阻尼、边界mask、height+velocity（或两个时刻height）、有界eventId列表、模型/world/topology generation。输出：同tick/generation的height/normal snapshot、数值诊断与事件消费记录。适用单值二维线性高度场波动，不支持翻卷/破碎/完整体积流动，不自动等于非线性浅水、Navier–Stokes或三维流体。[ENGINE][REF]
+
+明确选择一个离散模型，例如无阻尼中心差分：`Hnext = 2*Hcurrent - Hprevious + c²*h²*Laplacian(Hcurrent)`，Laplacian 使用各轴 dx/dy。速度形式或阻尼项是另一明确配置，不能混用参数。该均匀网格、常c、显式线性二维基线的检查量 `r=c*h*sqrt(1/dx²+1/dy²)` 要≤1，实际选安全裕量；阻尼、非线性、边界或耦合改变后重新推导/测试。它不是所有水算法通用CFL公式，height clamp不能掩盖不稳定。[ENGINE]
+
+链路：按tick去重事件→每单元gather有界source/impulse→只读旧稳定场、写下一场→应用指定边界→单独normal/gradient dispatch→发布同tick height+normal→独立高度可视化。三时刻差分的previous/current/next不可无证明别名；采用height+velocity的A/B打包状态时同样保持读旧写新。不能靠workgroup barrier同步全网格。[SPEC]
+
+VkImage需核对目标tiling/format/image properties的STORAGE及SAMPLED能力，绑定匹配format与descriptor layout；write通常GENERAL，sample可保持合法GENERAL或transition到SHADER_READ_ONLY_OPTIMAL，仍需写→采样依赖。格式不支持时走SSBO状态与输出转换或另一受支持格式，不提高产品最低版本。每轮读→覆盖和写→下一轮读分别表达；尾部与shared halo加载必须满足 [kernel参与规则](../../03_api_manual/06_pipeline/compute_pipeline.md#simulation-kernel-portability)。
+
+- 边界明确固定（Dirichlet）、反射（选定离散Neumann）或耗散，逐项验证角点与mask；更新不得越界读取邻点。
+- 静水全零、无输入和匹配边界保持零；单/双脉冲按tick注入，渲染FPS不影响次数。重叠扰动由每单元唯一writer gather或独占归约，普通并发加法不是安全注入。
+- source、force与impulse单位/空间和积分方式显式区分；密集事件超容量拒绝/降级并记录overflow。
+- 分辨率变化保持世界尺度和c语义，重新计算dx/dy及稳定界；明确重采样/清空状态，递增代际、重新初始化需要的历史。
+- normal由同一height的世界空间梯度生成，例如normalize((-dH/dx,1,-dH/dy))，按场景坐标系调整。旧normal配新height要报错，不靠滤波遮盖。
+- 粒子命中只生成一次有界扰动，默认单向视觉耦合，复用 [调度与粒子池](add_compute_pass.md#simulation-scheduling)。透明水/玻璃外观属v1.0.15前置，未集成保持未验证，不阻塞高度/法线数值检查。
+
+最小验收：零场、脉冲传播/边界、非法步长、尺寸变化、重叠与超容量事件；预注册CPU同离散模型位置/高度/能量或衰减误差，保存输入和时间序列。关联hard_rules 3/10/17；可视化、Shader编译和GPU读回分别证明不同层。来源：[Ten Minute Physics高度场教学](https://matthias-research.github.io/pages/tenMinutePhysics/index.html)（模型参考，不是Vulkan性能证据）、[Vulkan计算执行](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/shaders.adoc)。API详见 [image卡](../../03_api_manual/04_buffer_image_memory/image.md)、[交接依赖](compute_to_graphics_sync.md#simulation-render-handoff)。

@@ -225,3 +225,34 @@ legacy reset 用 TRANSFER/TRANSFER_WRITE，vertex 与 index fetch 用 VERTEX_INP
 跨 VkQueue 必须实际 semaphore 依赖，wait stage 覆盖最早 consumer；ownership 由 queue family 与 exclusive/concurrent 决定，same family 或 concurrent 不取消内存依赖。每个 frame/view/generation 的 scratch、sort output 与选择 ID buffer 维持到所有消费者完成，尺寸/资源变化拒收旧异步输出。回退同 queue、CPU sort/upload 或直接 instance draw 仍保留对应依赖。
 
 验证分别只写 indirect、再写 vertex SSBO、再用固定 vertex fetch；sync validation、结果对照和跨View/退休压力分开，不能以 barrier 数量或 Validation clean 代替正确性。[SPEC] [Synchronization](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc)。
+
+<a id="simulation-render-handoff"></a>
+## 仿真到渲染的发布与依赖（C4）
+
+输入：每个kernel真实读写集合、资源范围/usage/layout、queue/family、snapshot及所有consumer；输出：逐边依赖、同姿态position/normal/bounds与完成归属。适用于已有compute→graphics链路，不引入另一套RenderGraph。Sync2路径须支持并启用synchronization2；否则映射现有legacy标志与Vk*Barrier，不能直接截断64位flags。[SPEC][ENGINE]
+
+以下每行是同queue依赖的完整stage/access枚举，使用VkDependencyInfo和vkCmdPipelineBarrier2（或对应KHR入口）；buffer无layout，image还必须给真实oldLayout/newLayout及subresourceRange。不是把整张表无条件OR进每个barrier。[SPEC]
+
+| 生产→消费 | srcStage / srcAccess | dstStage / dstAccess |
+|---|---|---|
+| vkCmdCopyBuffer初始化→solver | VK_PIPELINE_STAGE_2_COPY_BIT / VK_ACCESS_2_TRANSFER_WRITE_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT / VK_ACCESS_2_SHADER_STORAGE_READ_BIT \| VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT |
+| vkCmdFillBuffer清零→solver | VK_PIPELINE_STAGE_2_CLEAR_BIT / VK_ACCESS_2_TRANSFER_WRITE_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT / VK_ACCESS_2_SHADER_STORAGE_READ_BIT \| VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT |
+| solver color/iteration→下阶段 | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT / VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT / VK_ACCESS_2_SHADER_STORAGE_READ_BIT \| VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT |
+| position→固定功能vertex fetch | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT / VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT / VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT |
+| position→vertex shader SSBO | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT / VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT / VK_ACCESS_2_SHADER_STORAGE_READ_BIT |
+| height/normal→fragment sampling | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT / VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT / VK_ACCESS_2_SHADER_SAMPLED_READ_BIT |
+| commands/count→indirect | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT / VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT / VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT |
+| deformed vertex/index/instance输入→可选AS build | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT / VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR / VK_ACCESS_2_SHADER_READ_BIT |
+| vertex fetch读完→覆盖原snapshot | VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT / VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT / VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT |
+
+末行为一个读后写例子；实际还有fragment/shadow/其他view/AS consumer就分别覆盖，纯WAR需要执行顺序，不强制无用的availability/visibility操作。读写混合按真实RAW/WAW/WAR分析。Buffer barrier给buffer/offset/size；无ownership时queueFamilyIndex为VK_QUEUE_FAMILY_IGNORED。vertex buffer要含VERTEX_BUFFER usage，indirect commands与独立count都要同步；image sampled usage/格式/layout合法且descriptor一致，GENERAL合法采样不强制transition。
+
+AS输入几何（vertex/index/transform/AABB/instance）读取是build stage + SHADER_READ，不是ACCELERATION_STRUCTURE_READ；AS对象与scratch另按相应AS读写规则。输入usage/地址、scratch对齐、UPDATE合法性和build→query依赖复用 [AS API合同](../../03_api_manual/08_synchronization/pipeline_barrier.md#as-build-query-dependencies)，不无条件refit。geometry generation与BLAS/TLAS一致才可发布，缺能力保留传统路径。
+
+跨queue同family仍须真实binary/timeline semaphore signal/wait，wait stage覆盖首次consumer；不同family+EXCLUSIVE额外匹配release/acquire ownership，CONCURRENT免ownership不免数据依赖。默认单queue；async收益必须测全帧、延迟、内存和持续热成本，不能按queue数量推断并行。[SPEC][ENGINE]
+
+发布要求：同snapshotId/tick/world/topology/resource generation包含position、normal、保守bounds及合法LOD。normal用三角形独占贡献→顶点gather或经门控atomic，禁止相邻三角形无保护累加同顶点。bounds覆盖变形或有证明的保守膨胀，rest bounds不能直接剔除变形几何。每个输出的motion vectors用上次有效渲染/展示姿态与当前展示姿态，不是上一solver子步；skip/interpolation保留对应姿态，teleport/reset/拓扑或LOD对应关系失效则history invalid。v1.0.14时域/AS复用，v1.0.15透明合成未集成保持未验证。
+
+最小验证：同queue读回、两view+shadow延迟消费、不同queue/family条件路径、teleport/topology重置、height/normal代际一致、动态bounds不漏剔除。记录所有消费者而不只主相机；复用/销毁见 [退休](../05_resource_management/manage_frame_resources.md#simulation-snapshot-retirement)。关联hard_rules 3/6/17及G2/G3；sync validation与数值对照分开。
+
+权威：[Synchronization](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc)、[AS build](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/accelstructures.adoc)、[Registry枚举](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/xml/vk.xml)。

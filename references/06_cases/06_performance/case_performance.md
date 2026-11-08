@@ -1054,3 +1054,10 @@ CPU单物体draw与GPU compact相比很快，但合理CPU instancing反而更快
 输入两份同场景合成 GS：A 多个小点，B 点数更少但投影更大；固定 camera/曝光/质量，输出 visible count、clipped quad/ellipse area、layer histogram、projection/sort/raster/resolve 时间和线性颜色/T误差。另设大量低 alpha 层比较 RGBA8/受支持FP16，分别模拟输入量化和逐层存储。
 
 预期判断不是固定加速比例：B 可能排序更便宜而 raster 更贵；FP16 改善某些误差但不是零误差。若合并损伤前景/轮廓/移动视差则拒绝该LOD；远背景低视差可候选但必须多视点验证。能力、同步、退休与回退依 [覆盖预算](../../05_workflows/07_optimization/optimize_mobile_bandwidth.md#coverage-budget)。CPU oracle、shader 编译、Vulkan 与移动设备各自记录实际状态，未运行不称 PASS。
+
+<a id="simulation-measurement-cases"></a>
+## 仿真测量反例与来源边界
+
+[Textile-Wave固定README](https://github.com/igor-polev/textile-wave/blob/c9afe32aed360acb6e1c45092ff8b0ab3c096701/README.md) 的报告提交日期2026-10-20，正文标记10-21测量，两日期分别保留；作者报告未独立复现，WebGPU不是Vulkan或Android证据。CPU完成等待可能混入排队延迟，用它自动减少substeps会同时改变数值质量，不能宣称纯GPU优化。[ENGINE]
+
+按 [仿真预算](../../05_workflows/07_optimization/optimize_frame_time.md#simulation-cost-quality-budget) 固定h/算法/误差/热状态，分项测solver、normal/bounds、等待与全帧；没有timestamp或真机则标未验证。社区性能报告是测量假设来源，不是本仓实测成绩。
