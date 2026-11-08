@@ -96,7 +96,7 @@
 
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
-| `srcStageMask` / `dstStageMask`（`VkPipelineStageFlags2`） | 扩展 stage 集合，包含 `VK_PIPELINE_STAGE_2_COPY_BIT`、`VK_PIPELINE_STAGE_2_CLEAR_BIT` 等更具体的阶段。[SPEC] | 仍使用旧版 `VkPipelineStageFlags` 的值直接赋给 `VkPipelineStageFlags2`，类型不匹配。[TOOL] |
+| 源/目标 stage mask（VkPipelineStageFlags2） | Sync2 的前31个位与旧版共享且可互换；新增高位必须保存在64位类型中。[SPEC] | 将64位高位截断到旧32位mask，或不核对stage/access支持条件。[TOOL] |
 | `srcAccessMask` / `dstAccessMask`（`VkAccessFlags2`） | 扩展 access 集合，如 `VK_ACCESS_2_SHADER_READ_BIT`、`VK_ACCESS_2_MEMORY_READ_BIT`。[SPEC] | 遗漏 `VK_ACCESS_2_MEMORY_WRITE_BIT` 等宽 access，导致 visibility 不足。[TOOL] |
 | `VkDependencyInfo.dependencyFlags` | 同旧版 `dependencyFlags`，支持 `VK_DEPENDENCY_BY_REGION_BIT` 等。[SPEC] | 在全局 barrier 中误用 `BY_REGION_BIT`。[TOOL] |
 | `VkImageMemoryBarrier2.oldLayout` / `newLayout` | 支持新增 layout 如 `VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL`、`VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL`。[SPEC] | 在旧版设备上错误使用 1.3 专用 layout。[TOOL] |
@@ -297,3 +297,37 @@ Vulkan 1.4 对 Synchronization2 的主要变更：
 4. `vkQueueSubmit2` 与 `vkQueueSubmit` 在 fence 行为上的差异细节。
 5. Vulkan 1.3 新增 image layout（`ATTACHMENT_OPTIMAL`、`READ_ONLY_OPTIMAL`）的兼容性要求。
 6. 目标 Android 设备对 synchronization2 的驱动支持矩阵。
+
+
+<a id="cross-queue-host-contract"></a>
+
+## 16. 执行、内存、ownership 三项合同
+
+**条件**：Sync2 必须启用 synchronization2；旧设备用等价 legacy barrier/submit，不把位宽/结构体机械强转当作迁移。每条边记录 producer stage/access、consumer stage/access、资源范围与 queue family。[SPEC]
+
+**正常路径**：RAW/WAW 需要执行与内存依赖，WAR 常只需执行依赖。跨 queue 的 semaphore signal/wait 本身建立 memory dependency，提供作用域内的 availability/visibility；没有 layout 或 ownership 变化且作用域完整时，不必为了“semaphore 不做内存同步”虚构额外 barrier。基线路径中需保留内容的 EXCLUSIVE 跨 family 仍需匹配 release/acquire ownership transfer（maintenance9 的精确例外见下文）；CONCURRENT 不需要此 ownership transfer，但仍需访问同步。image layout 单独保持一致。[SPEC]
+
+**Host 边界**：host API 的 externally synchronized 对象由应用锁/线程独占保护，GPU semaphore 不会给 C++ 线程加锁。同一 VkQueue 的 submit/bind/present 等调用遵守对应 host 同步要求。GPU→CPU 回读同时需要 HOST_READ 内存依赖、完成等待和非 coherent invalidate；见 [内存合同](../04_buffer_image_memory/memory_allocation.md#memory-host-alias-contract)。
+
+**失败/回退**：wait stage 太晚会使早期消费者越过等待；signal stage 不能漏掉需要退役的 compute/transfer。无法证明细粒度作用域时先使用正确的 ALL_COMMANDS 与对应访问范围，再测量收窄；timeout 不代表完成，device lost 不允许继续当作资源有效。
+
+**验证**：逐项检查同 queue/跨 queue/跨 family、readback、sparse bind 独立排序；运行 synchronization validation 并记录版本与未覆盖项。validation clean 不是无 race 的证明。
+
+固定依据：Vulkan 1.4.368，commit `fa30d4e312e843193601be7cb926c7e25d9ec885`；[synchronization#synchronization-dependencies-memory](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-dependencies-memory)；[synchronization#synchronization-semaphores-signaling](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-semaphores-signaling)；[synchronization#synchronization-queue-transfers](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-queue-transfers)。[SPEC]
+
+
+<a id="maintenance-ownership-contract"></a>
+
+## 18. maintenance8/9 ownership 差异合同
+
+**条件**：分别查询并启用maintenance8或maintenance9，不能从Vulkan1.4版本或后续编号推断启用。基线路径保留显式release→semaphore→acquire；ownership与执行/内存同步始终是不同问题。[SPEC]
+
+**正常路径**：maintenance8允许在符合条件的dependency上用 QUEUE_FAMILY_OWNERSHIP_TRANSFER_USE_ALL_STAGES_BIT_KHR，使ownership transfer使用指定的stage作用域；未启用时不能套该flag。maintenance9启用后，同一logical device内部queue family间buffer/linear image隐式acquire保留内容，显式ownership transfer可省，但仍要有访问同步。[SPEC]
+
+**Optimal image条件**：maintenance9还要求目标family的位在源family的optimalImageTransferToQueueFamilies中，且image usage不含COLOR_ATTACHMENT、DEPTH_STENCIL_ATTACHMENT、TRANSIENT_ATTACHMENT、INPUT_ATTACHMENT、ATTACHMENT_FEEDBACK_LOOP、FRAGMENT_SHADING_RATE_ATTACHMENT相应位。满足才可保留内容隐式acquire；其他情况沿用显式ownership流程，或明确放弃旧内容并重新初始化。[SPEC]
+
+**失败/回退**：EXTERNAL/FOREIGN跨API或跨instance不属于该同logical-device例外；不能因CONCURRENT或maintenance9就跳过外部所有权合同。不满足feature/property/usage时回到显式transfer；显式旧路径仍兼容，不伪称必然更慢。
+
+**验证**：覆盖feature关闭/开启、buffer/linear/optimal、方向性mask缺位、attachment usage排除、external边界；检查省transfer后semaphore内存依赖和image layout仍完整。
+
+固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[resources#resources-sharing](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/resources.adoc#resources-sharing)；[resources#resources-external-sharing](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/resources.adoc#resources-external-sharing)；[synchronization#synchronization-queue-transfers](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-queue-transfers)；[features#features-maintenance8](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/features.adoc#features-maintenance8)；[features#features-maintenance9](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/features.adoc#features-maintenance9)。[SPEC]

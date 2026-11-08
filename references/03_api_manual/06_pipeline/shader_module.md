@@ -267,3 +267,19 @@ FP16 算术 `shaderFloat16`、16-bit buffer/push storage（如 `storageBuffer16B
 默认保留剔除/depth 比较的保守精度；精度变体要测近平面、远近尺度、NaN/Inf、动画和跨 GPU，不以 FPS 或静态截图代替数值验收。接口与热更新见 [定向合同](../../05_workflows/06_pipeline_descriptor/shader_binding_workflow.md#shader-hot-reload)。
 
 固定规范：[Vulkan-Docs v1.4.328 features](https://github.com/KhronosGroup/Vulkan-Docs/blob/d38733398a4bec673bd5d24c904d4739a45f020d/chapters/features.adoc)、[shader/pipeline](https://github.com/KhronosGroup/Vulkan-Docs/blob/d38733398a4bec673bd5d24c904d4739a45f020d/chapters/pipelines.adoc)。核验 2026-11-01，source-read；不是设备支持声明。
+
+
+<a id="shader-object-contract"></a>
+## Shader Object：独立能力与生命周期
+
+查询并启用 `VK_EXT_shader_object` / `shaderObject` 及其 Registry 依赖；这不是核心版本自动获得的能力，也不表示所有传统 optional shader stage 都支持。`VkShaderEXT` 与 `VkShaderModule` 不同：使用 `vkCreateShadersEXT` 的 SPIR-V 或 binary code、entry point、stage、nextStage、descriptor set layouts、push constant ranges、specialization → `vkCmdBindShadersEXT` → 设置相关动态状态 → draw/dispatch。图形 shader object draw 使用 dynamic rendering 并满足对应 rendering 与 attachment 合同；不把 shader object 直接当 RT Pipeline/SBT 的替代品。[SPEC]
+
+启用 `VK_SHADER_CREATE_LINK_STAGE_BIT_EXT` 的阶段按链接集合创建并依规范绑定，不能把不兼容接口或任意链接组合拼成图形链。所有静态使用 descriptor 与 push constant 接口必须相容；未使用的 graphics stage 显式解除绑定，避免残留 stage。`nextStage` 不是启用硬件能力的开关。[SPEC]
+
+Binary cache 记录 `shaderBinaryUUID` 与 `shaderBinaryVersion`：相同 UUID 且目标版本不低于来源版本才有保证兼容；其他组合可尝试创建，但 `VK_INCOMPATIBLE_SHADER_BINARY_EXT` 必须回到已验证 SPIR-V 重建。其他错误按错误类型处理；partial creation 按返回的实际 handle 清理，不使用未创建对象。不能用 pipelineCacheUUID 代替 shaderBinaryUUID。[SPEC]
+
+`vkCmdBindShadersEXT` 会扰动对应 pipeline bind point；原 pipeline 中非 dynamic 的 graphics 状态变为 undefined。`vkCmdBindPipeline` 反过来解除对应 shader stages。切换模式后按 [动态状态合同](dynamic_state.md#shader-object-state-contract) 重新建立 draw 条件，不能假定上次 pipeline 已设置完整状态。Shader object 销毁前所有提交引用必须结束；销毁对象并不替代 host/command-buffer 的外部同步。[SPEC]
+
+验证：缺 feature 拒绝、binary incompatible → SPIR-V、混合绑定状态失效、linked stage/layout 不兼容负例；无设备执行不记 GPU PASS。回退使用传统 graphics/compute pipeline，维持相同 descriptor 与 rendering 接口。
+
+固定规范（Vulkan 1.4.368，source-read；不是设备验证）：[shaders-objects-creation / binary-compatibility / pipeline-interaction / destruction](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/shaders.adoc)。

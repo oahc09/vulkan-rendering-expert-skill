@@ -111,7 +111,7 @@ CPU 侧帧调度
 
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
-| `flags` | `VK_FENCE_CREATE_SIGNALED_BIT` 用于创建时即为 signaled，避免首次 wait 死锁。[SPEC] | 未 signaled 的 fence 直接 submit 后 CPU wait 永远等不到。[TOOL] |
+| `flags` | `VK_FENCE_CREATE_SIGNALED_BIT` 用于创建时即为 signaled，避免首次 wait 死锁。[SPEC] | 从未提交的 unsignaled fence 直接 wait 可能永远等不到；submit 所用 fence 反而必须 unsignaled 且不关联未完成工作。[TOOL] |
 | `pFence` | 每个 per-frame 资源池配一个 fence；不要多个 frame 共用一个未等待的 fence。[ENGINE] | 共用一个 fence 导致 CPU 无法判断哪一帧已完成。[TOOL] |
 | `timeout` | `vkWaitForFences` 的超时建议设置合理值（如 1s），便于发现 GPU hang。[HEUR] | timeout = UINT64_MAX 时 GPU hang 将永久阻塞 CPU。[TOOL] |
 | `waitAll` | `vkWaitForFences` 的 `waitAll` 决定等待全部还是任一 fence。[SPEC] | 只需要任一完成时误设为 true，降低 CPU 并行度。[HEUR] |
@@ -120,7 +120,7 @@ CPU 侧帧调度
 
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
-| `waitSemaphoreCount` / `pWaitSemaphores` | 必须保证 semaphore 在进入 wait 前已被 signal，否则提交非法。[SPEC] | 未 acquire image 就 submit render，导致 wait semaphore 未 signaled。[TOOL] |
+| `waitSemaphoreCount` / `pWaitSemaphores` | binary wait 的 signal 操作必须先被提交且满足合法关联，signal 不必在 host 提交 wait 时已执行完成。[SPEC] | 未 acquire image 就 submit render，导致 wait semaphore 未 signaled。[TOOL] |
 | `pWaitDstStageMask` | 决定 GPU 在哪个 stage 开始等待，过宽会降低并行度。[SPEC] | 统一使用 `ALL_COMMANDS` 造成不必要流水线停顿。[HEUR] |
 | `signalSemaphoreCount` / `pSignalSemaphores` | signal 与 wait 成对使用，一个 binary semaphore 每轮只能 signal 一次、wait 一次。[SPEC] | 同一 binary semaphore 在多个 submit 中重复 signal 未 reset。[TOOL] |
 
@@ -129,7 +129,7 @@ CPU 侧帧调度
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
 | `semaphoreType` | 创建时指定 `VK_SEMAPHORE_TYPE_TIMELINE`。[SPEC] | 用 binary semaphore 的 API 处理 timeline value。[TOOL] |
-| `initialValue` | 创建时指定初始 counter，后续 signal/wait 单调递增。[SPEC] | value 不单调递增或回退导致未定义行为。[TOOL] |
+| `initialValue` | 创建时指定初始 counter，后续 signal 执行值严格递增；wait 可重复或等待已满足值。[SPEC] | value 不单调递增或回退导致未定义行为。[TOOL] |
 | `value` | submit / signal / wait 时传递目标 counter。[SPEC] | CPU 与 GPU 侧 value 不同步，导致等待失败。[TOOL] |
 
 ---
@@ -208,7 +208,7 @@ CPU 侧帧调度
 ### 销毁时机
 
 - 确认设备 idle 或相关 queue 完成后再销毁。[SPEC]
-- Timeline semaphore 被多个 queue 引用时，需确保所有 wait 已完成。[SPEC]
+- Timeline semaphore 被多个 queue 引用时，需确保全部已提交 signal/wait 引用及相关 host 调用结束。[SPEC]
 
 ### in-flight 风险
 
@@ -234,7 +234,7 @@ CPU 侧帧调度
 ### 资源访问同步
 
 - Fence 只标记 command buffer 执行完成，不保证 resource layout / visibility；layout transition 仍需 barrier。[SPEC]
-- Semaphore 保证阶段顺序，但不代替 memory barrier；barrier 的 stage/access 仍需正确设置。[SPEC]
+- Queue semaphore signal/wait 建立作用域内 memory dependency；layout transition 和需要的 ownership transfer 另满足。[SPEC]
 
 ---
 
@@ -299,3 +299,18 @@ CPU 侧帧调度
 3. `vkQueueSubmit2` / `VK_KHR_synchronization2` 中 semaphore stage mask 的扩展语义。
 4. 不同平台 presentation engine 对 semaphore 的特殊要求。
 5. Fence 在 `vkDeviceWaitIdle` / `vkQueueWaitIdle` 下的行为与状态迁移。
+
+
+<a id="completion-primitive-contract"></a>
+
+## 18. 同步原语选择与兼容迁移
+
+**条件/正常路径**：同queue依赖用 barrier/event；跨queue producer→consumer 用 binary/timeline semaphore，signal/wait包含作用域内 memory dependency；CPU完成等待用fence或timeline。对本卡帧流程，保留 frameIndex 的 acquire/提交资源与 imageIndex 的 present semaphore 两套索引。[SPEC][ENGINE]
+
+**失败**：binary wait提交时需要合法已提交signal，不等于signal必须已经执行；timeline wait允许wait-before-signal且可重复值，signal执行值才严格递增。原语销毁检查全部已提交 signal 和 wait，不只等待者；单独graphics fence不证明其他queue或presentation已结束。[SPEC]
+
+**回退**：缺少timeline feature用binary+fence，不把WSI信号改timeline；应用不能将host signal当作GPU工作完成。详细恢复规则见 [Fence合同](../08_synchronization/fence.md#fence-completion-contract) 与 [Timeline合同](../08_synchronization/timeline_semaphore.md#timeline-retirement-contract)。
+
+**验证**：以同queue/跨queue/CPU/WSI四类边建立表格，逐边确认执行作用域、内存可见性、layout/ownership及退役条件；负例覆盖binary重复signal、wait-any误回收和host伪造timeline完成。
+
+固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[synchronization#synchronization-semaphores-waiting](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-semaphores-waiting)；[synchronization#synchronization-fences-waiting](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-fences-waiting)。[SPEC]

@@ -377,3 +377,11 @@ ENG13 新24题按 primary/contrast 成对输入评估，实际 path/anchor/hash/
 ## GPU 仿真与动态几何（SIM16）
 
 沿用既有主类型、硬规则与最小启动集合。只命中加载上表一个合同，再按缺口补充；不把仿真文档整组预加载。旧104题与原12题token基线冻结，SIM16-01..16成对条件单列；新总数120是registry规模，不是已执行Live结果。数值Host、Shader、Vulkan、Live/Host、移动持续质量各自报告。Skill v1.0.15已合并不代表配套tests证据已发布，也不代表水面透明集成已验收。
+
+
+<a id="vulkan-coverage-topics"></a>
+## 全域 API 合同审计（CORE17）
+
+仍按原 API/debug/performance/implementation/architecture 主类型，不增加默认加载文件。具体版本、稀有能力、平台、Video、完整RT/SBT、cooperative/tensor等命中时，仅查 [18域索引](../03_api_manual/api_index.md#vulkan-domain-map)，读取一个对应合同，再按剩余缺口补载官方来源。不要将整份Registry/所有领域作为启动上下文；也不能因省token跳过19硬规则、错误分支或feature/生命周期条件。实现/真实项目仍叠加原Evidence/Architecture Map、R1–R5与适用G1–G6。
+
+全域完成声明以 [K/B/P边界](README.md#vulkan-coverage-scope) 为准。当前稳定域语义审计仍有缺口，只有候选状态；未执行Live/实际宿主或目标设备不得写PASS。旧120个prompt不改，CORE17复用图只说明验收任务归属，不是模型答对证明。

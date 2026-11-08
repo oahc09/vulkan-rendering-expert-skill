@@ -103,7 +103,7 @@ VkImage / VkBuffer
 | `alignment` | 绑定 offset 必须是 alignment 的倍数。[SPEC] | offset 未对齐导致 validation error 或崩溃。[TOOL] |
 | `memoryTypeBits` | 32 位掩码，表示该资源可使用的 memory type index。[SPEC] | 选择不在掩码中的 memory type。[TOOL] |
 | `propertyFlags` | `DEVICE_LOCAL` / `HOST_VISIBLE` / `HOST_COHERENT` / `HOST_CACHED` / `LAZILY_ALLOCATED`。[SPEC] | 需要 CPU map 但选非 HOST_VISIBLE；需要 GPU 性能但选非 DEVICE_LOCAL。[TOOL] |
-| `allocationSize` | 可分配多个资源到同一块 memory 的不同 offset，但需满足 alignment 和非重叠。[SPEC] | sub-allocation 未对齐或重叠。[SPEC] |
+| `allocationSize` | 可分配多个资源到同一块 memory 的不同 offset，普通子分配须满足alignment与范围隔离；显式alias需遵循单独的alias合同。[SPEC] | sub-allocation 未对齐或重叠。[SPEC] |
 
 ---
 
@@ -191,7 +191,7 @@ VkImage / VkBuffer
 
 ### CPU-GPU 同步
 
-- Host-visible coherent memory：CPU 写入后 GPU 立即可见。[SPEC]
+- Host-visible coherent memory：省去显式 flush/invalidate，不省去 host/device 执行同步；CPU 写入须 happens-before 正确提交，且不得覆写 GPU 仍在使用的区域。[SPEC]
 - Host-visible non-coherent memory：需要 `vkFlushMappedMemoryRanges`。[SPEC]
 - CPU 读取 GPU 写入：通常需要 barrier + invalidate。[SPEC]
 
@@ -277,3 +277,58 @@ VkImage / VkBuffer
 [同步表](../08_synchronization/pipeline_barrier.md#as-build-query-dependencies)。最小验证含 scratch 重叠拒绝、无 ALLOW_UPDATE 拒绝、拓扑变化 rebuild、compaction 后 pending TLAS 保留旧地址，以及共享 BLAS 的两个 View 先后销毁。[ENGINE]
 
 依据：[固定 AS 规范](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/accelstructures.adoc)。上限/更新约束随选用扩展变化，以上清单不是完整 VUID 替代品。
+
+
+<a id="memory-host-alias-contract"></a>
+
+## 16. Host cache、alias 与退役合同
+
+**条件**：先求 requirements 的 size/alignment/memoryTypeBits，再筛内存属性；coherent 与 device-local 是独立属性。dedicated allocation 要求优先于子分配策略，bufferImageGranularity 与 nonCoherentAtomSize 是不同约束。[SPEC]
+
+**正常路径**：上传要求 host 写 happens-before 提交：host 写 → 非 coherent flush → queue submission → device 读；提交建立所需 host→device domain operation，普通提交前写无需仅为上传额外插入 HOST barrier。回读为 device 写 → 对 HOST_READ 的内存依赖 → fence/timeline 等待覆盖该工作 → 非 coherent invalidate → host 读。映射/解除映射本身不等待 GPU，也不隐式 flush。每个 mapped range 的 offset 相对 VkDeviceMemory，不是 buffer 子分配起点。[SPEC]
+
+**边界与失败**：flush/invalidate offset 必须按 nonCoherentAtomSize 对齐；size 为 atom 整数倍，或范围到 allocation 末尾；还须落在已映射区间，VK_WHOLE_SIZE 同样遵守映射末端条件。向外取整不能越出映射区。共享同一个 atom 的子分配要作为同步单元管理，不能在另一线程/设备仍写该 atom 时 invalidate；coherent 不消除数据竞争。[SPEC]
+
+**Alias 正常路径**：检查每个别名资源各自 requirements、memory type、dedicated/alias image flags；混合 linear/non-linear 还需考虑 bufferImageGranularity 扩展后的重叠。切换 A→B 时等待 A 的最后访问并建立覆盖底层共享内存的依赖；image 另处理 layout 和内容有效性，不能把仅指定 A handle 的 buffer barrier 当作对所有别名的万能依赖。重新绑定普通 non-sparse 资源不是 alias 技巧。[SPEC]
+
+**回退**：无法证明 alias 内容一致或独占时使用独立 allocation/不重叠子分配；OOM 先回收已退役缓存、缩减可选资源，再报告失败，不释放 pending 分配。预算查询是估计，不保证分配成功。[ENGINE]
+
+**验证**：测试原子大小边界（offset=atom−1、末尾非整 atom、局部映射）、两个邻接子分配竞争、A/B 重叠切换及延迟 GPU 完成；记录 validation 与字节校验结果。仅有文本检查不是 GPU 验证。
+
+固定依据：Vulkan 1.4.368，commit `fa30d4e312e843193601be7cb926c7e25d9ec885`；[memory#memory-device-hostaccess](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/memory.adoc#memory-device-hostaccess)；[resources#resources-memory-aliasing](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/resources.adoc#resources-memory-aliasing)；[synchronization#synchronization-submission-host-writes](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-submission-host-writes)。[SPEC]
+
+
+<a id="sparse-residency-contract"></a>
+
+## 16. Sparse binding / residency / mip tail 合同
+
+**条件**：sparseBinding 允许非连续绑定与重绑定，不自动允许非驻留访问。部分驻留另需 sparseResidencyBuffer / sparseResidencyImage2D / sparseResidencyImage3D 和相应 sample-count feature；aliased sparse bindings 另查 sparseResidencyAliased。先查精确 image format/type/samples/usage/tiling 的 sparse properties，再以实际资源查询 sparse memory requirements。队列必须含 VK_QUEUE_SPARSE_BINDING_BIT。[SPEC]
+
+**正常路径**：创建带 SPARSE_BINDING_BIT（需要部分驻留时加 SPARSE_RESIDENCY_BIT）的资源 → 查询普通及 sparse requirements → 分配页面 → vkQueueBindSparse → semaphore 等待绑定完成 → 上传/访问。即使同一个 queue，sparse binding 与 command buffer 执行也不自动排序。重绑/解绑要先等待所有旧访问结束，再让新使用等待 bind 完成；vkFreeMemory 不会自动解绑。[SPEC]
+
+**Mip tail**：按 aspect 处理 imageMipTailFirstLod、imageMipTailSize、imageMipTailOffset、imageMipTailStride。尾部只能走 VkSparseImageOpaqueMemoryBindInfo，不能当普通 tile 交给 VkSparseImageMemoryBind。SINGLE_MIPTAIL_BIT 表示全 array 共用一尾；否则 layer 偏移为 imageMipTailOffset + layer * imageMipTailStride。metadata aspect 也走 opaque bind，并加 VK_SPARSE_MEMORY_BIND_METADATA_BIT。[SPEC]
+
+**失败与回退**：只有 sparse binding 而没有 residency 时，不允许把未绑定洞当成可读零页；residencyNonResidentStrict 决定非驻留访问的严格行为，不能把未驻留读值泛化为零。缺少格式支持、粒度不合或页面分配失败时使用完整常驻普通资源/降分辨率；不可把 feature 不支持计为成功稀疏运行。[SPEC][ENGINE]
+
+**验证**：覆盖单尾/逐层尾/metadata、边缘 tile 粒度、同队列 bind→使用、跨队列重绑、全部消费者退役后回收。保存 feature/property、bind 参数、分配与完成点日志；无相应设备时 Device=UNVERIFIED。
+
+固定依据：Vulkan 1.4.368，commit `fa30d4e312e843193601be7cb926c7e25d9ec885`；[sparsemem#sparsememory-resource-binding](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/sparsemem.adoc#sparsememory-resource-binding)；[sparsemem#sparsememory-memory-partially-resident](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/sparsemem.adoc#sparsememory-memory-partially-resident)；[sparsemem#sparsememory-physicalprops](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/sparsemem.adoc#sparsememory-physicalprops)。[SPEC]
+
+
+<a id="mapped-range-edge-contract"></a>
+
+## 18. 局部映射、atom共享与alias边界
+
+**条件**：分别保存 allocationSize、mapOffset/mapSize、resource bindOffset 和 suballocation offset；VkMappedMemoryRange.offset 相对整个allocation。VK_WHOLE_SIZE 在flush/invalidate中到当前mapping末端，不必是allocation末端。[SPEC]
+
+**正常路径**：先把dirty范围换算为allocation坐标，再向nonCoherentAtomSize对齐；必须完全落入当前mapping。有限size为atom倍数，或offset+size恰到allocation末端；WHOLE_SIZE要求mapping末端为atom边界或allocation末端。例：atom=128，allocation=1000，map=[128,1000)，offset=896,size=104合法末尾；map=[128,950)的WHOLE_SIZE末端不满足边界，不能逃避约束。[SPEC]
+
+**失败边界**：flush一个字节会使所在完整atom按host写访问参与同步，即使相邻字节值未改也可能与device访问race。invalidate前存在未flush的host写会使内容undefined；不得把invalidate当flush替代。map/unmap/flush/invalidate不自动等待device工作。[SPEC]
+
+**Alias**：重叠绑定不保证两个不同image有可互读表示。只有符合规范alias consistency条件时才保留内容；其他切换视内容为未定义并初始化新资源，image需各自合法layout。混合linear/nonlinear按bufferImageGranularity扩展范围判断潜在alias；dedicated allocation条件仍独立检查。[SPEC]
+
+**回退**：扩大到合法完整mapping或重新选择atom对齐子分配；无法协调同atom多owner时隔离分配。不能把向外取整后超出mapping的range提交给API。
+
+**验证**：测试allocation末尾非整atom、map末尾非整atom、负向/溢出范围、WHOLE_SIZE与局部mapping、邻接两个owner、alias失效后重新初始化；记录精确offset/size，不只记录buffer局部偏移。
+
+固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[memory#memory-device-hostaccess](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/memory.adoc#memory-device-hostaccess)；[memory#memory-device-unmap-does-not-flush](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/memory.adoc#memory-device-unmap-does-not-flush)；[resources#resources-memory-aliasing-consistency](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/resources.adoc#resources-memory-aliasing-consistency)。[SPEC]

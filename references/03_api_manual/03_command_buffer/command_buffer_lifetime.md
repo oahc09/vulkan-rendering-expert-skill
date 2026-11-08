@@ -29,7 +29,7 @@ Allocate
 → End (EXECUTABLE)
 → Submit (PENDING)
 → GPU Execute
-→ Fence Signal (EXECUTABLE again, if resettable)
+→ All executions complete (EXECUTABLE, or INVALID for ONE_TIME_SUBMIT)
 → Reset (INITIAL)
 → Begin (RECORDING) ...
 ```
@@ -62,8 +62,8 @@ Allocate
 | `vkBeginCommandBuffer` | INITIAL → RECORDING。[SPEC] |
 | `vkEndCommandBuffer` | RECORDING → EXECUTABLE。[SPEC] |
 | `vkQueueSubmit` | EXECUTABLE → PENDING。[SPEC] |
-| `vkResetCommandBuffer` / `vkResetCommandPool` | EXECUTABLE / INITIAL → INITIAL；PENDING 状态不允许 reset。[SPEC] |
-| `vkFreeCommandBuffers` | 释放，可在任何状态调用，但需确保 GPU 不再使用。[SPEC] |
+| `vkResetCommandBuffer` / `vkResetCommandPool` | 非 PENDING → INITIAL；单 buffer reset 要求 pool 的 RESET_COMMAND_BUFFER_BIT，pool reset 不要求此 flag。[SPEC] |
+| `vkFreeCommandBuffers` | 释放任何非 pending 状态的 command buffer。[SPEC] |
 
 ### 相关扩展 / 版本
 
@@ -82,7 +82,8 @@ Frame N:
     vkBeginCommandBuffer(cmd[N])
     record commands
     vkEndCommandBuffer(cmd[N])
-    vkQueueSubmit(cmd[N], fence = inFlightFence[N])
+    确定提交后 vkResetFences(inFlightFence[N])
+    vkQueueSubmit(cmd[N], fence = inFlightFence[N])；检查失败，不能继续普通等待
 
 下一帧使用下一个 slot，循环。
 ```
@@ -102,7 +103,7 @@ vkAllocateCommandBuffers
 
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
-| `commandBuffer` 状态 | 只有 EXECUTABLE 或 INITIAL 才能 reset / begin。[SPEC] | PENDING 状态 reset 导致 validation error 或 crash。[TOOL] |
+| `commandBuffer` 状态 | reset 允许任何非 pending 状态；begin 的状态条件依赖 pool 的 RESET_COMMAND_BUFFER_BIT。[SPEC] | PENDING 状态 reset 导致 validation error 或 crash。[TOOL] |
 | `flags`（reset） | `VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT` 可释放内存回 pool。[SPEC] | 频繁使用导致内存碎片或额外分配开销。[HEUR] |
 | `flags`（pool reset） | `VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT`。[SPEC] | 重置时释放了仍在使用的资源。[SPEC] |
 | `pCommandBuffers`（free） | 释放后 handle 变为不可用，但 pool 中内存可能保留。[SPEC] | free 后立即使用旧 handle。[TOOL] |
@@ -147,7 +148,7 @@ vkAllocateCommandBuffers
 
 - `VUID-vkResetCommandBuffer-commandBuffer-00045`：command buffer 不能处于 pending 状态。
 - `VUID-vkFreeCommandBuffers-pCommandBuffers-00047`：free 的 command buffer 不能处于 pending 状态。
-- `VUID-vkBeginCommandBuffer-commandBuffer-00049`：只能从 INITIAL 或 EXECUTABLE（若允许 reset）状态开始。
+- `VUID-vkBeginCommandBuffer-commandBuffer-00049`：不能为 pending；00050 另要求没有 RESET_COMMAND_BUFFER_BIT 的 pool 所分配 buffer 必须为 initial。
 - `VUID-vkQueueSubmit-pCommandBuffers-00072`：被提交的 primary command buffer 内引用的 secondary command buffers 必须处于 pending 或 executable；pending 的合法性还受 SIMULTANEOUS_USE 限制。 [官方 vkQueueSubmit 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueSubmit.html)。[SPEC]
 
 ### RenderDoc / AGI
@@ -192,18 +193,18 @@ vkAllocateCommandBuffers
 
 ### CPU-GPU 同步
 
-- Fence 是判断 command buffer 是否可 reset / free 的唯一可靠依据。[SPEC]
+- Fence、覆盖全部执行的 timeline 完成点或 queue/device idle 都可证明完成；仅覆盖部分 stage 的信号不能证明全部执行结束。[SPEC]
 - `vkDeviceWaitIdle` 是最保守的等待方式，但会阻塞并行。[SPEC]
 
 ### GPU-GPU 同步
 
 - Command buffer 内部通过 barrier / event 管理资源状态。
-- 跨 command buffer 通过 semaphore 同步。
+- 同 queue 跨 command buffer 可通过 barrier/event 同步；跨 queue 通常使用 semaphore。
 
 ### 资源访问同步
 
 - Command buffer 录制时引用的资源，在 GPU 执行期间必须有效。
-- 不要录制命令后、submit 前修改或销毁资源，除非通过 barrier 明确管理。[SPEC]
+- 录制后修改资源须遵守资源/descriptor 的具体规则；销毁所引用对象可能使非 pending command buffer invalid，barrier 不能复活对象。[SPEC]
 
 ---
 
@@ -265,3 +266,18 @@ vkAllocateCommandBuffers
 2. `VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT` 的具体内存行为。
 3. 多线程下 command pool 的线程安全限制。
 4. Secondary command buffer 的 lifetime 与 primary command buffer 的关系。
+
+
+<a id="command-retirement-contract"></a>
+
+## 18. Primary/secondary 与多完成点退役
+
+**条件/正常路径**：采用 [状态与线程合同](command_buffer.md#command-state-thread-contract)，区分录制有效性、pending执行次数与资源使用结束。completion proof 可以是覆盖最后命令 ALL_COMMANDS 的 timeline、fence 或正确 idle，不限 fence；SIMULTANEOUS_USE 的全部执行都结束才可 reset/free。[SPEC]
+
+**主从链**：submit primary 时被执行的 secondary 也 pending；primary 执行完成覆盖其内部 secondary 的该次执行，不自动覆盖 secondary 被其他 primary 的使用。reset/free primary 解除该主从引用，但不等于销毁 secondary；secondary失效可使仍引用它的非pending primary失效。[SPEC]
+
+**失败/回退**：不能用资源最后一次 shader-read 完成点证明整个 command buffer 已不 pending，后面仍可能有命令；选完整完成作用域。barrier 不会恢复已经销毁的对象，也不会使 invalid CB executable。依赖图不明时回退保守全部相关 queue idle 后重录，不继续提交旧录制。
+
+**验证**：追踪 CB generation、parent links、每次 submit 的 completion token，测试同一 secondary 被两个 primary使用、只完成其中一项、reset传播及重录；host-only状态检查与实际GPU执行证据分开记录。
+
+固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[cmdbuffers#commandbuffers-lifecycle](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/cmdbuffers.adoc#commandbuffers-lifecycle)；[cmdbuffers#commandbuffers-secondary](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/cmdbuffers.adoc#commandbuffers-secondary)。[SPEC]

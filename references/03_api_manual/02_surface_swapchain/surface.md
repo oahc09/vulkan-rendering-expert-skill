@@ -68,7 +68,7 @@ Platform Window / ANativeWindow / HWND
 
 ### 相关扩展 / 版本
 
-- `VK_KHR_surface`（核心已普及，通常必须显式启用）。
+- `VK_KHR_surface` 是 instance 扩展，未晋升为 Vulkan core；使用时显式启用。
 - `VK_KHR_android_surface` / `VK_KHR_win32_surface` / `VK_KHR_xlib_surface` 等平台扩展。
 - Android 可用性：所有支持 Vulkan 的 Android 设备均可用，但 `ANativeWindow` 有效性由 Android 生命周期控制。[ANDROID]
 
@@ -181,7 +181,7 @@ Platform Window / ANativeWindow / HWND
 
 ### in-flight 风险
 
-- `vkQueuePresentKHR` 可能异步持有 surface 引用；销毁 surface 前需确保 GPU 已完成相关工作，或 render loop 已停止。[SPEC]
+- `vkQueuePresentKHR` 可能异步持有 surface 引用；先停止新的 WSI 操作，并按 swapchain 退役合同完成全部引用；render loop 停止本身不是完成证明。[SPEC]
 -  retired swapchain 不影响 surface 生命周期，但 surface 销毁必须等 swapchain 销毁完成。[SPEC]
 
 ---
@@ -190,7 +190,7 @@ Platform Window / ANativeWindow / HWND
 
 ### CPU-GPU 同步
 
-- 销毁 surface 前，CPU 需等待 GPU idle 或至少确认没有 pending present。[SPEC]
+- 销毁 surface 前先销毁关联 swapchain，并按 swapchain 退役合同确认 presentation 引用结束；GPU submit fence 或 idle 不能单独证明 presentation 已退役。[SPEC]
 - Android 切后台时，render thread 应在 surface 销毁前停止提交。[ANDROID]
 
 ### GPU-GPU 同步
@@ -262,3 +262,19 @@ Android Native Activity / SurfaceView / TextureView 渲染场景，生命周期�
 2. 特定 GPU 对 `VkSurfaceCapabilitiesKHR` 中 `currentTransform`、`supportedTransforms` 的具体行为。
 3. Android `ANativeWindow` 与 `VkSurfaceKHR` 的精确生命周期边界。
 4. 多 GPU / 多 surface 场景下的 queue family present 支持查询。
+
+
+<a id="surface-platform-contract"></a>
+## 平台与无窗口路径的选择合同
+
+Surface、swapchain、present support 是不同能力。`VK_KHR_surface` 与平台 instance 扩展不属于 Vulkan 1.0–1.4 core；`VK_KHR_swapchain` 为 device 扩展。每个 physical device / queue family / surface 单独查 present support，不从 graphics queue 或另一窗口的结果推断。[SPEC]
+
+Windows 使用 Win32，Linux 区分 Xlib/Xcb/Wayland，Metal 使用 `VK_EXT_metal_surface` 的 CAMetalLayer 合同；窗口库返回的所需扩展仍须核对支持并启用。枚举 portability 实现时，支持且启用 `VK_KHR_portability_enumeration` 并设置 `VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR`；设备若报告 `VK_KHR_portability_subset`，创建 device 时必须启用该扩展，并查询其 feature/property 限制，不能宣称完整原生 Vulkan 等价。[SPEC]
+
+普通 offscreen rendering 只用 image，不需要 surface/swapchain/present。`VK_EXT_headless_surface` 是可选的 WSI headless surface，仍走 surface 能力和 swapchain 协议，不等同 offscreen 自动支持。`VK_KHR_display` 的 display/mode/plane 直显还需独立枚举与兼容查询，不能把桌面窗口创建参数套进去。[SPEC]
+
+正常：创建平台 surface → 查询 support/capabilities/formats/modes → 按实际 extent/usage 创建 swapchain。失败：SURFACE_LOST 停止向旧 surface 新提交，按 [swapchain 生命周期](swapchain_recreate.md) 退役并重建平台关联；零 extent 暂停而非制造 1×1 present。无 present 支持时可选择另一个已查询支持的 queue/device，或明确回退 offscreen；不要伪造 headless 扩展。多窗口分别维护 acquisition 与 retirement 状态，GPU submit 完成不能替代 presentation 完成。protected surface/swapchain 必须查询相应支持并保留保护边界，不允许 readback 作为通用诊断。[SPEC][ENGINE]
+
+静态验收检查平台分支、固定 extent、unsupported 拒绝与 presentation 退休条件；各 WSI 平台、HDR、direct display 与 protected present 的真机结果独立记录，未运行即 NOT_RUN。
+
+固定规范（Vulkan 1.4.368，source-read；不是设备验证）：[WSI surfaces / swapchains / platform extensions](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/VK_KHR_surface/wsi.adoc)；[portability enumeration](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/extensions.adoc)。

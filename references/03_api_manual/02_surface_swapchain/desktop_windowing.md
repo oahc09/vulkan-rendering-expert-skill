@@ -78,7 +78,7 @@
 → 创建 VkSurfaceKHR（库封装或原生 API）
 → 选 present queue（surfaceSupport 检查）
 → 查询 surface capabilities / formats / present modes
-→ 创建 swapchain（extent 取 clamp(capabilities.currentExtent)）
+→ 创建 swapchain（currentExtent 非 UINT32_MAX 时使用精确值；否则 clamp 实际像素尺寸）
 → 渲染循环：acquire → submit（含 present/wait semaphore）→ present
 → 处理窗口事件 → 必要时 recreate swapchain
 ```
@@ -90,7 +90,7 @@
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
 | `capabilities.currentExtent` | 为 `0xFFFFFFFF`（`UINT32_MAX` 特殊值，width/height 各分量）时需用窗口实际像素尺寸，并 clamp 到 min/max extent。[SPEC] | 直接用窗口逻辑尺寸（DPI 缩放后不一致）。[TOOL] |
-| `imageExtent` | 必须在 min/max extent 范围内 clamp。[SPEC] | 未 clamp 直接用窗口尺寸。[SPEC] |
+| `imageExtent` | 固定 currentExtent 使用精确值；可变 extent 才把像素尺寸 clamp 到 min/max。[SPEC] | 未 clamp 直接用窗口尺寸。[SPEC] |
 | `clipped` | 通常 VK_TRUE（被遮挡区域不保证内容）。[GUIDE] | 期望遮挡区仍可读回时误开 clipped。[GUIDE] |
 | present mode | FIFO 保底可用；MAILBOX/IMMEDIATE 视平台。[SPEC] | 未确认支持即请求 MAILBOX。[TOOL] |
 
@@ -117,7 +117,7 @@
 
 - [ ] 窗口销毁前是否按依赖逆序：先销毁 swapchain 及其依赖资源，再销毁 surface？[SPEC]
 - [ ] 事件回调里销毁 Vulkan 对象前是否先暂停渲染线程？[ENGINE]
-- [ ] 退出路径是否等待 GPU idle / in-flight fence 后再销毁？[SPEC]
+- [ ] 退出路径是否分别确认 GPU 提交完成与 presentation 退役后再销毁？[SPEC]
 
 ---
 
@@ -171,7 +171,7 @@
 
 ### in-flight 风险
 
-- 事件回调销毁旧资源时，in-flight command buffer 可能仍引用旧 swapchain image / framebuffer：必须先等待 fence signal 或暂停渲染线程。[SPEC]
+- 事件回调销毁旧资源时，in-flight command buffer 可能仍引用旧 swapchain image / framebuffer：先暂停新提交并等待相关提交完成；暂停线程不是 completion 证明，presentation 退役另按 swapchain 合同。[SPEC]
 - recreate 时旧 swapchain 通过 `oldSwapchain` 退休，GPU 用完前不得销毁旧句柄。[SPEC]
 
 ---

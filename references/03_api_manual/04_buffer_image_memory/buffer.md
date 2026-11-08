@@ -193,8 +193,8 @@ vkCreateBuffer(..., &createInfo, ..., &buffer)
 
 ### CPU-GPU 同步
 
-- CPU 写入 coherent memory 后 GPU 立即可见；非 coherent memory 需 `vkFlushMappedMemoryRanges`。[SPEC]
-- CPU 读取 GPU 写入的 buffer 通常需要 barrier 或 coherent memory + invalidate。[SPEC]
+- CPU 写入 coherent memory 可省 flush，但必须在提交前完成 host 写入并避免与 GPU 访问重叠；非 coherent memory 还需 `vkFlushMappedMemoryRanges`。[SPEC]
+- CPU 读取 GPU 写入的 buffer：device 写入 → HOST_READ 内存依赖 → 等待覆盖写入的完成点 → 非 coherent memory invalidate → CPU 读取；coherent 只免 invalidate，不免完成等待。[SPEC]
 
 ### GPU-GPU 同步
 
@@ -266,3 +266,16 @@ Uniform 数据极少或完全不变化的场景。
 2. `minUniformBufferOffsetAlignment` 和 `minStorageBufferOffsetAlignment` 的具体值。
 3. `VK_KHR_buffer_device_address` 的启用与使用规则。
 4. Coherent / non-coherent memory 的 flush / invalidate 规则。
+
+
+<a id="buffer-host-contract"></a>
+
+## 16. Buffer host 可见性兼容入口
+
+**条件/正常路径**：usage 与 requirements 验证完成后，host-visible buffer 的上传、回读、atom 对齐与 alias 切换统一遵循 [内存合同](memory_allocation.md#memory-host-alias-contract)。仍需覆盖 GPU 访问的完成等待；HOST_COHERENT 不是 GPU 完成标志；persistent mapping 也不允许提前覆盖 in-flight 帧槽。
+
+**失败/回退**：没有合适 host-visible 类型时采用 staging copy，目标 buffer 必须含对应 TRANSFER_DST/SRC usage；不能强行 map device-only allocation。等待超时保留该槽而非提前复用，设备丢失走重建/错误报告。
+
+**验证**：上传后 GPU 校验与 GPU 写后 CPU 校验分别验证 coherent/non-coherent 两条路径；测试帧槽不足时是否等待/扩容/跳过，而不是破坏 pending 数据。
+
+固定依据：Vulkan 1.4.368，commit `fa30d4e312e843193601be7cb926c7e25d9ec885`；[memory#memory-device-hostaccess](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/memory.adoc#memory-device-hostaccess)；[synchronization#synchronization-submission-host-writes](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-submission-host-writes)。[SPEC]

@@ -112,7 +112,7 @@
 ## 7. 高频错误
 
 1. `srcAccessMask` 不包含 producer 实际使用的 access flag，导致 consumer 读脏数据。[TOOL]
-2. `dstStageMask` 设为 `TOP_OF_PIPE_BIT`，consumer 在该阶段之后立即读取，未等待 producer 完成。[TOOL]
+2. `dstStageMask` 设为 `TOP_OF_PIPE_BIT`，通常过度阻塞执行，且不能为 consumer 的具体读取提供正确访问作用域；不是天然漏掉执行等待。[TOOL]
 3. 过度使用 `VK_PIPELINE_STAGE_ALL_COMMANDS_BIT` 和 `VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT` 作为通用配对，造成性能严重下降。[HEUR]
 4. 在 render pass 内部用 pipeline barrier 替代 subpass dependency 处理 attachment 同步。[TOOL]
 5. Buffer barrier 的 offset/size 未按 `minMemoryMapAlignment` / `nonCoherentAtomSize` 对齐。[TOOL]
@@ -287,3 +287,20 @@ Vulkan 1.4 对 Pipeline Barrier 的主要变更：
 buffer 无 image layout；结果图和 history 要另填 old/new layout、subresource、descriptor layout。ping-pong 的两张图不自动保证跨帧 RAW/WAR 安全。不同 queue 即使同 family 也要 semaphore；exclusive sharing 跨 family 另作 release/acquire ownership。完成点同时覆盖 scratch、TLAS 和 hit-shading 数据，不能用全局 waitIdle 掩盖每帧错误依赖。[SPEC][ENGINE]
 
 依据：[同步范围](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc)、[AS 命令](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/accelstructures.adoc)。
+
+
+<a id="barrier-scope-contract"></a>
+
+## 18. Stage/access 与同步作用域合同
+
+**条件**：为每个hazard记录producer/consumer、range、queue、stage/access及image layout。stage顺序影响执行作用域，access mask另限制内存作用域；不能用“所有更早stage”推断其访问都被选中。[SPEC]
+
+**正常路径**：RAW/WAW建立memory dependency；WAR常只需execution dependency，access可0。barrier作用域沿同queue submission order，可跨command buffer边界，不限本CB。跨queue用semaphore连接，layout与必要的ownership由对应barrier满足。ALL_COMMANDS/宽access可作为调试正确性起点，不是性能推荐。[SPEC]
+
+**TOP/BOTTOM迁移**：TOP_OF_PIPE作为第二作用域相当ALL_COMMANDS且access=0，作为第一作用域相当NONE；BOTTOM_OF_PIPE相反。故dst=TOP不是天然“消费者过早执行”，而通常过度阻塞且不能表达真实内存访问。Sync2优先明确NONE/ALL_COMMANDS与正确access。旧mask前31位与Sync2共享，高位新增flags不能截断至32位。[SPEC]
+
+**失败/回退**：同queue提交顺序不消除hazard；仅设置正确layout不等于写→读可见。stage/access不匹配、queue不支持某stage、renderpass内缺少所需self-dependency均应在录制前拒绝。缺少Sync2使用语义等价legacy路径，不能机械替换NONE为空mask而忽略legacy条件。
+
+**验证**：测RAW/WAR/WAW、同queue跨CB、跨queue同family、不同family、TOP/BOTTOM正反作用域及64位高bit保留；使用validation查组合，实际内容校验补充其盲区。
+
+固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[synchronization#synchronization-pipeline-stages](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-pipeline-stages)；[synchronization#synchronization-dependencies-access-scopes](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-dependencies-access-scopes)；[synchronization#synchronization-pipeline-barriers](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-pipeline-barriers)。[SPEC]

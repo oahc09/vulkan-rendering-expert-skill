@@ -68,7 +68,7 @@ Compute Shader (imageStore)
 → VkDescriptorSet
 → VkImage (VK_IMAGE_USAGE_STORAGE_BIT | SAMPLED_BIT)
 → VkImageView (single mip/layer, non-multisample)
-→ VkComputePipeline
+→ VkPipeline
 → vkCmdBindPipeline(COMPUTE)
 → vkCmdBindDescriptorSets
 → vkCmdDispatch

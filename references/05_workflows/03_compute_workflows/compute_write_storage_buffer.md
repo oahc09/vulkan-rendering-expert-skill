@@ -72,7 +72,7 @@ CPU Data / Previous Compute Output
 → VkDescriptorSetLayout (STORAGE_BUFFER, COMPUTE stage)
 → VkDescriptorSet
 → vkCmdBindDescriptorSets(COMPUTE)
-→ VkComputePipeline
+→ VkPipeline
 → vkCmdDispatch
 → VkBufferMemoryBarrier (ACCESS_SHADER_WRITE_BIT → ACCESS_SHADER_READ_BIT)
 → Next Consumer (Graphics Shader / DrawIndirect / CPU Readback)

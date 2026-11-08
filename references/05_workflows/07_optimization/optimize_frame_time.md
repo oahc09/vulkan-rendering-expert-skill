@@ -62,9 +62,9 @@ CPU Record + Submit
 ```text
 CPU Record
 → VkCommandBuffer (primary/secondary)
-→ VkQueueSubmit (fence/semaphore)
+→ vkQueueSubmit (fence/semaphore)
 → GPU Vertex/Fragment/Compute Stages
-→ VkSwapchain Present
+→ VkSwapchainKHR → vkQueuePresentKHR
 → Frame Time = max(CPU, GPU) + synchronization overhead
 ```
 
