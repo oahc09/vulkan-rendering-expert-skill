@@ -238,3 +238,40 @@ demo 或快速原型，shader 接口差异很大。
 2. 同一 pipeline layout 被多个 pipeline 共享时的限制。
 3. Push descriptor 与 pipeline layout 的交互。
 4. `VK_EXT_descriptor_indexing` 对 layout 的额外要求。
+
+## Delivery19 compute interface delivery chain (bounded L1/L2)
+
+The artifact boundary is not the pipeline boundary. Pair exact shader binary,
+validator target/result and disassembly before deriving an interface. Match its
+set/binding, descriptor type and compute visibility to the layout used by the
+actual pipeline. Missing bindings or missing stage visibility violate07988;
+incompatible ordinary descriptor type violates07990. Descriptor arrays add count
+requirements (07991), but the paired extractor deliberately does not implement
+arrays and must return UNKNOWN rather than silently treating them as one resource.
+
+`tools/pipeline_interface19.py` only extracts direct Block StorageBuffer variables
+from a single GLCompute entrypoint with Shader-only capability and no extensions.
+Its source is actual SPIRV-Tools output, with binary/disassembly digests paired to
+validation. Uniform/UniformConstant, push constants, multi-entry modules, descriptor
+arrays and optional capabilities are not supported by this extractor. Dynamic
+and mutable descriptor layout types also return UNKNOWN rather than a false
+ordinary-type mismatch diagnostic. Do not use
+its positive result as general reflection, descriptor update permission, layout
+compatibility across unrelated pipelines, or proof of all Vulkan validity.
+
+The complete experiment in `cases19/pipeline_interface` keeps an intentionally
+wrong layout, an inspectable minimal repair and actual compiled artifacts. A
+Validation diagnostic and abort prove the bad API call was rejected, not that
+undefined execution occurred. The repaired path must create the pipeline, bind
+its descriptor, dispatch, establish device-to-host visibility, wait and read the
+expected result. A clean validation log without correct readback is insufficient;
+a deliberately wrong readback expectation must fail. Keep resource lifetime and
+cleanup errors in the result instead of ignoring them after a nominal pass.
+
+This joins shader artifact, interface, descriptor and command/memory evidence for
+one ordinary compute workload. It is authored fault injection, not discovered
+production-engine failure. Check the paired summary for actual diagnostics and
+runtime/tool identity. Hardware, performance, broader layout features, SC, Live
+and original-plan external-engine acceptance remain separate.
+
+Source: [compute pipeline interface requirements](https://docs.vulkan.org/refpages/latest/refpages/source/VkComputePipelineCreateInfo.html).
