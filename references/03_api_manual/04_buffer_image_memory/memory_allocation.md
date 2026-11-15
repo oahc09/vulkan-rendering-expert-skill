@@ -332,3 +332,51 @@ VkImage / VkBuffer
 **验证**：测试allocation末尾非整atom、map末尾非整atom、负向/溢出范围、WHOLE_SIZE与局部mapping、邻接两个owner、alias失效后重新初始化；记录精确offset/size，不只记录buffer局部偏移。
 
 固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[memory#memory-device-hostaccess](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/memory.adoc#memory-device-hostaccess)；[memory#memory-device-unmap-does-not-flush](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/memory.adoc#memory-device-unmap-does-not-flush)；[resources#resources-memory-aliasing-consistency](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/resources.adoc#resources-memory-aliasing-consistency)。[SPEC]
+
+## Delivery19 mapped-memory visibility contract (bounded L1/L2)
+
+**Capability first.** Query actual memory properties and intersect memory type
+indices with each resource's `memoryTypeBits`. A host-visible type without
+HOST_COHERENT is required to claim noncoherent visibility execution. Headers,
+CPU arithmetic, or coherent flush calls cannot establish that capability. If no
+compatible type exists, report `UNAVAILABLE_NOT_RUN` for that path; do not change
+memory flags in evidence or substitute a coherent success.
+
+**Ranges.** `VkMappedMemoryRange.offset` is allocation-relative, not buffer-local.
+Account for the binding/suballocation offset first. The allocation must be mapped.
+The offset must align to nonCoherentAtomSize (00687); explicit ranges must remain
+inside the mapping (00685). Explicit size must be atom-aligned unless the range
+ends at allocation end (01390). WHOLE_SIZE ends at the current mapping end, not
+unconditionally allocation end; its offset must be in that mapping (00686), and
+mapping end must be atom-aligned or equal allocation end (01389). Check arithmetic
+before narrowing to VkDeviceSize. Expanding a dirty span to atoms may require a
+larger mapping; never clamp to an arbitrary unaligned partial mapping boundary.
+A valid numerical range alone is not synchronization permission.
+
+**Upload.** Serialize relevant host accesses and retire conflicting device uses.
+Flush noncoherent writes before the consuming submission's dependency chain.
+Unmap is not a replacement for flush. Atom expansion affects neighboring bytes
+for synchronization purposes, so sharing one atom between unrelated live
+suballocations requires ownership coordination, not merely byte-disjoint writes.
+Coherence removes the explicit cache-maintenance requirement, not execution
+ordering or lifetime obligations.
+
+**Readback.** Establish the device-write to host-read memory dependency, wait for
+the associated completion, then invalidate noncoherent ranges before host reads.
+Invalidation is not a device wait. Do not invalidate over unflushed host writes;
+keep upload and readback ownership explicit. Mapping alone is not invalidation.
+Fence evidence must cover the actual uses and object generations, not another
+queue or a reused handle. Device loss or failed flush/invalidate/wait fails the
+path; do not consume a stale readback as success.
+
+Paired `tools/mapped_memory19.py` returns bounded numerical/ownership obligations,
+not proof of GPU state. `cases19/mapped_memory` records queried capabilities and
+actual tested branches separately. External/sparse memory, device groups,
+concurrent atom sharing, mobile hardware, full SC and external-engine acceptance
+remain outside this slice.
+
+Sources: [mapped-range VUIDs](https://docs.vulkan.org/refpages/latest/refpages/source/VkMappedMemoryRange.html),
+[flush semantics](https://docs.vulkan.org/refpages/latest/refpages/source/vkFlushMappedMemoryRanges.html),
+[invalidate dependency chain](https://docs.vulkan.org/refpages/latest/refpages/source/vkInvalidateMappedMemoryRanges.html).
+These live normative pages are distinct from the frozen registry snapshot and
+from the actual Validation layer version recorded by the probe.
