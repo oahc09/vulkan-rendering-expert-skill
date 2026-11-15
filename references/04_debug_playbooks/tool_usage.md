@@ -156,3 +156,11 @@ fault记录见 [资源级取证](02_crash_hang/device_lost.md#mobile-fault-evide
 [2026-10-28 工具介绍](https://developer.android.com/blog/posts/android-dev-summit-26-developer-tools-performance)、
 [APA release notes](https://developer.android.com/android-performance-analyzer/release-notes)。
 上述为文档核验，不表示本环境安装或运行了这些工具。
+
+
+<a id="delivery19-tool-adapters"></a>
+## 薄适配与真实执行边界
+
+[ENGINE] 优先已有工具，不引入常驻调试服务。Validation/SyncVal 回调保留 message ID 与原始文件 hash；GPU-AV 插桩与性能测量分离。RenderDoc 通过官方 Python API 获取事件/绑定，先核 replay support 与 protected 内容限制；未加载成功不得生成“抓帧已验证”记录。Perfetto Trace Processor 固定查询 `SELECT id, ts, dur, track_id, name FROM slice ORDER BY id LIMIT 10001;`，超过约定10000行拒绝而非把截断表当完整 trace。字段、单位或工具版本不匹配，停止该层并保留错误。
+
+本候选的 callback/CSV 解析是离线合同，不负责获取系统权限或安装 layer，不把模拟输入算真实工具采集。来源：[SyncVal](https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/main/docs/syncval_usage.md)、[Trace Processor](https://perfetto.dev/docs/analysis/trace-processor)。正式证据需另冻结工具版本和文件 hash。

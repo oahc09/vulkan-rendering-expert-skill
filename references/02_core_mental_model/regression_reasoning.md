@@ -156,3 +156,11 @@ Surface destroyed / replaced（Android pause / resume / rotation）
 3. 改 barrier 只改了一侧 stage / access。[SPEC]
 4. 改 frames-in-flight 数量后 per-frame 资源没有成套扩展。[ENGINE]
 5. 销毁旧资源前没有等待 in-flight fence。[SPEC]
+
+
+<a id="delivery19-minimal-patch"></a>
+## 最小修复交付合同
+
+[ENGINE] 修改前保存复现/失败证据，给明确机制与反证。冻结 Must Change / Should Change / Can Defer / Do Not Change 和路径白名单；不夹带重构，不创建第二套 Device/resource 管理器。patch 后验证正常、创建失败、取消、迟到产物、旧代际退休和销毁路径；若改变架构，单列迁移理由。
+
+交付记录包含 diff、依赖顺序、针对性与全影响回归、回滚步骤、剩余风险。某层 BLOCKED/UNVERIFIED 时不能写全部已解决；没有 target device 可交付未验证 patch，但不是设备修复通过。一次不复现不等于消灭偶发问题。

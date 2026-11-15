@@ -147,3 +147,8 @@ Baseline shadows and reflection fallback; optional query-only AS engineering; te
 ## v1.0.18 文字专题候选
 
 已接入文字 provider、字形质量、有界矢量/3D文字与动态图集合同，详见 [按需入口](references/07_integration_pack/task_routing_rules.md#text-vector-topics)。这是知识/测试候选，不是完整平台或视觉验收。v1.0.17 已合入；其未关闭的全域、Live、设备与精确测试配对缺口继续保留。
+
+
+## v1.0.19 开发候选（未封板）
+
+新增按需读取的决策、取证、因果实验、最小修复、联合A/B和可撤销经验合同，保留八模块及原启动集合。配套可执行验证在测试仓，当前不是完整全域知识/实战/设备验收证书。规范L1/L2逐项审查、真实工具采集、模型盲测、目标设备和宿主尚未完成；此前TEXT18的质量与集成限制仍继承。详见测试仓 `docs/v1.0.19-status.md`，不自动合并或发布。

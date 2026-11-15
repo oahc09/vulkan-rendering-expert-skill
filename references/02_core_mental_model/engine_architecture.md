@@ -788,3 +788,26 @@ Vulkan Mapping：A → 状态写入 `VkGraphicsPipelineCreateInfo` 各状态结�
 - [ENGINE] [HarfBuzz 15.0.0 NEWS](https://github.com/harfbuzz/harfbuzz/blob/15.0.0/NEWS)
 - [ANDROID] [TextShaper](https://developer.android.com/reference/android/text/TextShaper)
 - [REF] [GetGlyphRunOutline](https://learn.microsoft.com/en-us/windows/win32/api/dwrite/nf-dwrite-idwritefontface-getglyphrunoutline)
+
+
+<a id="delivery19-decision-contract"></a>
+## GPU 决策合同 v1.0.19
+
+[ENGINE] 决策不是品牌排序、自动升级阶梯或无依据综合分。先固定设备/driver/API、实际 supported 与 enabled、format/usage/sample 组合、queue ownership、资源代际、scene/分辨率/输入、质量/延迟/内存/持续运行预算。未知必须保持 UNKNOWN。内部 JSON 字段不是 Vulkan API。
+
+按候选逐条检查：合法性 → 已启用 → 参数组合 → 生命周期 → 成本预算 → 同条件测量。已支持但未启用不得执行；多个合法方案而缺少测量时保持 NEEDS_MEASUREMENT，保留原路径。证明单 pass 更快不够，完整帧/质量/延迟任何必需目标失败均 KEEP_BASELINE。已有证据须绑定本项目、设备、驱动、scene；换驱动/负载不继承收益。
+
+| 决策族 | 必须比较的候选 | 必须拒绝的推断 |
+|---|---|---|
+| 渲染组织 | RenderPass/subpass、Dynamic Rendering/local read | 新 API 自动降低 tile 带宽 |
+| 绑定 | sets/push/indexing、buffer/heap | opaque descriptor 字节可猜测 |
+| 调度 | 单 queue、异步 Compute | 独立 family 必然重叠、无需 ownership |
+| 加载与内存 | 驻留/streaming/sparse、staging/host copy | coherent 允许覆写 in-flight 数据 |
+| Pipeline | cache/binary/GPL/shader object | 编译可用等于运行 feature 已启用 |
+| GPU-driven | CPU/fixed slot/count/Mesh/DGC | 所有路径强制同一扩展组 |
+| 画质 | raster/query/full RT、MSAA/TAA/SR、透明精度 | query-only 强加 SBT |
+| 持续性能 | 分辨率/更新频率/LOD/采样 | 短时 FPS 代替热稳态和输入延迟 |
+| 平台内容 | Vulkan Video/platform codec、XR/外部计算 | codec 导入等于 DPB/session 验收 |
+| 仿真与文字 | 状态快照/并行策略、bitmap/MSDF/mesh | 所有字号和变换固定单表示 |
+
+每个规则输出 prerequisites、拒绝原因、替代项、证据、fallback、复评条件及版本范围。先选择最小必要变化；“有证据地不改”是合法交付。配套测试仓 tools/delivery19.py 只验证输入合同，不查询真实设备、不代替规范或完整专家判断。

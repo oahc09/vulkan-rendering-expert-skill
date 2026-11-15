@@ -405,3 +405,9 @@ ENG13 新24题按 primary/contrast 成对输入评估，实际 path/anchor/hash/
 | 高频变化、上传/排版卡顿与同质量预算 | [cost](../05_workflows/07_optimization/optimize_frame_time.md#text-quality-cost-budget) |
 
 不能默认引入 UI 框架、Kotlin、完整字体解析器或强制提高 minSdk。优先已有/系统资源生产，最终 Vulkan 显示不变；最多条件性评估一个小型源码算法模块。系统字体不随包分发。原始 TEXT18 prompt 与独立评审 rubric 在 tests 仓分离，rubric/标准答案/历史回答不得进入被测输入。旧题与原12题token基线不改；平台、Host、Shader、Vulkan、Live、Visual、Device 和 Package 各层独立报告。v1.0.17已合入不等于其 K/B/P 缺口自动关闭。
+
+
+<a id="delivery19-topics"></a>
+## v1.0.19 最终交付的按需子主题
+
+沿现有任务类型路由，只在命中时继续读取：架构取舍 → [决策](../02_core_mental_model/engine_architecture.md#delivery19-decision-contract)；项目取证 → [关联](../05_workflows/01_renderer_setup/project_diagnosis.md#delivery19-evidence-chain)；因果诊断 → [实验](../00_expert_entry/debug_priority.md#delivery19-causal-diagnosis)；修复 → [patch](../02_core_mental_model/regression_reasoning.md#delivery19-minimal-patch)；优化 → [A/B](../00_expert_entry/performance_priority.md#delivery19-joint-ab)；案例 → [生命周期](../06_cases/case_template.md#delivery19-experience-lifecycle)；完成声明 → [四封板](../00_expert_entry/verification_gate.md#delivery19-four-seals)。不把全部子主题加入默认启动。

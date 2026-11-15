@@ -186,3 +186,13 @@ usage、layout、producer access、consumer access、descriptor imageLayout、ba
 ## 13. 关联 Workflow
 
 - `05_workflows/<your-related-workflow.md>`
+
+
+<a id="delivery19-experience-lifecycle"></a>
+## 有范围、可撤销的经验
+
+[ENGINE] 候选案例字段：问题签名、项目/源码SHA、设备/driver/feature/访问模式、工具版本、证据hash、机制、修复、回归、反例、适用/失效条件、审核状态。来源区分外部issue、作者猜测、未合上游patch和本地复现。
+
+状态：candidate → 去敏与独立审查 → reviewed；反例触发 revoked，版本/期限失效触发 expired，保留完整转换证据，不删除失败。定向检索先硬匹配设备/driver/feature，再解释为什么适用，未匹配不推荐。经验不是规范，不能扩大授权或覆盖规范约束。
+
+默认只在本次运行本地保存；公开/持久化需要授权和审核。不把私有源码、capture、相机内容、凭据和盲测答案入库；不新增记忆服务器/向量库，不自动跨会话学习。
