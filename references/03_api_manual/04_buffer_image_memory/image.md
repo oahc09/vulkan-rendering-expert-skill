@@ -351,3 +351,68 @@ RGBA8 UNORM 每次存储会量化且范围有限，低 alpha 累积可能丢失�
 **定向验收。** 静态负例至少包含 H264 双 field 不误计 slot、H265 key 冲突、AV1 sequence update/film-grain output alias、VP9 伪造参数或 DPB 结构体、AV1 encode feature 缺失与 QP/QIndex 混用、feedback2 signedness/布局错误。实际 codec PASS 另需合法码流、解码像素或 round-trip 对照、header/feedback 核对、session reset 与参考链恢复；本轮这些 Device 项均 NOT_RUN，不能用 source-read/字符串回归替代。
 
 固定规范证据（全部 1.4.368）：[C1](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/video/h264_decode.adoc#L173)；[C1 参数 key](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/video/h264_parameter_sets.adoc#L7)；[C2](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/video/h265_decode.adoc#L121)；[C2 参数 key](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/video/h265_parameter_sets.adoc#L7)；[C3](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/video/av1_decode.adoc#L164)；[C4](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/video/vp9_decode.adoc#L142)；[C4 无 parameters](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/videocoding.adoc#L2066)；[C5](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/video/h264_encode.adoc#L273)；[C6](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/video/h265_encode.adoc#L310)；[C7](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/video/av1_encode.adoc#L435)；[C7 update VU](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/videocoding.adoc#L3280)；[C8 profile compatibility / inline / parameter controls](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/videocoding.adoc#L1881)；[C8 features](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/features.adoc#L4622)；[C9](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/queries.adoc#L3238)；[C9 result layout](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/queries.adoc#L1273)；[C10 quantization/intra/RGB](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/video/encode.adoc#L2336)。
+
+## Delivery19 image-compute delivery chain (bounded L1/L2)
+
+This contract joins upload, storage-image descriptors, compute, synchronization,
+readback and a pixel oracle. It is not a complete image-domain audit or an
+external-engine repair. The executable counterpart lives in tests
+`cases19/image_compute`; its measured scope is recorded separately in
+`coverage/v1.0.19/image-compute.json`.
+
+### Preconditions and state ledger
+
+- Query format features for **optimal tiling**, image-format properties for the
+  actual usage/type/flags, extent and sample count. A format name alone is not
+  proof of support; unsupported or missing query results stop execution.
+- Allocate and bind each image using its own memory requirements. Keep upload
+  and readback buffer ranges separate from image subresource identities.
+- Track each image's aspect, mip, layer, current layout, queue owner and last
+  access. A descriptor's `imageLayout` declares the layout at use; updating the
+  descriptor does **not** perform a transition or make earlier writes visible.
+- For this bounded chain use single-mip, single-layer, single-sample R32_UINT,
+  one compute-capable queue, ordinary storage-image descriptors and coherent
+  host staging. Input usage is TRANSFER_DST|STORAGE; output usage is
+  STORAGE|TRANSFER_SRC. R32_UINT views match shader `r32ui uimage2D`; select
+  COLOR aspect, mip0, layer0 and tightly packed copies inside the declared
+  extent. Neither formatless access nor sampled-image filtering is implied.
+
+### Execution and causal checks
+
+1. Populate staging before submission. UNDEFINED is for new/discardable contents,
+   not a substitute for tracking reused images and their last access. Transition
+   the new input from UNDEFINED for
+   upload, copy buffer to image, then establish transfer-write to compute-read
+   visibility and the layout used by the storage descriptor.
+2. Initialize the output layout independently. Bind both image views and the
+   matching compute pipeline; dispatch only the declared extent.
+3. Establish compute-write to transfer-read visibility on the output while
+   transitioning for image-to-buffer copy. Establish transfer-write to host-read
+   visibility on the destination buffer, submit, wait for the fence, then read.
+4. Compare every output element with a separately calculated CPU expression.
+   A successful submit, zero validation messages or a plausible image is not a
+   correctness oracle. Keep dimensions, source bytes, shader binary, run modes
+   and expected/actual values attached to the same run.
+
+A GENERAL layout is not a substitute for an access dependency. Conversely,
+correct memory masks cannot excuse an incorrect current layout. Keep those
+faults separate when selecting a minimal repair. Invalid-command diagnostics
+must abort before unsafe execution; the repaired run must execute the entire
+chain. A deliberately wrong expected result must fail even when validation is
+clean. Coherent memory removes explicit host flush/invalidate requirements,
+not device/host ordering or completion obligations.
+
+### Evidence and limits
+
+Preserve capability query results, tool/binary hashes, actual validation mode,
+raw callbacks, the applied patch and full output comparison. Validation capture
+is a diagnostic run, not a performance measurement. The same authored example
+cannot stand in for an independent production defect or a blind model task.
+Multi-queue ownership, depth/stencil, compressed/multiplanar images, aliases,
+sparse/protected images, arrays/mips, physical GPU performance and noncoherent
+execution remain separate acceptance items.
+
+Normative reading: [Khronos synchronization examples](https://docs.vulkan.org/guide/latest/synchronization_examples.html)
+and [synchronization and cache control](https://docs.vulkan.org/spec/latest/chapters/synchronization.html).
+These live links are supporting references, not an assertion that the complete
+v1.0.19 source denominator has been frozen or audited.
