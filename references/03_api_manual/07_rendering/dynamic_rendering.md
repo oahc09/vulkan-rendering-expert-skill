@@ -373,3 +373,52 @@ attachment load/store 与 render area；来源 CC-BY-4.0，本节为释义。生
 及某 load/store/subpass 组合必然更省带宽等表述。改动收紧推断，不改变 API。
 运行证据仅为 CPU software ICD 正确性，不代表物理 GPU、移动端带宽/功耗或
 外部工程收益；全域 VK10、SC、完整光栅管线与原计划盲测/发布门槛仍未完成。
+
+<a id="delivery19-dynamic-draw-family"></a>
+## 17. 有 shader/draw 的受限整合合同（v1.0.19）
+
+上一节只验收 attachment CLEAR/LOAD 生命周期，不能证明 graphics pipeline、
+vertex/fragment shader 或 draw 实际参与。本合同另接 tests 仓库的
+`cases19/dynamic_draw/run.py` 与 `tools/dynamic_draw19.py`：必须真正编译并验证
+SPIR-V、创建普通 graphics pipeline、绑定后 draw、同步回读，并逐像素匹配
+独立 CPU 参考。仅成功创建 pipeline、零 Validation 错误或单一清屏色不够。
+
+### 准入与解释边界
+
+- 先查询并显式启用 dynamicRendering，选 graphics queue；普通 core 1.3 路径
+  不因仅发现扩展名便获准。检查实际 format/usage/sample 支持、framebuffer 与
+  viewport 限制，保留查询值和使用值。工具/设备不可用是 NOT_RUN，不是 PASS。
+- 本切片限定单个非空 RGBA8_UNORM color view、单样本、单 layer、无 multiview、
+  无 resolve、无 depth/stencil、无特殊 attachment 扩展。未知事实返回 UNKNOWN，
+  超出切片返回 OUT_OF_SCOPE；不能将其他扩展的例外套进普通路径。
+- pipeline 的 `VkPipelineRenderingCreateInfo` 与 begin rendering 的实际
+  attachment 数量、格式、viewMask/sample 必须适配。此处未启用
+  dynamicRenderingUnusedAttachments，实际非空 view 的 format 必须与
+  pipeline 对应 color format 相同；1.4.309 依据为
+  `VUID-vkCmdDraw-dynamicRenderingUnusedAttachments-08910`。
+- 空 renderPass 的 pipeline 创建成功不是 draw 兼容性证明。pipeline bind、
+  viewport/scissor、shader 输出 location、write mask 与真正的 draw 参数
+  必须可追溯到本次命令；动态状态仅在被配置为动态时才由命令设置。
+- shader 编译/spirv-val 验证与设备运行分别记录，不能把前者当成执行证明。
+  shader 文件、SPIR-V、执行源及 runner 的 hash 保留；固定 target 与真实
+  glslang/SPIRV-Tools 版本，不能借一个未固定的系统工具声称可重复。
+
+### 输出与故障隔离
+
+受限参考为 4×4 像素棋盘：vertex shader 通过 gl_VertexIndex 形成覆盖画布的
+三角形，fragment shader 按窗口坐标输出红/蓝；CPU 按行列计算参考，不能从
+实际回读结果反推出期望。保留全部像素，而非仅“图像非黑”或平均颜色。
+CLEAR 后 draw 的颜色与清屏不同，可识别 draw 未生效；错误参考必须失败。
+颜色输出到 transfer 的依赖、layout 转换、buffer 到 host 的依赖及完成等待
+仍不可省，coherent 只处理宿主缓存一致性。
+
+格式不匹配负控必须在实际 vkCmdDraw 获得预期 Validation 诊断，callback
+中止无效 void 命令后丢弃该 command buffer，不提交错误实例，不伪造 VkResult。
+多余错误、缺少目标错误、非预期工具退出或回读不匹配均失败。通过这一负控
+不等于所有 shader 接口、光栅状态、同步或动态渲染扩展组合都已验证。
+
+来源：[Khronos Vulkan-Docs drawing v1.4.309](https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.309/chapters/drawing.adoc)，
+Git blob `77c199718a6d74d179af4536df47f3cdc5fe25ad`，CC-BY-4.0，本节为释义；
+精确 VUID 来自前节固定的独立 1.4.309 validusage.json。实际工具结果与具体
+运行范围以配对 tests 证据为准，不用规范链接代替设备验收。此路径仍为 CPU
+software ICD 正确性，不宣称物理 GPU、移动端画质/性能、外部工程或盲测完成。
