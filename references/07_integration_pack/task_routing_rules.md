@@ -17,6 +17,7 @@
 | Android Surface / Swapchain / 生命周期 | #route-android | #format-android |
 | 真实仓库 / 升级 / 源码影响面 | #route-project（叠加任何主类型） | #format-project |
 | 简短回答 | #route-compact（保留主类型约束） | #format-compact |
+| 文字 / 字体 / glyph / atlas / 矢量 / 空间标签 / 立体字 | 原主类型 + #text-vector-topics | 主类型模板 |
 | 第三方库 / Vulkan backend / 模型加载 / PBR | #route-third-party | 主类型模板 |
 
 跨类型先按 `../00_expert_entry/progressive_retrieval.md#r1-decompose` 分解再逐项路由；不可拆分时主类型优先级：调试 > 性能 > Android > 项目诊断 > 正向开发 > 架构 > API > 案例 > 概念 > 简短。第三方集成是叠加规则，真实仓库约束也不得被主类型覆盖。
@@ -385,3 +386,22 @@ ENG13 新24题按 primary/contrast 成对输入评估，实际 path/anchor/hash/
 仍按原 API/debug/performance/implementation/architecture 主类型，不增加默认加载文件。具体版本、稀有能力、平台、Video、完整RT/SBT、cooperative/tensor等命中时，仅查 [18域索引](../03_api_manual/api_index.md#vulkan-domain-map)，读取一个对应合同，再按剩余缺口补载官方来源。不要将整份Registry/所有领域作为启动上下文；也不能因省token跳过19硬规则、错误分支或feature/生命周期条件。实现/真实项目仍叠加原Evidence/Architecture Map、R1–R5与适用G1–G6。
 
 全域完成声明以 [K/B/P边界](README.md#vulkan-coverage-scope) 为准。当前稳定域语义审计仍有缺口，只有候选状态；未执行Live/实际宿主或目标设备不得写PASS。旧120个prompt不改，CORE17复用图只说明验收任务归属，不是模型答对证明。
+
+
+<a id="text-vector-topics"></a>
+## 文字、矢量与 2D/3D 融合（TEXT18）
+
+[ENGINE] 保留原 API/debug/performance/implementation/architecture 主类型及真实项目叠加规则；本节只在文字、glyph、字体、矢量、atlas、空间标签或立体字任务命中时读取。先按症状选择一个权威段，不整组预加载：
+
+| 任务缺口 | 首段 |
+|---|---|
+| shaping/layout、fallback、glyph ID/字体身份 | [provider 合同](../02_core_mental_model/engine_architecture.md#text-provider-contract) |
+| Android Java/JNI 或 Windows DirectWrite 资源桥 | [platform bridge](../05_workflows/04_android_integration/integrate_surfaceview_anativewindow.md#platform-text-resource-bridge) |
+| 小字、MSDF/MTSDF、颜色 glyph、采样伪影 | [字形质量](../05_workflows/02_render_pass_effects/add_texture_sampling_pass.md#glyph-representation-quality) |
+| 矢量孔洞、clip、world label、有限 extrusion/bevel | [vector/mesh](../05_workflows/06_pipeline_descriptor/add_graphics_pipeline.md#vector-and-extruded-text) |
+| 图集更新、缓存身份与上传 | [atlas](../05_workflows/05_resource_management/add_texture_resource.md#dynamic-glyph-atlas) |
+| 取消、旧代际、GPU 未退役 slot | [retirement](../05_workflows/05_resource_management/manage_resource_lifetime.md#glyph-generation-retirement) |
+| Overlay/MRT、HDR、时域位置、多 Device | [composition](../05_workflows/02_render_pass_effects/add_postprocess_pass.md#text-overlay-composition) |
+| 高频变化、上传/排版卡顿与同质量预算 | [cost](../05_workflows/07_optimization/optimize_frame_time.md#text-quality-cost-budget) |
+
+不能默认引入 UI 框架、Kotlin、完整字体解析器或强制提高 minSdk。优先已有/系统资源生产，最终 Vulkan 显示不变；最多条件性评估一个小型源码算法模块。系统字体不随包分发。原始 TEXT18 prompt 与独立评审 rubric 在 tests 仓分离，rubric/标准答案/历史回答不得进入被测输入。旧题与原12题token基线不改；平台、Host、Shader、Vulkan、Live、Visual、Device 和 Package 各层独立报告。v1.0.17已合入不等于其 K/B/P 缺口自动关闭。

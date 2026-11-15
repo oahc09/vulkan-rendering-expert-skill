@@ -241,3 +241,11 @@ VkSamplerCreateInfo
 3. `unnormalizedCoordinates` 与 shader 坐标系的交互。
 4. 自定义 border color 扩展的限制。
 5. 不同驱动对 compare sampler 与 shadow map 的优化。
+
+
+<a id="glyph-filtering-contract"></a>
+## TEXT18 字形过滤合同
+
+[ENGINE] Coverage/SDF/MSDF/MTSDF 是线性数据，不作 sRGB 颜色解码；颜色 glyph 独立声明 transfer 与 premultiplication。CLAMP_TO_EDGE 仅约束整页边缘，不隔离 atlas 内部 glyph。记录 range、padding、效果半径和采样 footprint；紧密 atlas 普通 mip 不提供逐 glyph 隔离。
+
+生成器/采样的通道、导数与回退权威见 [字形质量](../../05_workflows/02_render_pass_effects/add_texture_sampling_pass.md#glyph-representation-quality)。按实际格式查询过滤支持，不擅自把平台 bitmap 格式当 Vulkan format。[SPEC]

@@ -147,3 +147,9 @@ v1.0.12仅按章节扩展既有Android Surface、媒体采样与颜色输出内�
 | normal/bounds/history/同步 | [C4交接](03_compute_workflows/compute_to_graphics_sync.md#simulation-render-handoff) |
 | 多消费者退休 | [C4寿命](05_resource_management/manage_frame_resources.md#simulation-snapshot-retirement) |
 | 分项成本/持续质量 | [C4预算](07_optimization/optimize_frame_time.md#simulation-cost-quality-budget) |
+
+
+<a id="text18-workflows"></a>
+## TEXT18 工作流导航
+
+文字/矢量任务入口见 [唯一路由](../07_integration_pack/task_routing_rules.md#text-vector-topics)。按需进入现有纹理、Android、geometry、资源退休或后处理段；不是新的 UI 框架。

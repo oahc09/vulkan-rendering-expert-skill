@@ -139,3 +139,7 @@ Additive C1 fixed-tick/input/shared-world, C2 lightweight XPBD rope/regular-clot
 The candidate entry version is **1.0.16**. Skill v1.0.15 was merged in PR #11; publication of its paired test evidence remains pending. Transparent water/glass integration and sustained mobile acceptance remain unverified. This is candidate content, not a completed release. Documentation, host numerics, Shader compilation, Vulkan execution, Live/host behavior and sustained Android quality require separate evidence in the paired tests repository.
 
 Change record (2026-11-07): extend eight existing authority anchors and short navigation; correct directly conflicting legacy advice on cross-workgroup barriers, atomic capability, Surface-independent compute and sampled-image layouts in place. No hard rules are moved. This candidate is not automatically merged or published.
+
+## v1.0.18 text/vector candidate
+
+Adds on-demand provider, glyph-quality, bounded vector/3D text and atlas contracts in existing files. See [TEXT18 routing](references/07_integration_pack/task_routing_rules.md#text-vector-topics). Knowledge and host material do not establish platform, live-model, GPU, visual or device acceptance. Merging v1.0.17 did not close its outstanding coverage and evidence gates.

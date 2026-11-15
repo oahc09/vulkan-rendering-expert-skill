@@ -297,3 +297,32 @@ Compute 输出给 Fragment 采样黑屏，有没有类似案例？
 - Dependency Order
 - synchronization / lifetime impact
 - Verification / Rollback / DoD
+
+
+<a id="text18-layered-gates"></a>
+## TEXT18 分层验收合同
+
+| 层 | 执行内容 | 通过能够证明 / 不能证明 |
+|---|---|---|
+| Static | 文档/锚点/来源/版本、原路由和模型配置、包合同 | 结构可用；不证明文字画对 |
+| Host Unit | 缓存key、generation、预算、path子集、alpha参考、取消/退休状态 | CPU合同；不证明JNI/DirectWrite或GPU正确 |
+| Platform Integration | 真实Android Java调用或Windows DirectWrite run/bitmap/outline | 指定平台与字体上的接口行为；不等于全部字体/语言 |
+| Shader Unit | 真实编译与SPIR-V验证，ABI与数据格式检查 | Shader构建；不证明raster质量 |
+| Vulkan Integration | 指定实现真实upload/draw、readback、MRT sentinel检查 | 实际Vulkan正确性；软件Vulkan不代表移动性能 |
+| Live Model | 最终Skill读取轨迹、原始回答/usage、TEXT18语义评审 | 本模型/本输入行为；不等于手机运行 |
+| Visual Quality | 预注册序列/ROI/字体条件下的参考与误差 | 对应条件的质量；截图不等于面板色准 |
+| Device | Adreno/Mali及可用Windows设备同场景持续测试 | 指定设备/驱动/配置；不外推所有手机 |
+| Package/Host | 白名单确定性包、实际宿主发现/读取 | 交付/读取有效；不替代上述各层 |
+
+### M0必须预注册的判据
+
+1. 字形语义：已知输入在固定provider/version/font条件下的glyph/run/fallback与方向；有合法跨版本差异时以明确规则判定，不能把新结果随手改成golden。
+2. 数值合成：[字形合成](../05_workflows/02_render_pass_effects/add_texture_sampling_pass.md#glyph-representation-quality)的线性over参考0.52，按实际附件格式量化与读回误差预设容差；不让sRGB编码后的数值直接对比线性参考。
+3. 图集退休：无pending使用的slot才可复用；原始状态日志可核查。边界测试在受控CPU模拟或有效Vulkan操作中完成，不主动执行非法use-after-free注入GPU。
+4. MRT保护：预填ID/velocity/depth，文字pass之后非目标附件按其格式与实际操作合同保持不变；需要清除/转换者应分pass，不能偷偷改判据。
+5. 路径几何：孔洞保留、三角形范围/索引合法、拓扑不支持有明确fallback；屏幕误差、面积误差和细分预算在运行前固定。
+6. 动态质量：固定相机和亚像素移动序列，测轮廓边缘误差/coverage偏差/边缘抖动，标注reference类型。不能用大面积背景稀释字符ROI误差。
+7. 资源稳定：多轮冷/热加载和atlas churn后资源计数回到预期稳态；峰值预算不超声明值；CPU字体服务缓存另记，不能都归到Vulkan泄漏。
+8. 性能分项：shaping、raster/distance generation、triangulation、JNI、upload、draw、总帧p50/p95/p99、峰值内存与持续热状态。未获得可靠GPU/功耗计数时标UNMEASURED。
+
+不设一个对所有字体与字号通用的SSIM/FPS硬阈值。M0按已批准的输入、表示和reference预注册具体阈值，后续不得因候选失败而放宽；若需要改阈值，独立评审并保留旧结果。效果依赖视觉判断时必须查看实际渲染结果，不仅看文件存在或hash。

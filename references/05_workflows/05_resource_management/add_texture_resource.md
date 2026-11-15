@@ -245,3 +245,36 @@ Request → CPU Decode/Transcode → Reserve budgets → Upload chunks
 取消前未提交的独占 CPU 数据可释放；已提交 copy 引用的 staging/image 等其 GPU 完成，取消迟到结果检查 generation 后拒绝发布。共享纹理由实际 owner/引用与退休协议回收，不随单 Surface/Engine 退出误释放。[ENGINE]
 
 验证：压缩与未压缩、NPOT/最后小 mip、缺格式/过滤、色彩/alpha、预算下降、取消、并发双输出；每层 mip 图像及资源计数证据单列。参考固定 [Vulkan-Docs v1.4.328 resources](https://github.com/KhronosGroup/Vulkan-Docs/blob/d38733398a4bec673bd5d24c904d4739a45f020d/chapters/resources.adoc)、[copies](https://github.com/KhronosGroup/Vulkan-Docs/blob/d38733398a4bec673bd5d24c904d4739a45f020d/chapters/copies.adoc)、[KTX-Software v4.4.0 transcode](https://github.com/KhronosGroup/KTX-Software/blob/beef80159525d9fb7abb8645ea85f4c4f6842e8f/lib/basis_transcode.cpp)。2026-11-01 source-read，未运行转码/GPU。
+
+
+<a id="dynamic-glyph-atlas"></a>
+## TEXT18 C4：动态图集身份、上传与发布
+
+最小语义键按实际 provider 扩展：
+
+```text
+FontProviderIdentity + FontFaceIdentity + FaceGeneration
++ GlyphID + VariationAxes + SyntheticStyle
++ Representation + RasterSize/DPI/SubpixelPhase(如适用)
++ RenderMode/Palette/DistanceRange/GenerationOptions(如适用)
+```
+
+文本布局缓存和 glyph 图集缓存分离。仅 GlyphID 相同不表示同一个字形；仅字体名称相同不表示同一字体版本。明确字体/locale/fontScale/fallback变化使哪一级失效。
+
+### 上传依赖
+| Producer | Resource | Consumer | 最小检查 |
+|---|---|---|---|
+| 平台/CPU 栅格化 | CPU bytes / staging buffer | transfer copy | owner、row pitch、范围、非 coherent flush；host 发布/上传完成是不同时间 |
+| transfer copy | atlas image subresource | fragment sampled read | 实际 copy stage/write → fragment sampled read；合法 layout；旧采样与新写入也需处理 |
+| 可选 Compute glyph/vector pass | storage buffer/image | vertex/index/fragment/indirect | 按真实读法分别给 stage/access；不是一条 fragment barrier 覆盖所有输出 |
+| descriptor 更新 | descriptor set | recorded/pending draws | 现有 update-after-bind 能力与使用规则；不以更新 descriptor 代替数据同步 |
+| 任意 queue/view | page/slot/outline buffer | reuse/retire | 汇合最后读取完成点；不同 Device 不共用 Vulkan handle |
+| mask pass | mask image | path/text composite | mask 写入到采样依赖；多 view/尺寸/generation 匹配 |
+
+Atlas 更新同一 image 时，layout 状态按 subresource 追踪，不按任意 texel 小矩形独立变更。若当前页正在采样，优先 staged 更新/新页代际等明确路径；不能因为两个 glyph 的像素不重叠就忽略 subresource layout 与已提交命令。[SPEC]
+
+退休权威见 [generation retirement](manage_resource_lifetime.md#glyph-generation-retirement)。CPU Ready 不是 GPU Ready；完成上传依赖前不得暴露可绘制快照。
+
+依据（接口事实与工程策略分开；平台/设备执行未验证）：
+- [SPEC] [Vulkan synchronization](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc)
+- [SPEC] [Vulkan descriptors](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/descriptorsets.adoc)

@@ -209,3 +209,31 @@ Surface销毁回调等待“对应代线程已停止访问”的确认；不要�
 
 摄像头仅在明确授权且系统允许的前台测试路径；Wallpaper测试默认色条/非私密本地输入，不默认后台相机可用。无需root、隐藏API、接管其他应用Surface或绕过保护内容。
 来源：[Callback](https://developer.android.com/reference/android/view/SurfaceHolder.Callback)、[WallpaperService](https://developer.android.com/reference/android/service/wallpaper/WallpaperService)、[RemoteViews](https://developer.android.com/reference/android/widget/RemoteViews)。
+
+
+<a id="platform-text-resource-bridge"></a>
+## TEXT18 C1：平台文字资源桥
+
+面向用户 Android 14/API 34+ 优先验证 Java 平台方案。`TextShaper.shapeText` 是 API 31 已有接口，支持多样式 shaping；`PositionedGlyphs` 可提供 glyph 及其 font 信息。[ANDROID]
+
+实施要求：
+
+1. 先以平台排版结果建立正确性基线，保留实际字体身份和位置，不自行重新猜 kerning/fallback。
+2. 同 font 的 glyph run 按批次交接；异步任务使用自有值副本与明确 Java/native owner，不保存短命数组/临时指针。
+3. 系统 CPU 栅格化可产生紧致覆盖率/颜色字形纹理，再由 Vulkan 上传并合成；测量 CPU、分配与上传成本，不每帧重新绘制整段 UI bitmap。
+4. 轮廓路径是独立能力：`Paint.getTextPath` 接收文本，并不是任意已 shaping glyph ID 的通用轮廓接口。必须证明得到的是同 face、同 variation、同 glyph 的轮廓，否则回到 bitmap/run fallback。
+5. 不以隐藏 API、JNI 查找内部 Minikin/Skia 私有符号或不稳定 native font handle 作为默认方案。
+6. 较低 Android 目标若已有支持，保留其旧后端/能力回退；不因本专题把全项目 minSdk 提到 34。
+
+### Windows：DirectWrite 输出，Vulkan 显示
+
+通过已有 DirectWrite layout/custom-renderer 路径取得 glyph run；需要轮廓时用受支持的 outline 接口和自有 sink。系统示例采用 Direct2D 绘制不代表本项目必须引入 Direct2D 显示后端。[REF]
+
+灰度 coverage 的生产、字体 fallback、颜色字形与平台版本分别检查。位图格式、row pitch、alpha、transfer 等交接数据由适配层规范化；不直接把平台 bitmap 字节解释成 Vulkan 纹理。
+
+依据（接口事实与工程策略分开；平台/设备执行未验证）：
+- [ANDROID] [TextShaper](https://developer.android.com/reference/android/text/TextShaper)
+- [ANDROID] [TextRunShaper](https://developer.android.com/reference/android/graphics/text/TextRunShaper)
+- [ANDROID] [PositionedGlyphs](https://developer.android.com/reference/android/graphics/text/PositionedGlyphs)
+- [REF] [DirectWrite custom renderer](https://learn.microsoft.com/en-us/windows/win32/directwrite/how-to-implement-a-custom-text-renderer)
+- [REF] [GetGlyphRunOutline](https://learn.microsoft.com/en-us/windows/win32/api/dwrite/nf-dwrite-idwritefontface-getglyphrunoutline)

@@ -160,3 +160,9 @@ Android 上 resize / pause / resume 后要重新验证 per-frame resources 是�
 | query/滤波偶发旧值 | AS/结果/history 的实际 producer-consumer | 查 barrier、layout、跨 queue 和 ping-pong WAR |
 
 按 [时域工作流](../../05_workflows/02_render_pass_effects/add_postprocess_pass.md#temporal-quality-workflow) 保存固定动态序列与诊断资源，不用单张截图或 Validation clean 代替画质与生命周期结论。
+
+
+<a id="text-atlas-flicker"></a>
+## TEXT18：错字和边缘抖动定向排查
+
+[ENGINE] 先区分 glyph 身份错误、仍在读的 slot 被覆写、布局缩放错误与采样不稳定。对同一 run 保存实际 face/generation、glyph ID、UV snapshot、上传与所有消费完成点。错字优先查 [代际退休](../../05_workflows/05_resource_management/manage_resource_lifetime.md#glyph-generation-retirement)；仅边缘抖动查 [表示质量](../../05_workflows/02_render_pass_effects/add_texture_sampling_pass.md#glyph-representation-quality)。固定序列对比 ROI，保留失败帧；一次截图或 WaitIdle 后稳定不证明修复正确。
