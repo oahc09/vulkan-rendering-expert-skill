@@ -185,7 +185,7 @@ VkCommandBuffer (recording)
 
 ### 格式兼容性检查
 
-- [ ] `vkCmdCopyImage` 的 src / dst 格式是否兼容（相同格式，或同 size + 同 block extent 的兼容格式）？[SPEC]
+- [ ] `vkCmdCopyImage` 普通单平面 color 格式是否 size-compatible（同 texel block 字节数，另核 alpha 格式条件）？双方均压缩时还需同 block extent；压缩与非压缩间不要求同 block extent，但必须正确 size-adjust 目标区域。[SPEC]
 - [ ] `vkCmdBlitImage` 的 src / dst 是否为 color / depth / stencil 同类格式？LINEAR filter 不支持 depth/stencil 格式。[SPEC]
 - [ ] `vkCmdResolveImage` 的 src / dst 格式是否完全相同？[SPEC]
 
@@ -193,7 +193,7 @@ VkCommandBuffer (recording)
 
 - [ ] `vkCmdFillBuffer` 的 offset / size 是否 4 字节对齐？[SPEC]
 - [ ] `vkCmdCopyBufferToImage` / `vkCmdCopyImageToBuffer` 的 bufferOffset 是否满足格式对齐？[SPEC]
-- [ ] 压缩格式的 image copy / blit region 是否按 block size 对齐？[SPEC]
+- [ ] Image copy 的各 offset 是否按相应 texel block extent 对齐，extent 是否块对齐或恰好到达实际 mip 边缘？Blit 单独核其格式/区域规则，不套用 copy 规则。[SPEC]
 
 ### 同步检查
 
@@ -208,7 +208,7 @@ VkCommandBuffer (recording)
 2. 调用时实际 layout 不匹配所声明/允许的布局；GENERAL 也是合法布局，不能只因未使用 TRANSFER_*_OPTIMAL 就判错。[TOOL]
 3. `vkCmdBlitImage` 误用 LINEAR filter 处理 depth / stencil 格式。[SPEC]
 4. `vkCmdResolveImage` src / dst samples 不匹配（src 必须 MS，dst 必须 1×）。[SPEC]
-5. 压缩格式 region 未按 texel block 对齐。[SPEC]
+5. Image copy 的 offset 未按 texel block extent 对齐，或 extent 既未块对齐也未恰到实际 mip 边缘；边缘例外不豁免 offset。[SPEC]
 6. `vkCmdFillBuffer` offset / size 非 4 字节对齐。[SPEC]
 7. Staging 上传写入未对 shader read 建立可见性，或实际/描述符布局不匹配；GENERAL 下同样可以正确采样。[TOOL]
 8. Mipmap 链使用错误 oldLayout，或漏掉前一级 TRANSFER_WRITE 到下一级 TRANSFER_READ 的依赖；一次 barrier 包含多个正确 subresource barrier 并不天然错误。[ENGINE]
@@ -371,3 +371,41 @@ Copy / Blit / Resolve 三者看似都是“搬运”，但同步语义差别显�
 - single-source 负控在源只有1样本却仍指定AVERAGE resolve时，必须得到唯一06861；Validation callback中止 BeginRendering，整条CB弃置、不提交。单独wrong-output模式应真实返回非零。验证层拒绝记录不等于GPU执行过非法resolve。[TOOL]
 
 回退/拒绝：若4×组合不支持，应用可明确选择已验证的1× render_sample路径，重新创建对应pipeline/resources并关闭resolve；这不是保留MSAA质量的等价回退。本入口不自动把unsupported算作pass。depth/stencil resolve、traditional RenderPass、mixed samples、render-to-single-sampled扩展和物理/外部工程/Live验收仍独立未验。[ENGINE]
+
+<a id="delivery19-image-copy-format-region"></a>
+
+### delivery19-image-copy-format-region
+
+普通单平面 color 的 size-compatible 比较 **texel block 字节数**，
+不是要求两边 block extent 一律相同。双方均为 compressed 时额外要求
+block extent 相同（09247）；compressed ↔ uncompressed 可有不同 block extent，
+但这不是解压、过滤或数值格式转换。Alpha 格式类别、multi-planar、
+depth/stencil 及相关 feature 另核，不从此普通 color 子合同推断。
+
+Copy extent 使用 **source texel 单位**。不同 block extent 时，destination
+offset/extent 按固定规范 size-adjust 后检查实际目标范围，不能把 source
+数值直接套在两边。固定正文给出 ASTC_8x5 的 7x3 可表示为 R64G64_UINT 的
+1x1 的例子；这仅说明 size compatibility/表示，不单独证明任何设备上的
+完整 copy 合法或该格式能力受支持。
+
+各 offset 仍须按对应 texel block extent 对齐。Extent 的非整块例外只在
+恰好到达相应实际 mip/subresource 边缘时适用，**边缘例外不豁免 offset**。
+例如相同 4-wide block 格式的 7-wide mip，offset=4、extent=3 可满足该轴的块/边缘条件；
+offset=3、extent=4 不能靠到边缘豁免 offset，offset=4、extent=2 既不整块
+也未到边缘。不同格式仍须先正确处理目标单位；这些不是完整命令准入。
+另核 mip/layer/aspect、image type、sample count、usage、format capability、
+queue transfer granularity、layout、对象范围与寿命及访问同步。
+
+固定 Vulkan-Docs commit `fa30d4e312e843193601be7cb926c7e25d9ec885`
+（Registry API 1.4.368）：
+- `chapters/copies.adoc`，`[[copies-images]]`、`[[copies-images-addressing]]`，
+  SHA256 `b821b4b219c3e7e691332b651c40cd169b74017d7212aad9d1ddbeef8acbec05`；
+- `chapters/formats.adoc`，`[[formats-size-compatibility]]`，
+  SHA256 `9360d12ae4c69c9eb7cf374dc3c99c061b6386f1551b9b4648d14728101cb7f1`。
+
+另核 API 1.4.309 validusage SHA256
+`f61afea8ca6097342cae1b65bfab81675ee7fdc2d809403e083329b7d56597a7`：
+`VUID-vkCmdCopyImage-srcImage-01548`、`VUID-vkCmdCopyImage-srcImage-09247`；
+offset 为 `VUID-vkCmdCopyImage-pRegions-07278` 至 `07283`，
+extent 边缘条件为 srcImage `01728`–`01730` 和 dstImage `01732`–`01734`。
+两版本来源分别绑定，不声称完整条件展开、自动规范语义或 GPU 验收。
