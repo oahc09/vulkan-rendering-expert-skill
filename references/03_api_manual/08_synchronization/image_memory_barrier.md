@@ -83,10 +83,10 @@ Image 生产阶段（如 COLOR_ATTACHMENT_OUTPUT + COLOR_ATTACHMENT_WRITE）
 
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
-| `oldLayout` | 必须与 image 当前实际 layout 一致，或 `VK_IMAGE_LAYOUT_UNDEFINED` 表示丢弃当前内容。[SPEC] | 填写错误的 oldLayout，导致 validation error 或数据损坏。[TOOL] |
+| `oldLayout` | 在布局值不被忽略的真实 transition 中，必须匹配所覆盖 subresource 的实际 layout，或以 `VK_IMAGE_LAYOUT_UNDEFINED` 允许丢弃；equal-layout 例外见后述合同。[SPEC] | 填写错误的 oldLayout，导致 validation error 或数据损坏。[TOOL] |
 | `newLayout` | Consumer 期望的 layout；常见如 `SHADER_READ_ONLY_OPTIMAL`、`COLOR_ATTACHMENT_OPTIMAL`、`TRANSFER_DST_OPTIMAL`、`PRESENT_SRC_KHR`。[SPEC] | sampled image 使用 `COLOR_ATTACHMENT_OPTIMAL` 或 attachment 使用 `SHADER_READ_ONLY_OPTIMAL`。[TOOL] |
 | `srcStageMask` / `dstStageMask` | 控制 layout transition 前后的执行依赖。[SPEC] | 使用 `ALL_COMMANDS_BIT` 导致性能损失；或 stage 与 access 不匹配。[HEUR] |
-| `srcAccessMask` / `dstAccessMask` | 控制 memory availability / visibility；layout transition 本身通常需要 src access 包含对应写入。[SPEC] | srcAccess 为空导致旧 layout 数据未 flush。[TOOL] |
+| `srcAccessMask` / `dstAccessMask` | 控制 memory availability / visibility；layout transition 本身通常需要 src access 包含对应写入。[SPEC] | 存在需要 availability 的先前写入且未由有效依赖覆盖时，遗漏相应 source access 会产生 hazard；不能仅凭 srcAccess 为空判错。[TOOL] |
 | `subresourceRange` | 精确指定 mip level / array layer / aspect mask。[SPEC] | `aspectMask` 遗漏 `DEPTH_BIT` 或 `STENCIL_BIT`；mip level 范围未覆盖实际使用区域。[TOOL] |
 | `srcQueueFamilyIndex` / `dstQueueFamilyIndex` | 用于 queue family ownership transfer；未 transfer 时通常设为 `QUEUE_FAMILY_IGNORED`。[SPEC] | 需要 ownership transfer 时设为 `QUEUE_FAMILY_IGNORED`，导致跨 queue 数据竞争。[TOOL] |
 | `image` | 必须是已创建且绑定内存的 image handle。[SPEC] | image 已销毁或尚未绑定内存。[TOOL] |
@@ -97,7 +97,7 @@ Image 生产阶段（如 COLOR_ATTACHMENT_OUTPUT + COLOR_ATTACHMENT_WRITE）
 
 ### 创建阶段
 
-- [ ] `oldLayout` 是否与实际 layout 一致？
+- [ ] 先判断布局值是否被忽略；否则 oldLayout 是否匹配覆盖范围的实际状态或合法选择 UNDEFINED discard？
 - [ ] `newLayout` 是否符合 consumer 的使用方式？
 - [ ] `subresourceRange` 是否覆盖目标 mip/array/aspect？
 - [ ] 是否需要 queue family ownership transfer？
@@ -107,7 +107,7 @@ Image 生产阶段（如 COLOR_ATTACHMENT_OUTPUT + COLOR_ATTACHMENT_WRITE）
 - [ ] Barrier 是否放在 producer 命令之后、consumer 命令之前？
 - [ ] `srcAccessMask` 是否包含 producer 的写入 access？
 - [ ] `dstAccessMask` 是否包含 consumer 的读取/写入 access？
-- [ ] 同一 image 在 barrier 后是否使用了 `newLayout`？
+- [ ] 对真实 transition，覆盖的 subresource 是否在执行后按 newLayout 使用；布局忽略分支是否保留原实际状态？
 
 ### 销毁阶段
 
@@ -120,7 +120,7 @@ Image 生产阶段（如 COLOR_ATTACHMENT_OUTPUT + COLOR_ATTACHMENT_WRITE）
 1. `oldLayout` 与 image 实际 layout 不符，或错误地使用 `UNDEFINED` 丢弃了仍需保留的内容。[TOOL]
 2. `newLayout` 与后续 consumer 需要的 layout 不一致，例如 present 前未转换到 `PRESENT_SRC_KHR`。[TOOL]
 3. `subresourceRange.aspectMask` 对 depth/stencil image 只填 `COLOR_BIT`。[TOOL]
-4. `srcAccessMask` 为空就执行 layout transition，导致 transition 前的数据未正确 flush。[TOOL]
+4. 存在需提供 availability 的先前写入却未建立相应依赖；不能只凭 srcAccessMask 为空判错，首次使用无先前写入与其他已建立依赖须分开判断。[TOOL]
 5. 在 render pass 内部对 attachment 做 layout transition，应使用 subpass description / dependency 中的 layout 字段。[TOOL]
 6. 跨 queue family transfer 只做了 release 没做 acquire，或 family index 填反。[TOOL]
 7. 对 swapchain image 做 barrier 时未等待 acquire semaphore。[SPEC]
@@ -183,7 +183,7 @@ Image 生产阶段（如 COLOR_ATTACHMENT_OUTPUT + COLOR_ATTACHMENT_WRITE）
 
 ### 资源访问同步
 
-- Layout transition 本身即是一种 memory dependency，需正确设置 src/dst access。[SPEC]
+- Layout transition 是 memory dependency 中的操作，不单独证明依赖充分；它在 availability 后、visibility 前执行，可能读写指定 subresource，须建立覆盖真实访问的依赖。[SPEC]
 - Depth/stencil image 的 aspect 需要单独考虑；某些 layout 仅对 depth 或 stencil 有效。[SPEC]
 - Multi-plane image 的 aspect mask 需按 format 规范填写。[SPEC]
 
@@ -249,7 +249,7 @@ Vulkan 1.4 对 Image Memory Barrier 的主要变更：
 
 ### Synchronization2 promote 为 mandatory feature
 
-1.4 设备保证支持 `VkImageMemoryBarrier2`，`oldLayout`/`newLayout` 语义与 1.0 版本一致；但 mandatory feature 仍需通过 `VkPhysicalDeviceVulkan13Features.synchronization2 = VK_TRUE`（或 `VkPhysicalDeviceSynchronization2Features.synchronization2`）显式启用后才能使用 sync2 API。`synchronization2` 是 Vulkan 1.3 promote，字段位于 `VkPhysicalDeviceVulkan13Features`，**不在 `VkPhysicalDeviceVulkan14Features`**。[SPEC]
+1.4 设备保证支持 `VkImageMemoryBarrier2`，不能假定 `oldLayout`/`newLayout` 在所有 feature 条件下与 1.0 相同；但 mandatory feature 仍需通过 `VkPhysicalDeviceVulkan13Features.synchronization2 = VK_TRUE`（或 `VkPhysicalDeviceSynchronization2Features.synchronization2`）显式启用后才能使用 sync2 API。`synchronization2` 是 Vulkan 1.3 promote，字段位于 `VkPhysicalDeviceVulkan13Features`，**不在 `VkPhysicalDeviceVulkan14Features`**。[SPEC]
 
 ### Dynamic Rendering Local Read
 
@@ -279,12 +279,39 @@ Vulkan 1.4 对 Image Memory Barrier 的主要变更：
 
 ## 18. Image subresource与layout执行合同
 
-**条件/正常路径**：按aspect/mip/layer跟踪layout和owner，transition是device执行操作，不是录制/submit前host已完成的状态。UNDEFINED作为旧layout丢弃旧内容但不免除与仍在访问该image的执行hazard。color、depth/stencil、multi-plane分别遵守合法aspect与layout/usage要求。[SPEC]
+**条件/正常路径**：按aspect/mip/layer跟踪layout和owner，transition是device执行操作，不是录制/submit前host已完成的状态。仅在布局值未被忽略的真实 transition 中，UNDEFINED 作为旧 layout 允许丢弃旧内容（may discard，不保证清零或修改），但不免除与仍在访问该 image 的执行 hazard；equal-layout 忽略分支不因此 discard。color、depth/stencil、multi-plane分别遵守合法aspect与layout/usage要求。[SPEC]
 
-**失败边界**：Sync2的VkImageMemoryBarrier2中srcQueueFamilyIndex==dstQueueFamilyIndex且oldLayout==newLayout时不是layout transition，相关布局值可被忽略但仍保留内存依赖语义；不要把通用“old必须等于当前”错误套到这条特例。跨queue同family仍需semaphore，不需要family ownership；跨family保内容遵循 [maintenance ownership合同](synchronization2.md#maintenance-ownership-contract)。外部API所有权不是此内部例外。[SPEC]
+**失败边界**：VkImageMemoryBarrier2中srcQueueFamilyIndex==dstQueueFamilyIndex且oldLayout==newLayout时布局值被忽略，内容保留且实际布局不变；旧VkImageMemoryBarrier在synchronization2 feature启用时也有该分支，未启用时不可机械套用。即使两值均UNDEFINED，忽略分支也不是discard；仍需正确内存依赖。不要把通用“old必须等于当前”错误套到这条特例。跨queue同family仍需semaphore，不需要family ownership；跨family保内容遵循 [maintenance ownership合同](synchronization2.md#maintenance-ownership-contract)。外部API所有权不是此内部例外。[SPEC]
 
 **回退**：无法证明旧内容有效时明确discard后重新初始化，不能伪造旧layout；不支持独立depth/stencil layout或局部slice行为时选受支持的完整subresource路径。仅改变descriptor里声明的layout不会执行transition。
 
 **验证**：检查只改变一个mip/layer、错误aspect、discard但仍有旧writer、equal-layout Sync2、跨queue acquire→transition→consumer及present前执行顺序；保存subresource状态轨迹而非仅一张image一个全局layout。
 
 固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[synchronization#synchronization-image-layout-transitions](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-image-layout-transitions)；[synchronization#synchronization-image-barrier2-ignored-layout](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-image-barrier2-ignored-layout)；[synchronization#synchronization-image-memory-barriers](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-image-memory-barriers)。[SPEC]
+
+<a id="delivery19-image-layout-ignored-discard"></a>
+
+### delivery19-image-layout-ignored-discard
+
+先判 barrier 类型、实际 synchronization2 启用与 queue-family/layout 值，
+再判断布局是否被忽略。忽略分支不执行 transition，不改变实际布局，不丢弃内容，
+也不自动消除 RAW/WAW/WAR；不同 family 不可套 equal-family 特例。
+真实 transition 则作用于精确 aspect/mip/layer 范围，在 availability 后、
+visibility 前执行；未覆盖 subresource 不随之更新。UNDEFINED 允许 discard
+旧内容，不表示此前访问已退休，也不能单凭它证明新写入与旧访问无竞争。
+此处不展开 3D slice/maintenance9、ownership 或全部 layout/usage 条件。
+
+固定 Vulkan-Docs `fa30d4e312e843193601be7cb926c7e25d9ec885`（1.4.368）
+`chapters/synchronization.adoc` SHA256
+`7748c88e48007820179681ef4f82c1d2244afc5482b5bc0c13d370ef64821909`，
+anchors `synchronization-image-layout-transitions`、
+`synchronization-image-barrier2-ignored-layout`、
+`synchronization-image-barrier-ignored-layout`。正文解释不是 GPU 实测，
+不能替代其他版本 validusage 的条件审查。
+
+另以 API 1.4.309 validusage SHA256
+`f61afea8ca6097342cae1b65bfab81675ee7fdc2d809403e083329b7d56597a7`
+核对 `VUID-VkImageMemoryBarrier2-oldLayout-01197` 与
+`VUID-VkImageMemoryBarrier-oldLayout-01197`：其 oldLayout 要求带有
+ownership transfer 或真实 layout transition 的条件，不是无条件匹配断言。
+两版本来源分别绑定，不推断其全部条款完全相同或整族验收完成。

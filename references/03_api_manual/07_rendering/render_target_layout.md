@@ -120,7 +120,7 @@ VkImage
 2. Present 前未 transition swapchain image 到 `PRESENT_SRC_KHR`。[TOOL]
 3. Depth attachment 在被 shader sample 时仍保持 `DEPTH_STENCIL_ATTACHMENT_OPTIMAL`。[TOOL]
 4. 在 render pass 内部手动对 attachment 做 layout transition，与 render pass 自动 transition 冲突。[TOOL]
-5. Image barrier 的 `oldLayout` 填 `UNDEFINED` 导致内容丢失。[TOOL]
+5. 真实 transition 中误用 UNDEFINED 丢弃仍需保留的内容；布局忽略分支中的 UNDEFINED 不表示 discard。[TOOL]
 6. 对同一 image 的 subresource range 出现重叠但冲突的 layout 要求。[TOOL]
 
 ---
@@ -180,7 +180,7 @@ VkImage
 ### 资源访问同步
 
 - Layout transition 通常与 stage/access mask 一起出现在 image memory barrier 中。[SPEC]
-- `oldLayout` 到 `newLayout` 的 transition 隐含一次 memory dependency，但 src/dst stage/access 仍需正确填写。[SPEC]
+- 真实 layout transition 是 memory dependency 内的操作，不是充分同步证明；须保证先前写 availability、transition、后续 visibility 的顺序。UNDEFINED discard 不豁免旧访问的执行 hazard。[SPEC]
 
 ---
 
@@ -261,3 +261,6 @@ opaque COLOR_ATTACHMENT_OUTPUT/COLOR_ATTACHMENT_WRITE → FRAGMENT_SHADER/SHADER
 回退：复制/分离 pass，或关闭屏幕折射并使用已声明 probe/材质近似。验证独立读写成功与同 subresource 故意错误的诊断、屏外样本和 resize 退休；API 合法性与折射画质分别判定。
 
 [SPEC] [Feedback loop extension](https://docs.vulkan.org/refpages/latest/refpages/source/VK_EXT_attachment_feedback_loop_layout.html)、[Synchronization](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc)。
+
+布局值忽略、实际 subresource 状态保持及 discard 不免同步的固定正文边界，见
+[image barrier 合同](../08_synchronization/image_memory_barrier.md#delivery19-image-layout-ignored-discard)。
