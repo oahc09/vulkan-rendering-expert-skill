@@ -50,11 +50,11 @@ Previous Pass Output Image
 
 - [ ] 输入 image 已创建且 `usage` 包含 `VK_IMAGE_USAGE_SAMPLED_BIT` 或作为 input attachment [SPEC]。
 - [ ] 输出 image 已创建且 `usage` 包含 `VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT` [SPEC]。
-- [ ] 上一 pass 已完成对输入 image 的写入，并通过 barrier / semaphore 同步 [SPEC]。
+- [ ] producer写与consumer读之间有覆盖实际stage/access/subresource的依赖；同queue可串接两pass，不要求中途CPU等待上一pass [SPEC]。
 - [ ] shader 编译链路可用，fullscreen vertex shader 与 fragment shader 已准备。
 - [ ] descriptor 管理可用，可分配/更新 `COMBINED_IMAGE_SAMPLER` 或 `INPUT_ATTACHMENT`。
 - [ ] RenderDoc / AGI 可抓帧 [TOOL]。
-- [ ] Android Surface / ANativeWindow 生命周期可追踪 [ANDROID]。
+- [ ] 若最终呈现到Android Surface，另行追踪Surface / ANativeWindow；纯离屏两pass不需要Surface [ANDROID]。
 
 ---
 
@@ -101,13 +101,14 @@ Previous Pass Output Image
 |---|---|---|---|
 | set=0,binding=0 | `COMBINED_IMAGE_SAMPLER` | input image view + sampler | Fragment [SPEC] |
 | set=0,binding=1 | `COMBINED_IMAGE_SAMPLER`（可选） | additional input（depth、prev frame、LUT） | Fragment [SPEC] |
-| set=0,binding=2 | `UNIFORM_BUFFER` / `PUSH_CONSTANT` | postprocess parameters（exposure、threshold、bloom radius） | Fragment [HEUR] |
+| set=0,binding=2 | `UNIFORM_BUFFER` | postprocess parameters（exposure、threshold、bloom radius） | Fragment [HEUR] |
+| 无 descriptor binding | push constant range | 可选参数替代路径，检查 pipeline layout range/stage/offset/size | Fragment [SPEC] |
 | set=1,binding=0 | `INPUT_ATTACHMENT`（可选，RenderPass subpass 路径） | previous subpass color attachment | Fragment [SPEC] |
 
 设计说明：
 
 - `COMBINED_IMAGE_SAMPLER` 是通用路径，支持 arbitrary sampling kernel 与多输入 [HEUR]。
-- `INPUT_ATTACHMENT` 仅在 RenderPass subpass 内有效，适合需要像素精确对应、不需要自定义采样的场景（如 deferred lighting 读取 G-Buffer） [SPEC]。
+- `INPUT_ATTACHMENT` 适合 framebuffer-local 读取，不替代任意采样核。传统路径由 RenderPass/subpass 约束；dynamic rendering local-read 另需相应 feature、attachment location/input index及layout等条件，不能把普通dynamic rendering当成自动支持 [SPEC]。
 - 输出到 swapchain 时，pipeline color attachment format 必须与 swapchain `imageFormat` 一致 [SPEC]。
 - Fullscreen vertex shader 通常使用硬编码顶点位置，无需 vertex buffer；也可使用 `vkCmdDraw(3)` 绘制 fullscreen triangle [HEUR]。
 
@@ -118,16 +119,16 @@ Previous Pass Output Image
 | Producer | Resource | Barrier / Layout | Consumer |
 |---|---|---|---|
 | previous pass color write | input image | `COLOR_ATTACHMENT_OPTIMAL` → `SHADER_READ_ONLY_OPTIMAL` | postprocess fragment shader [SPEC] |
-| previous subpass write | input image（input attachment） | `COLOR_ATTACHMENT_OPTIMAL` 保持，通过 subpass dependency 同步 | next subpass fragment input [SPEC] |
-| postprocess fragment write | output image | `UNDEFINED` / `SHADER_READ_ONLY_OPTIMAL` → `COLOR_ATTACHMENT_OPTIMAL` | postprocess color write [SPEC] |
-| postprocess fragment write | output image | `COLOR_ATTACHMENT_OPTIMAL` → `PRESENT_SRC_KHR` / `SHADER_READ_ONLY_OPTIMAL` | present / next pass [SPEC] |
+| previous subpass write | input image（input attachment） | 以 attachment reference 的合法读 layout 配合 subpass dependency；不能默认保持仅color-write的 layout | next subpass fragment input [SPEC] |
+| postprocess color attachment write | output image | `UNDEFINED` / `SHADER_READ_ONLY_OPTIMAL` → `COLOR_ATTACHMENT_OPTIMAL` | postprocess color write [SPEC] |
+| postprocess color attachment write | output image | `COLOR_ATTACHMENT_OPTIMAL` → `PRESENT_SRC_KHR` / `SHADER_READ_ONLY_OPTIMAL` | present / next pass [SPEC] |
 
 必须说明：
 
-- input image 在 fragment shader 采样前必须转换到 `SHADER_READ_ONLY_OPTIMAL`（sampled 路径） [SPEC]。
-- input attachment 路径下，layout 通常为 `COLOR_ATTACHMENT_OPTIMAL` 或 `SHADER_READ_ONLY_OPTIMAL`，具体取决于 RenderPass subpass 配置 [SPEC]。
-- output image 在 `vkCmdBeginRenderPass` / `vkCmdBeginRendering` 前需转换到 `COLOR_ATTACHMENT_OPTIMAL` [SPEC]。
-- 若使用 compute 路径替代，input/output image layout 可能为 `GENERAL`，需要额外 barrier [SPEC]。
+- sampled input 可采用满足条件的 `SHADER_READ_ONLY_OPTIMAL` 或 `GENERAL` 等合法 layout，并与访问时 descriptor 一致；保持 `GENERAL` 仍须建立 producer→consumer memory dependency [SPEC]。
+- input attachment 的 layout、索引与依赖按具体 subpass/local-read 合同设置；feedback loop 另有条件，不能以“同一 image”推断同时读写合法 [SPEC]。
+- dynamic rendering 前确保 output 实际 layout 与 attachment 声明一致且适用于color attachment（如 `COLOR_ATTACHMENT_OPTIMAL` 或 `GENERAL`）；传统 render pass 的 initial/subpass/final layout 与自动转换另行配置 [SPEC]。
+- 明确 producer 是 `COLOR_ATTACHMENT_OUTPUT` / `COLOR_ATTACHMENT_WRITE`，consumer sampled read 是 fragment或compute shader阶段；color输出写并不是fragment shader存储写。compute storage写另按该访问类型建立依赖，不按阶段名硬分layout [SPEC]。
 
 ---
 
@@ -155,8 +156,8 @@ Previous Pass Output Image
    - Fragment shader 实现后处理算法，采样输入 image。
 2. **创建 sampler**：根据后处理需求设置 `magFilter`、`minFilter`、`mipmapMode`、`addressModeUVW`；通常为 `LINEAR` + `CLAMP_TO_EDGE` [HEUR]。
 3. **创建 descriptor set layout**：
-   - sampled 路径：`COMBINED_IMAGE_SAMPLER` + `UNIFORM_BUFFER` / push constant。
-   - input attachment 路径：`INPUT_ATTACHMENT` + `UNIFORM_BUFFER` / push constant [SPEC]。
+   - sampled 路径：`COMBINED_IMAGE_SAMPLER`，可选 `UNIFORM_BUFFER`；push constants不属于descriptor set。
+   - input attachment 路径：`INPUT_ATTACHMENT`，可选 `UNIFORM_BUFFER`；push constant ranges在pipeline layout单独声明 [SPEC]。
 4. **创建 pipeline layout**：组合 descriptor set layouts 与 push constant ranges [SPEC]。
 5. **创建 graphics pipeline**：
    - vertex input：无 binding / attribute（fullscreen triangle）或简单 quad layout。
@@ -164,7 +165,7 @@ Previous Pass Output Image
    - rasterizer：`cullMode = NONE`。
    - depth-stencil：`depthTestEnable = VK_FALSE`，`depthWriteEnable = VK_FALSE` [HEUR]。
    - color blend：通常 disabled；additive bloom 可启用 additive blend [HEUR]。
-   - dynamic state：`VIEWPORT`、`SCISSOR` 至少启用 [SPEC]。
+   - viewport/scissor可静态写入pipeline；若声明为dynamic，draw前必须设置对应状态。不是必须启用dynamic [SPEC]。
 6. **准备 input image view**：确保 input image 已创建对应 view，aspect mask = `COLOR_BIT` [SPEC]。
 7. **准备 output image / view**：输出到 swapchain 时使用 swapchain image view；输出到 offscreen 时创建对应 image [SPEC]。
 8. **更新 descriptor set**：填写 `VkDescriptorImageInfo`（image view + sampler + layout），调用 `vkUpdateDescriptorSets` [SPEC]。
@@ -180,7 +181,7 @@ Previous Pass Output Image
     - 若只需要简单 copy / scale，使用 `vkCmdBlitImage` 或 `vkCmdCopyImage` 比 fullscreen pass 开销更低 [HEUR]。
     - 若需要每像素复杂计算或读写 storage image，使用 compute shader（见 `../03_compute_workflows/compute_blur_pass.md`） [HEUR]。
 11. **接入 resize / recreate**：input / output image 若与 swapchain 尺寸相关，recreate 后更新 image view 与 descriptor [ENGINE]。
-12. **接入销毁路径**：按 `pipeline → pipeline layout → descriptor set layout → sampler → image view` 顺序销毁 [ENGINE]。
+12. **接入销毁路径**：先证明所有关联GPU使用退休，再按对象引用关系销毁；固定列举一个对象顺序不代替in-flight检查，旧descriptor/command buffer失效关系也需更新 [ENGINE]。
 
 ---
 
@@ -202,9 +203,9 @@ Previous Pass Output Image
 - [ ] 截图符合预期：后处理效果正确，无拉伸 / 翻转 / 黑边。
 - [ ] logcat（Android）：`adb logcat -s vulkan` 无 validation error；输出 pass 输入/输出 image extent、descriptor binding。
 - [ ] 性能指标：
-  - fullscreen pass GPU cost 与分辨率/采样次数成正比；
+  - 实测 fullscreen pass GPU cost 与分辨率/采样次数的关系，不假定严格成正比；
   - AGI 中 bandwidth 无异常峰值；
-  - 多后处理 pass 合并后 frame time 下降（若已合并） [TOOL]。
+  - 多后处理 pass 合并后对照完整 frame time、画质及资源成本；不预先保证收益 [TOOL]。
 - [ ] resize / rotation / pause / resume 后后处理输出正常。
 - [ ] 多帧运行稳定，无 `DEVICE_LOST` 或 flickering。
 
@@ -219,7 +220,7 @@ Previous Pass Output Image
 5. **Output format 不匹配**：pipeline color attachment format 与 output image format 不一致 [SPEC]。
 6. **Depth test 未关闭**：后处理 pass 意外开启 depth test，导致 fullscreen quad 被剔除 [HEUR]。
 7. **Viewport / scissor 未更新**：resize 后仍为旧尺寸，画面拉伸或只渲染一部分 [ANDROID]。
-8. **Input attachment 使用错误**：在 dynamic rendering 或非 subpass 场景误用 `INPUT_ATTACHMENT` [SPEC]。
+8. **Input attachment 使用错误**：未满足传统subpass或dynamic rendering local-read所需的feature、映射、layout及依赖条件 [SPEC]。
 9. **Blit path 误用**：需要自定义采样核时用了 `vkCmdBlitImage`，导致效果缺失 [HEUR]。
 10. **Android rotation 后 descriptor 悬垂**：input/output image view 重建后未更新 descriptor set [ANDROID]。
 
@@ -352,3 +353,18 @@ Overlay 进入已有 Dynamic Rendering 或 RenderPass 时，使用实际 attachm
 - [SPEC] [Vulkan synchronization](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc)
 - [SPEC] [Vulkan descriptors](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/descriptorsets.adoc)
 - [REF] [Pipeline rendering attachments](https://docs.vulkan.org/refpages/latest/refpages/source/VkPipelineRenderingCreateInfo.html)
+
+<a id="delivery19-render-sample-chain"></a>
+### Delivery19：真实 render-to-texture → fragment 后处理（限定入口）
+
+测试仓 `cases19/render_sample/run.py` 将两次实际 dynamic rendering draw 连接到同一个源 image/view：pass1 生成非对称 RGBA8 端点色图，pass2 用 combined sampler 在 fragment shader 显式 LOD0 采样并执行非恒等通道重排。最终 framebuffer 的16像素用独立 CPU 参考逐一验证，不以 Validation clean 代替数值正确性。[ENGINE][TOOL]
+
+- core1.3 dynamicRendering 已查询并启用；实际查询 color attachment / sampled / transfer usage与format、sampler/descriptor及viewport限制。单队列、nearest/clamp、单level/sample1，两张独立图像；无 Surface、呈现或中途 CPU 等待前提。[SPEC][TOOL]
+- pass1 必须保存供后续使用的 attachment 内容；源 descriptor 绑定实际渲染 image 的 view。源在两个 pass 均保持 `GENERAL`，中间仍需要 `COLOR_ATTACHMENT_OUTPUT` / `COLOR_ATTACHMENT_WRITE` → `FRAGMENT_SHADER` / `SHADER_READ` 内存依赖。它不是 layout mismatch 负控；颜色写来自固定功能输出阶段。[SPEC]
+- pass2 的输出独立于源 attachment，不是同一像素同时读写的 feedback loop。输出 color-write→transfer-read、copy→host-read 和实际 fence 完成组成读回链。只直接读回最终输出；源中间结果由固定已散列 shader/录制及终点参考支持，不冒称独立抓取了中间帧。[TOOL]
+- 省略跨pass依赖的模式只能在真实 SyncVal 捕获 hazard 后称负控通过：本固定层需显式 shader-access heuristic 开启，得到唯一 `SYNC-HAZARD-READ-AFTER-WRITE`，callback 中止采样 draw并弃置整条CB、不提交。heuristic关闭时的未捕获是工具覆盖缺口，不是Vulkan合法或测试PASS。该标识是工具诊断，不是VUID；不是GPU-AV或完整shader内存证明。[TOOL]
+- 另有真实错误像素参考失败；源码、实际工具版本、SPIR-V、原始日志及ON/OFF行为均留证。所有资源使用完成前保持有效，失败cleanup不销毁可能pending的资源；这不代表实际设备挂死恢复已验证。[TOOL][ENGINE]
+
+这是可复用的后处理资源交接与诊断参考，不是完整bloom/HDR/tone-mapping算法、颜色科学或性能验收。仅CPU ICD小型端点色场景；linear/mip/anisotropy、sRGB/多平面、depth/resolve、并发/多帧、物理移动GPU、外部工程与Live盲测仍未验。原计划域和release门槛保持未完成。[ENGINE]
+
+参考：[Khronos同步示例](https://docs.vulkan.org/guide/latest/synchronization_examples.html)。实际运行的规范摘录和Validation版本由测试仓固定cohort约束，不用在线新版本替换已有证据。[SPEC]
