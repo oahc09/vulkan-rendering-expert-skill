@@ -336,8 +336,18 @@ Normative sources (live pages, separate from the frozen registry snapshot):
 - **继承**：secondary 使用 `RENDER_PASS_CONTINUE_BIT`，NULL renderPass，pNext 的 inheritance rendering 指定 color 格式、sample count、viewMask、depth/stencil；primary 在 `SECONDARY_COMMAND_BUFFERS_BIT` rendering instance 内 execute。这些是兼容性声明，不等于继承任意 primary pipeline/descriptor/dynamic state；绘制所需状态在 secondary 内明确建立。[SPEC]
 - **实际数据链**：secondary 绑定实际 graphics pipeline 并 draw，primary 结束 rendering 后建立 color-write → transfer-read，再复制到 readback，transfer-write → host-read，经实际 fence 成功后验证每个像素。执行关系不替代资源内存依赖。[SPEC][TOOL]
 - **负控**：negative secondary 的 inheritance 和自身 pipeline 均使用 BGRA8，而 primary attachment 是 RGBA8；安全中止 `vkCmdExecuteCommands` 的唯一 06028 诊断，丢弃 primary，不提交不匹配命令。它测试的是 execute 继承格式冲突，不是 secondary 自身 pipeline draw 格式错误。错误像素参考另行实际退出非零。[TOOL]
-- **生命周期**：所有对象在提交完成前保持有效；pending 时不得 reset/free。已退休 secondary 的 reset/re-record 可能使引用 primary 失效，需重录相应关系；本例仅验证一次录制/执行及拒绝路径，不代表 pending、多帧重录或多线程图已验证。DeviceWaitIdle 失败时保守退出，不销毁可能仍 pending 的资源；这不是实际设备故障恢复测试。[SPEC][ENGINE]
+- **生命周期**：所有对象在提交完成前保持有效；pending 时不得 reset/free。已退休 secondary 的 reset/re-record 可能使引用 primary 失效，需重录相应关系；原单次模式之外，下面的两代 lifecycle 模式补一条实际串行失效/重录路径；仍不代表 pending 修改、任意引用图或多线程已验证。DeviceWaitIdle 失败时保守退出，不销毁可能仍 pending 的资源；这不是实际设备故障恢复测试。[SPEC][ENGINE]
 
 格式负控对应测试仓冻结 1.4.309 normative.json；结构语义参见 [inheritance rendering](https://docs.vulkan.org/refpages/latest/refpages/source/VkCommandBufferInheritanceRenderingInfo.html) 与 [execute commands](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdExecuteCommands.html)。最新页面不替换固定 cohort 的 VUID 文本。[SPEC]
 
 限定 CPU ICD、单 secondary、单个 color attachment/sample1、离屏小图。传统 render pass、multiview/depth/resolve、query inheritance、nested、multi-thread/multi-queue、物理 GPU/移动性能、外部工程与 Live/盲测仍未验。VK03/VK10 只增加 PARTIAL_BOUNDED，不能宣布完整 domain 或最终交付通过。[ENGINE]
+
+### 两代 secondary 重录与 primary 失效恢复（限定 lifecycle 模式）
+
+同一 runner 的 `lifecycle` 路径先完成第一代绘制及全像素读回，在实际 fence 退休后 reset/re-record 同一个 secondary。第二代绑定 scissor 宽2的新 pipeline，右半输出来自 primary 的 magenta clear，因此像素变化来自实际录制，不只是 generation 标签。旧 primary 因 secondary reset 而失效，重录 secondary 不会自动修复它。[SPEC][TOOL]
+
+用安全 callback 拦截一次旧 primary 的 submit 尝试，固定 cohort 发出00070且返回 validation failure；这不是无效命令成功执行。之后重录 primary 的 execute 链，以实际上一代 `TRANSFER_SRC_OPTIMAL` 布局转换到 attachment，保留完整 write/read依赖，再成功提交、等待完成并独立核对第二代16像素。错误参考模式仅改变第二代预期，必须实际非零退出。[TOOL]
+
+拒绝的 submit 返回、未完成 fence 状态与成功提交后的完成证据分开；失败路径不将一个未signal fence 当成退休证明。第一次提交不是 ONE_TIME，失效原因被隔离为 secondary reset。所有两代 pipeline、image及readback资源在各自真实使用退休前保留。该路径展示一个可复现的失效诊断→重录修复→结果验证闭环，不是外部工程 patch、并发压力、完整引用图遍历或GPU挂死恢复。[ENGINE]
+
+依据：[reset失效传播](https://docs.vulkan.org/refpages/latest/refpages/source/vkResetCommandBuffer.html)；VUID 文本仍以测试仓冻结1.4.309 normative摘录为准。Barrier并不修复command buffer状态；完成点并不重新创建失效录制。[SPEC]
