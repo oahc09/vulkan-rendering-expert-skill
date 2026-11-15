@@ -350,3 +350,19 @@ Preserve the distinction between a readable bounded result and final release.
 All-domain L1/L2, Vulkan SC, external engineering, Live/blind tasks, physical/mobile
 and noncoherent-device verification retain their separate unfinished states.
 No human-facing PASS label may silently promote those original plan gates.
+
+<a id="delivery19-resource-suite"></a>
+## Delivery19 四族资源验收入口
+
+配对 tests 的 `checks19/run_resource_suite.py` 是地址链、ray query、robustness2、headless WSI 四个既有案例的固定串行入口，适合一次重建可交付的限定证据集。它不替代前面的五链 diagnostic bundle，也不把四个独立实例的资源、run ID 或时间线拼成同一场景。完整原计划阶段门槛、外部工程和盲测另行验收。
+
+输入为明确 Skill/tests 完整 commit、Skill checkout、受信工具配置及全新输出目录；只接受固定四条 case runner，不接受用户提供的 shell 命令或旧报告作为成功替代。配置提供编译器工具目录、Vulkan headers、loader、ICD/layer及固定 validusage 路径，不自动下载、安装、变更驱动或切换计算环境。固定 source/规则/规范身份须在导入 helper 和执行前核验，结束再次核对，防止运行期间 source/tool/pair 漂移。
+
+读取结果时同时检查：四项都实际执行、各子 run ID 和 source/tool/raw log/report 绑定、独立结果 oracle 与预期负控、进程组退役以及 suite 状态。只看到 summary 的 PASS 字符串或哈希自洽不足以验收。受信的固定源及独立 raw 检查是有界证据链，不是对恶意宿主/驱动的密码学认证。
+
+- BDA：物理指针表、64项输出、源与guard/table、启用/分配/地址范围与依赖；缺usage查询安全中止，错误oracle确实失败。
+- Ray query：真实 BLAS/TLAS→compute query；独立 hit/miss参考、scratch/range/feature、布局与同步；不扩展到RT pipeline/SBT。
+- Robustness2：实际开启buffer/null保护、精确零值和未被破坏的source；不继承到物理地址、cooperative或images。
+- Headless WSI：两代extent、图像字节、渲染及present fence退役；不等于物理显示、并行帧节奏或延迟实测。
+
+预算、取消、子进程失败、证据不匹配或任一必需案例缺失必须使整组非成功，并保留已收集的partial evidence。重试新目录，不复用失败产物。进程取消只承诺本入口拥有的进程组回收，不承诺GPU故障复位或逃逸进程管理。不可用的Video/专用计算族仍按独立能力清单保持未运行；本资源suite通过不解除release BLOCKED。
