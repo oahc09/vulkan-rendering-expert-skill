@@ -288,6 +288,7 @@ Android `AHardwareBuffer` 先用 `vkGetAndroidHardwareBufferPropertiesANDROID` �
 
 [描述符写入约束](https://docs.vulkan.org/refpages/latest/refpages/source/vkUpdateDescriptorSets.html) · [采样图像 layout 约束](https://docs.vulkan.org/refpages/latest/refpages/source/VkWriteDescriptorSet.html)。
 
+<a id="delivery19-texture-sampling"></a>
 ## delivery19-texture-sampling
 
 ### 可执行的限定采样合同（v1.0.19 候选）
