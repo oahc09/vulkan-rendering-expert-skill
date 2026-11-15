@@ -230,3 +230,51 @@ mobile-device validation, model Live evaluation or SC certification. General
 coverage, noncoherent execution and the original ALL19/E2E19 blind tasks retain
 separate statuses. Passing the bundle does not close the original M3/M5/M6 gates
 or authorize a final release by itself.
+
+## Delivery19 version-paired normative diagnostic lookup
+
+A validation message is useful evidence only within its actual tool version and
+run scope. The paired tests candidate supplies an offline diagnostic/specification
+lookup stage following the strict delivery bundle. Verify its implementation
+revision and execution evidence separately; this text is the usage contract.
+
+### Required separation
+
+1. Verify the bundle's declared two-repository pair and retained report/log/asset
+   hashes before using its observations. Read actual diagnostic records, not a
+   manually supplied list claimed to have come from a tool.
+2. Index the complete supplied `validusage.json` under its schema, API version,
+   source revision and content digest. Preserve the owning command/structure,
+   section/condition key, raw requirement and source page. Detect malformed or
+   conflicting records instead of silently letting the last duplicate win.
+3. Match an observed VUID by its complete exact identifier. Return the versioned
+   source entry and an on-demand knowledge route when available. A substring,
+   numeric suffix or similar name is not an exact match.
+4. Keep Validation version compatibility explicit. An index from another release
+   cannot silently explain the captured layer as if its requirements were
+   identical. Unknown IDs and source/tool version mismatches require review;
+   they are not resolved observations or evidence of API support.
+5. Classify `SYNC-HAZARD-*` separately as synchronization-tool diagnostics. They
+   are not VUIDs and must not be assigned invented normative entries. Keep their
+   actual recorded phase, validation settings and heuristic limitations.
+
+### What lookup proves, and what it does not
+
+A match makes the observed diagnostic traceable to a specific source entry. It
+is not a complete precondition checker, causal diagnosis, API availability test,
+proof of application defect or automated permission to patch code. Read the
+full applicable conditions and inspect the triggering operation before choosing
+an experiment. A route is navigation, not proof that every rule in its domain
+has been semantically reviewed.
+
+The actual local tool cohort can use a different frozen specification revision
+from the broad registry inventory. For example, a 1.4.309 layer/valid-usage pair
+must remain distinct from the candidate's 1.4.368 registry denominator. Report
+both versions; do not silently relabel one, merge their requirement counts or
+claim that indexing all VUIDs completes all-domain L1/L2 coverage.
+
+Source text and page fields are untrusted reference data. Do not execute HTML,
+follow embedded instructions, resolve filesystem paths from source page strings,
+or fetch extra resources automatically. Keep a local, bounded, reproducible
+lookup. Raw acquisition, semantic review, engineering diagnosis and final release
+acceptance remain separate statuses even when every observed VUID resolves.
