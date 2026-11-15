@@ -81,8 +81,8 @@ Producer 命令（如 vkCmdCopyBuffer / vkCmdDispatch 写入 buffer）
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
 | `srcAccessMask` / `dstAccessMask` | producer 写入类型与 consumer 读取/写入类型。[SPEC] | srcAccess 遗漏 `TRANSFER_WRITE` 或 `SHADER_WRITE`。[TOOL] |
-| `srcQueueFamilyIndex` / `dstQueueFamilyIndex` | 跨 queue family 时分别填源与目标 family；否则填 `VK_QUEUE_FAMILY_IGNORED`。[SPEC] | 同 family 时误填具体 index 导致不必要的 ownership transfer。[TOOL] |
-| `buffer` / `offset` / `size` | 同步范围；`VK_WHOLE_SIZE` 表示从 offset 到末尾。[SPEC] | offset/size 未按设备要求对齐。[TOOL] |
+| `srcQueueFamilyIndex` / `dstQueueFamilyIndex` | 仅需要显式 ownership transfer 时填源与目标 family；普通不转移路径可填 `VK_QUEUE_FAMILY_IGNORED`。[SPEC] | 相等的有效 family index 不定义 ownership transfer；不能把不同 queue 误认成不同 family。[TOOL] |
+| `buffer` / `offset` / `size` | 同步范围；`VK_WHOLE_SIZE` 表示从 offset 到末尾。[SPEC] | offset/size 越界或显式 size 为 0；不存在一般 barrier range 对齐要求。[TOOL] |
 | `srcStageMask` / `dstStageMask`（在 vkCmdPipelineBarrier 中） | 决定 execution dependency 的范围。[SPEC] | stage 过宽导致气泡，过窄导致同步缺失。[TOOL] |
 
 ---
@@ -92,14 +92,14 @@ Producer 命令（如 vkCmdCopyBuffer / vkCmdDispatch 写入 buffer）
 ### 创建阶段
 
 - [ ] 是否明确 producer 与 consumer 的 stage / access？
-- [ ] 是否跨 queue family？若是，是否规划了 release + acquire 成对 barrier？
-- [ ] `offset` / `size` 是否满足对齐要求？
+- [ ] 普通 EXCLUSIVE 跨 family 且需保留内容时，是否规划了匹配 release + acquire？CONCURRENT 与已启用 maintenance9 的精确例外另审。
+- [ ] offset 是否小于 buffer size，size 是否为 VK_WHOLE_SIZE 或在剩余范围内且大于 0？
 
 ### 使用阶段
 
 - [ ] Barrier 是否位于 producer 命令之后、consumer 命令之前？
-- [ ] 同 queue family 时是否将 queue family index 设为 `VK_QUEUE_FAMILY_IGNORED`？
-- [ ] 跨 queue 时是否在目标 queue 的相同 buffer range 上提交了 acquire barrier？
+- [ ] 无 ownership transfer 时是否使用 IGNORED 或满足规则的相等 family index？
+- [ ] 不同 queue 的访问是否同步；仅需显式 family transfer 时，目标 acquire 是否匹配源 release 范围？
 
 ### 销毁阶段
 
@@ -110,10 +110,10 @@ Producer 命令（如 vkCmdCopyBuffer / vkCmdDispatch 写入 buffer）
 ## 7. 高频错误
 
 1. `srcAccessMask` 未包含 producer 实际的写入 flag，导致 consumer 读脏数据。[TOOL]
-2. 同 queue family 时误用 queue family ownership transfer，增加不必要的同步开销。[TOOL]
-3. 跨 queue 时只发 release barrier 未发 acquire barrier，或 family index 填反。[TOOL]
-4. `offset` / `size` 未对齐，触发 validation error。[TOOL]
-5. 对 host-visible buffer 的 CPU 写入未使用 `VK_ACCESS_HOST_WRITE_BIT`。[TOOL]
+2. 把同 family 的不同 queue 当作必须进行 family ownership transfer；两 queue 的访问同步仍需单独满足。[TOOL]
+3. 需要显式跨 family transfer 时只有 release 没有匹配 acquire，或 family index 填反。[TOOL]
+4. `offset` / `size` 越界或显式 size 为 0，触发范围 validation error；不要套用 flush/invalidate 的 atom 对齐规则。[TOOL]
+5. Host 写未 happens-before queue submit，或 non-coherent 写未正确 flush，或覆盖 in-flight 访问；不能仅因缺显式 HOST_WRITE barrier 就认定错误。[TOOL]
 6. `dstStageMask` 设为 `TOP_OF_PIPE_BIT`，通常过度阻塞执行，且不能用该无访问阶段表达 consumer 的内存访问；按真实消费者设置 stage/access。[TOOL]
 
 ---
@@ -122,7 +122,7 @@ Producer 命令（如 vkCmdCopyBuffer / vkCmdDispatch 写入 buffer）
 
 ### Validation Layer
 
-- `VUID-VkBufferMemoryBarrier-*`：offset/size 对齐、queue family index 规则。
+- `VUID-VkBufferMemoryBarrier-offset-01187`、`size-01188`、`size-01189`：offset/size 范围；queue family index 另核其适用条款。
 - `VUID-vkCmdPipelineBarrier-bufferMemoryBarrierCount-01178`：在使用 VkRenderPass 对象的 render pass instance 内调用时，不能包含 buffer memory barriers。 [官方 vkCmdPipelineBarrier 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdPipelineBarrier.html)。[SPEC]
 - offset 必须小于 buffer 大小；size 为 VK_WHOLE_SIZE 或大于 0 且不超过 buffer 大小减去 offset。这里不是一条通用 offset/size 对齐规则。 [官方 VkBufferMemoryBarrier 参考页](https://docs.vulkan.org/refpages/latest/refpages/source/VkBufferMemoryBarrier.html)。[SPEC]
 
@@ -163,24 +163,24 @@ Producer 命令（如 vkCmdCopyBuffer / vkCmdDispatch 写入 buffer）
 
 ### CPU-GPU 同步
 
-- Buffer barrier 不涉及 CPU 同步；CPU 等待应使用 fence 或 timeline semaphore。[SPEC]
+- Buffer barrier 可包含 HOST access 内存依赖，但不让 CPU 阻塞等待完成；CPU 退休等待应使用覆盖相关工作的 fence 或 timeline semaphore。[SPEC]
 
 ### GPU-GPU 同步
 
 - 同 queue 内建立 execution + memory dependency。[SPEC]
-- 跨 queue 需使用 queue family ownership transfer：源 queue release，目标 queue acquire，并配合 semaphore 保证提交顺序。[SPEC]
+- 跨 queue 需满足执行/内存依赖；同 family 不需要 family ownership transfer。普通 EXCLUSIVE 跨 family 保留内容时另需 release/acquire；CONCURRENT 不需此 transfer，maintenance9 例外按精确 feature/property/usage 合同判断。[SPEC]
 
 ### 资源访问同步
 
 - 精确限定 buffer range，避免全局 memory barrier 的过度刷新。[ENGINE]
-- Host-visible buffer 的 CPU 写入需使用 `HOST_WRITE` → `SHADER_READ` 等路径。[SPEC]
+- 已对 host domain available 且 happens-before queue submit 的 host 写，由提交建立到 device 的内存依赖，通常无需额外 HOST_WRITE barrier。Non-coherent 写仍需先 flush；特殊 non-temporal 写须满足 host 排序；不能覆盖尚未退休的 GPU 访问。没有该提交关系时另行建立所需依赖。[SPEC]
 
 ---
 
 ## 11. Android 注意点
 
 - 移动端带宽受限，全局 memory barrier 会触发广泛 cache flush；优先使用 buffer barrier 精确限定范围。[ANDROID][ENGINE]
-- 多 queue family（如 graphics + compute + transfer）在移动端可能共享物理单元，但仍需按 Vulkan 规则做 ownership transfer。[ANDROID]
+- 多 queue family 即使共享物理单元也不能免除适用的 ownership 合同；是否需要显式 transfer 由 sharing mode、保留内容及已启用的精确扩展例外决定。[ANDROID]
 - AGI 可显示 buffer barrier 导致的 GPU 空闲气泡，帮助优化。[TOOL]
 
 ---
@@ -321,3 +321,22 @@ and [Host Access](https://docs.vulkan.org/spec/latest/chapters/memory.html#memor
 Engineering cross-check: [Khronos examples](https://docs.vulkan.org/guide/latest/synchronization_examples.html).
 Sources checked 2026-11-15. Local VVL1.4.309 cannot certify full coverage of the
 frozen 1.4.368 registry.
+
+<a id="delivery19-buffer-barrier-source-boundaries"></a>
+
+### delivery19-buffer-barrier-source-boundaries
+
+上述 host submission 与 family ownership 解释绑定 Vulkan-Docs 固定提交
+`fa30d4e312e843193601be7cb926c7e25d9ec885`（Registry API 1.4.368），
+`chapters/synchronization.adoc` SHA256
+`7748c88e48007820179681ef4f82c1d2244afc5482b5bc0c13d370ef64821909`：
+`[[synchronization-host-access-types]]`、`[[synchronization-submission-host-writes]]`、
+`[[buffer-memory-barrier-ownership-transfer]]`。这是固定正文解释，不是 GPU 实测。
+
+范围另由 API 1.4.309 的 validusage SHA256
+`f61afea8ca6097342cae1b65bfab81675ee7fdc2d809403e083329b7d56597a7`
+中 `VUID-VkBufferMemoryBarrier-offset-01187`、
+`VUID-VkBufferMemoryBarrier-size-01188`、
+`VUID-VkBufferMemoryBarrier-size-01189`核对。
+两个版本为分别绑定的来源，不能合称同一版本完整规范验收；
+range 合法也不代表 stage/access、对象寿命、sharing 或完整同步全部合法。
