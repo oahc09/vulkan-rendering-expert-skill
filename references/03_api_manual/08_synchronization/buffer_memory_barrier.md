@@ -253,3 +253,71 @@ CPU-GPU 同步（用 fence）；跨 queue 全局顺序（用 semaphore）；只�
 **验证**：测试非零bindOffset、子buffer范围边界、首次静态上传、同family两queue、跨family功能开关与alias；每种路径分别记录同步和所有权条件。
 
 固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[synchronization#synchronization-buffer-memory-barriers](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-buffer-memory-barriers)；[resources#resources-sharing](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/resources.adoc#resources-sharing)。[SPEC]
+
+## delivery19-transfer-contract: bounded L1/L2 fill/copy/readback
+
+Scope: standard Vulkan, one transfer-capable queue, two non-overlapping bound
+buffers, 256 bytes, coherent host-visible allocations. Companion cases19/transfer
+is original deliberate fault injection, NOT an external production bug.
+
+### Support, enablement, resources and ownership
+Legacy vkCmdPipelineBarrier/fill/copy/fences need no synchronization2 feature.
+A device API version alone does not enable synchronization2; its separate path
+must query/enable the feature and resolve matching entry points. Command pool
+and queue family must match and support transfers. Buffer usage, complete memory
+binding, memoryTypeBits, alignment and fill four-byte restrictions still apply.
+
+Command recording order alone does not establish transfer RAW visibility.
+The fill writes source memory; copy reads it. Scope TRANSFER WRITE to TRANSFER
+READ over the full source range, with TRANSFER stages for both operations.
+A stage-only barrier is not a RAW memory dependency. An omitted access mask or
+wrong range can leave a hazard despite the presence of a barrier.
+Both family indices are IGNORED in this same-family path. This is NOT an
+ownership release/acquire recipe: other families/queues require separately
+scoped semaphore dependencies and ownership operations when applicable.
+
+After copying, destination TRANSFER WRITE must be visible to HOST READ and the
+submission fence must complete successfully before CPU access or destruction.
+HOST_COHERENT removes explicit invalidate/flush needs, not execution/lifetime
+dependencies. A noncoherent variant needs mapped-range invalidation after
+completion, atom-size/allocation-boundary handling, and corresponding flush
+rules for CPU writes. Do not merely relax the coherent allocation predicate.
+The sample is single-threaded. Production host ownership must serialize
+externally synchronized command pools, queue access and memory operations.
+Fence completion here says nothing about presentation retirement or other queues.
+
+### Implement, repair, reject and verify
+1. Record real device/layer identity; enable SyncVal. Missing tools are BLOCKED.
+2. Freeze baseline and run. Expect SYNC-HAZARD-READ-AFTER-WRITE. The callback
+   returns VK_TRUE to abort the invalid copy. Zero output is therefore NOT
+   evidence of actual undefined driver execution or a measured timing race.
+3. Apply fix.patch, enabling the already-written precise source barrier. On the
+   same runtime require no error callbacks and 64/64 words equal 0x12345678 after
+   actual submission/fence completion.
+4. Retain the barrier but erase its destination access mask: the independent
+   mutant must restore the RAW hazard and fail the patched output gate.
+5. Preserve source/patch/binary hashes and runtime identity. Compile, initialize,
+   allocate, submit or wait failure stops acceptance. Never inherit old PASS.
+6. Prefer the explicit dependency over global device-idle insertion. No speedup
+   was measured. Broader barriers are diagnostic options, not proven production
+   optimizations. Keep the known single-queue fallback when other scopes are
+   unsupported or not established.
+
+Timeout is not completion; device loss is not a successful wait. Do not recycle
+resources or blindly retry stale work. This small repro exits on API failure;
+production bounded cleanup/recovery and fault reporting remain unimplemented.
+SyncVal does not prove all shader/host races or driver correctness, and the
+software ICD does not certify physical GPUs. No timing/performance acceptance.
+
+### Vulkan SC boundary
+Shared synchronization concepts do not authorize copying this dynamic allocation,
+creation and validation startup into SC. Resource reservation, offline pipelines,
+allowed call phases and safety process require a separate scoped design. SC is
+UNVERIFIED here, not supported or certified. The overall synchronization domain
+also remains partially reviewed, despite this bounded L1/L2 contract.
+
+Normative: [Execution and Memory Dependencies](https://docs.vulkan.org/spec/latest/chapters/synchronization.html#synchronization-dependencies)
+and [Host Access](https://docs.vulkan.org/spec/latest/chapters/memory.html#memory-device-hostaccess).
+Engineering cross-check: [Khronos examples](https://docs.vulkan.org/guide/latest/synchronization_examples.html).
+Sources checked 2026-11-15. Local VVL1.4.309 cannot certify full coverage of the
+frozen 1.4.368 registry.
