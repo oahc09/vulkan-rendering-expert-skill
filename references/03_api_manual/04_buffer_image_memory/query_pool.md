@@ -167,11 +167,11 @@ VkDevice
 - [ ] `vkCmdBeginQuery` 与 `vkCmdEndQuery` 是否成对？index 是否一致？[SPEC]
 - [ ] `vkCmdWriteTimestamp` 是否在合法 stage 上调用？[SPEC]
 - [ ] 是否避免在 render pass 内 reset query pool？[SPEC]
-- [ ] 是否避免在 `VkCommandBufferInheritanceInfo` 之外对 secondary command buffer 录制 query？[SPEC]
+- [ ] secondary command buffer 的自身 query 与继承中的 active query 是否分别满足继承 feature、类型和冲突规则？[SPEC]
 
 ### 读取阶段
 
-- [ ] host 读取前是否通过 fence / semaphore 或 `WAIT_BIT` 同步？
+- [ ] host 是否确认本轮 reset 已执行，并选择完成等待或正确处理 `VK_NOT_READY` / availability 的非阻塞轮询？
 - [ ] stride 是否与 flags 匹配（64-bit / availability 会改变 stride）？[SPEC]
 - [ ] 是否处理 `VK_NOT_READY` / `VK_ERROR_DEVICE_LOST` 返回值？[SPEC]
 
@@ -182,7 +182,7 @@ VkDevice
 1. 未在每次使用前 reset query，导致结果累加或 `VK_NOT_READY`。[SPEC]
 2. timestamp 未使用 `VK_QUERY_RESULT_64_BIT`，32 位结果可能截断 / wrap / saturate，影响测量精度（规范允许 32 位，但工程上不推荐）。[SPEC]
 3. 对 timestamp 使用 `PARTIAL_BIT` 触发 VUID。[SPEC]
-4. 在 host 读取 query 结果前未同步（fence / wait），导致读到未完成的数据。[SPEC]
+4. 非阻塞读取时未检查 `VK_NOT_READY` / availability，或把上一轮 availability 当成本轮结果。[SPEC]
 5. pipeline statistics query 未启用 feature。[SPEC]
 6. occlusion query 在 render pass 外调用 begin / end（部分场景合法但需注意 layout）。[ENGINE]
 7. 同一 query index 被 in-flight 多帧并发使用，结果错乱。[ENGINE]
@@ -237,7 +237,7 @@ VkDevice
 
 ### in-flight 风险
 
-- Query pool 不存在 per-frame 引用问题，但 query index 必须按 frame-in-flight 分槽，否则上一帧未完成时下一帧 reset 会污染结果。[ENGINE]
+- Query pool 本身也受已提交引用的生命周期约束；query index 必须按 frame-in-flight 分槽，否则上一帧未完成时下一帧 reset 会污染结果。[ENGINE]
 
 ---
 
@@ -245,14 +245,14 @@ VkDevice
 
 ### CPU-GPU 同步
 
-- `vkGetQueryPoolResults` 不带 `WAIT_BIT` 时，结果可能 `VK_NOT_READY`；需通过 fence 等待 command buffer 完成后再读取。[SPEC]
+- `vkGetQueryPoolResults` 不带 `WAIT_BIT` 可合法轮询，结果可能 `VK_NOT_READY`；不要求每次先等 fence，但必须确认本轮 reset 并检查结果可用性。[SPEC]
 - 带 `WAIT_BIT` 时阻塞 CPU 直到结果可用；适合调试，生产环境慎用。[ENGINE]
 - `WITH_AVAILABILITY_BIT` + 轮询：避免阻塞，适合 per-frame 异步采集。[ENGINE]
 
 ### GPU-GPU 同步
 
 - `vkCmdCopyQueryPoolResults` 把结果写入 buffer，下游读取该 buffer 必须通过 `vkCmdPipelineBarrier`（`srcStage = TRANSFER`，`srcAccess = TRANSFER_WRITE`）。[SPEC]
-- 同一 command buffer 内 query 之间无需额外 barrier；跨 command buffer / 跨 submit 需 fence / semaphore 同步。[SPEC]
+- Query reset、产生结果、复制及槽复用必须满足各自顺序规则，不能仅凭位于同一 command buffer 就推断全部同步；跨 queue 使用相应 semaphore，host 回收使用完成点。[SPEC]
 
 ### Stage 选择
 
@@ -268,7 +268,7 @@ VkDevice
 
 - Android 移动端 timestamp query 受 `timestampValidBits` 限制（部分设备为 32 / 36 / 64 位）。[ANDROID]
 - `timestampPeriod` 在移动端可能为非整数 ns/周期，需用 double 累积。[ENGINE]
-- occlusion query 在 tile-based renderer（TBDR）上可能不直观：硬件可能合并 / 丢弃 query，建议结合厂商文档。[TOOL]
+- occlusion query 在 TBDR 上仍须遵守 query 规范；PRECISE 与非精确计数保证不同，开销和实现方式需结合厂商工具验证。[TOOL]
 - `pipelineStatisticsQuery` 在部分移动 GPU 不被 feature 支持，需查询 `VkPhysicalDeviceFeatures`。[ANDROID]
 - `vkResetQueryPool`（1.2+）在主流 Android Vulkan 1.2+ 设备可用；旧设备需 `VK_EXT_host_query_reset` 或回退到 `vkCmdResetQueryPool`。[ANDROID]
 
@@ -304,7 +304,7 @@ Query pool 是 Vulkan 中少有的“GPU 写、host 读”对象，最容易出�
 - in-flight 多帧时，必须按 frame index 分配 query 槽，否则下一帧 reset 会污染上一帧尚未读取的结果。
 - timestamp query 工程上推荐用 64 位结果（规范允许 32 位但可能截断 / wrap / saturate）；`timestampPeriod` 是 ns-per-tick，需用浮点 / double 换算。[SPEC]
 - `vkResetQueryPool`（1.2+）相比 `vkCmdResetQueryPool` 的优势在于不占用 command buffer，可在 host 完成批量重置，简化录制路径。
-- occlusion query 在 TBDR 移动 GPU 上的语义可能与桌面 IMR 不同：某些驱动会在 resolve 时合并，需结合 AGI / 厂商文档验证。
+- occlusion query 的 Vulkan 保证不会因 TBDR/IMR 而失效；按是否启用 occlusionQueryPrecise 和 PRECISE flag 区分精确计数要求与保守结果。
 - 与 AGI / Profiler 集成时，应用层 query 与 profiler timeline 应对齐，便于交叉验证 GPU 段耗时。
 
 **适用条件**：
@@ -337,5 +337,24 @@ Query pool 是 Vulkan 中少有的“GPU 写、host 读”对象，最容易出�
 4. `VK_QUERY_RESULT_PARTIAL_BIT` 在 occlusion / pipeline stats 上的具体返回语义。
 5. `vkResetQueryPool` 与 `vkCmdResetQueryPool` 在 command buffer 录制顺序上的约束。
 6. Pipeline statistics query 各统计项的具体含义与计数单位。
-7. occlusion query 在 render pass 内 / 外的合法路径，以及 `PRECISE_BIT`（`VK_EXT_conservative_rasterization`）的支持情况。
+7. occlusion query 在 render pass 内 / 外的合法路径，以及 `VK_QUERY_CONTROL_PRECISE_BIT`（`occlusionQueryPrecise` feature）的支持情况。
 8. `vkCmdCopyQueryPoolResults` 与 `vkCmdCopyBuffer` 的同步 stage 差异。
+
+
+<a id="query-generation-contract"></a>
+
+## 16. Query generation、完成与测量合同
+
+**条件**：timestampValidBits 必须非零，按 queue family 判定；pipelineStatisticsQuery、occlusionQueryPrecise、hostQueryReset 是不同 feature。timestamp 不用 begin/end，也不允许 PARTIAL_BIT。普通 query pool 初建需 reset；仅满足专门扩展条件的 QUERY_POOL_CREATE_RESET_BIT_KHR 路径例外，不能套到普通创建。[SPEC]
+
+**正常路径**：每槽记录 generation 和覆盖所有引用的完成点：reset → begin/end 或 timestamp write → available → 获取/复制结果 → 消费结束 → 再 reset。vkResetQueryPool 要启用 hostQueryReset，所有引用该范围的已提交命令已完成，且不与其他线程 get/reset 同一范围重叠。vkCmdResetQueryPool 需正确设备顺序并在 render pass 外。池销毁等待所有已提交引用，而不是仅等待一个 query available。[SPEC]
+
+**失败**：新一轮 GPU reset 尚未执行时，host 读到的 availability 可能来自上一轮；WAIT_BIT 也不能区分 generation。先证明 reset 已执行，再轮询本轮结果。VK_NOT_READY 是未就绪，不复用槽、不当作零时长；等待不可达结果可能永久阻塞。槽耗尽时延后采样/扩大合法容量，不覆盖 in-flight query。[SPEC][ENGINE]
+
+**结果与单位**：按类型、统计项数量、64_BIT 和 WITH_AVAILABILITY_BIT 计算 dataSize/stride；availability 字段与所选结果位宽一致。普通 timestamp 差值按 timestampValidBits 做模差并乘 timestampPeriod（ns/tick），64-bit 结果不增加硬件 validBits；必须确保测量间隔短于可消歧回绕周期，不跨无校准时钟域直接相减。[SPEC]
+
+**专项路径**：校准时间先枚举可用 time domains，调用 vkGetCalibratedTimestampsKHR/EXT 并记录 maxDeviation，CPU/GPU 对齐需包含不确定度。performance query 另枚举 counters、counter scope 与 pass count，获取 profiling lock 后才 begin command buffer；lock 在相关 CB 的 recording/executable/pending 状态都须持有，完成所有要求的 passes 后才解读结果。[SPEC]
+
+**回退与验证**：不支持 timestamp/counter 时禁用该项或标记 CPU wall-time 为 CPU 测量，不伪称 GPU 时间。测试 reset 前旧 availability、延迟写入、两帧竞争、validBits 回绕、缺少 feature 和 profiling-lock timeout；对照有/无测量开销，工具捕获本身可能扰动结果。
+
+固定依据：Vulkan 1.4.368，commit `fa30d4e312e843193601be7cb926c7e25d9ec885`；[queries#queries-operation](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/queries.adoc#queries-operation)；[queries#queries-timestamps](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/queries.adoc#queries-timestamps)；[queries#profiling-lock](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/queries.adoc#profiling-lock)；[synchronization#calibrated-timestamps](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#calibrated-timestamps)。[SPEC]

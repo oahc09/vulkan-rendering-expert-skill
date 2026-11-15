@@ -140,31 +140,33 @@ Compute 写 storage buffer
 
 1. 等待 device idle，简单但粗暴。
 2. 等待相关 frame fence，适合 frames-in-flight。
-3. 延迟销毁队列，等 N 帧后销毁。
+3. 延迟销毁队列按全部实际使用的completion tokens退役；固定N帧只是调度策略，不是完成证明。
 4. Render Graph 中记录资源最后使用点。
 
 ## 幂等销毁
 
-Vulkan spec 允许 `vkDestroy*` / `vkFree*` 在 handle 为 `VK_NULL_HANDLE` 时执行 no-op，这是设计幂等 shutdown 的基础 [SPEC]。
+幂等shutdown由wrapper状态、有效父对象和逐命令的可空参数规则保证。不能泛称所有destroy/free API都容忍NULL；数组、pool、Device与外部同步要求仍须满足。[SPEC][ENGINE]
 
 ```text
 VulkanApp::shutdown():
     if isShutdown: return              // 幂等入口
     isShutdown = true
-    vkDeviceWaitIdle(device)           // 幂等 [SPEC]
+    if device != VK_NULL_HANDLE and device仍有效:
+        result = vkDeviceWaitIdle(device) // 检查device-lost等结果；遵守host同步
+    未创建的对象由wrapper跳过，不对无效Device调用API
     按依赖顺序销毁：下游 → 上游
     每个 handle destroy 后立即置 VK_NULL_HANDLE
 ```
 
 关键规则：
 
-1. `vkDeviceWaitIdle` 是幂等的，shutdown 入口可无条件调用 [SPEC]。
+1. 只对有效Device调用vkDeviceWaitIdle；同一有效Device上可重复等待，不等于NULL、已销毁Device或并发shutdown合法。[SPEC]
 2. 每个 `vkDestroy*` 后立即把 handle 置 `VK_NULL_HANDLE`，防止 destructor 与显式 shutdown 双重销毁同一 handle [ENGINE]。
-3. AllocationCallbacks 必须与创建时一致，destroy 时传不同 pAllocator 是 undefined behavior [SPEC]。
+3. 创建时提供allocator则销毁时必须提供compatible allocator，不要求结构体地址相同；双方分配的内存须能由另一方相应free/reallocation释放。创建时NULL则对应销毁也不能提供allocator，callbacks及其依赖状态须保持有效。[SPEC]
 4. swapchain recreate 与 shutdown 共用清理函数时，必须通过 flag 区分"仅 swapchain-dependent 资源"与"全部资源" [ENGINE]。
 5. destructor 必须调用 shutdown 并能容忍"对象从未成功创建"场景：所有 handle 为 NULL，wrapper 走 no-op 路径 [ENGINE]。
-6. device lost 后不能依赖 fence signal；应跳过 fence 等待直接销毁对象 [TOOL]。
-7. `vkDestroyDescriptorSet` 不存在；descriptor set 由 `vkResetDescriptorPool` / `vkDestroyDescriptorPool` 统一回收，幂等设计需作用在 pool 层 [SPEC]。
+6. device lost不会自动销毁子对象，handle仍有效；停止正常工作、协调host线程，按lost-device规则与有效使用要求清理。不能把检测到device lost泛化为允许任意并发销毁；等待可能返回SUCCESS或DEVICE_LOST，内容不再保证有效。[SPEC]
+7. `vkDestroyDescriptorSet` 不存在；descriptor set可由vkResetDescriptorPool/vkDestroyDescriptorPool整体回收；pool含VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT时也可vkFreeDescriptorSets逐个释放。两条路径都须满足相关已提交使用完成与host同步；wrapper跟踪有效set/pool状态 [SPEC]。
 8. swapchain image / implicit dispatchable handle 由父对象拥有，应用不能直接 destroy，幂等设计需跳过 [SPEC]。
 
 ## 专家规则
@@ -175,3 +177,6 @@ Buffer 上传成功不代表 shader 能读到。
 Descriptor 更新成功不代表资源生命周期正确。
 销毁对象时不能只看 CPU 引用，还要看 GPU 是否仍在使用。
 ```
+
+
+v1.0.17定向事实复核依据（不代表全文全域认证）：[memory#memory-allocation](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/memory.adoc#memory-allocation)；[descriptorsets#descriptors-allocation](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/descriptorsets.adoc#descriptors-allocation)；[devsandqueues#devsandqueues-lost-device](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/devsandqueues.adoc#devsandqueues-lost-device)；[synchronization#synchronization-wait-idle](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-wait-idle)。[SPEC]

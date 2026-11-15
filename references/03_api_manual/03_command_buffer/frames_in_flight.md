@@ -402,3 +402,18 @@ Frames in Flight 模型的本质是"用空间换时间"：把 GPU 仍可能正�
 7. Per-frame descriptor pool 与 descriptor set 更新在 frame-in-flight 下的合法时序。
 
 依据：[vkAcquireNextImageKHR](https://docs.vulkan.org/refpages/latest/refpages/source/vkAcquireNextImageKHR.html)、[Swapchain Recreation](https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/04_Swap_chain_recreation.html)、[present 资源退役样例](https://docs.vulkan.org/samples/latest/samples/api/swapchain_recreation/README.html)。
+
+
+<a id="frame-retirement-contract"></a>
+
+## 18. Frame slot 的全部消费者完成合同
+
+**条件/正常路径**：frameIndex 选择CPU帧槽，imageIndex选择取得的swapchain图像，两者不可互换。每个slot资源记录所有使用者；graphics完成而async compute/transfer仍使用时，不能reset pool或覆写共享buffer。可让最终提交等待各producer后signal一个覆盖全部工作的完成点，或在CPU分别等待全部相关token。[SPEC][ENGINE]
+
+**失败**：wait-any成功只释放确知完成的slot；acquire或录制失败不提前reset fence；submit失败不继续普通present或等待无signal的fence。CPU写入仍需host happens-before与non-coherent flush，不因slot fence存在自动获得cache可见性。
+
+**回退**：复杂多queue图先回退单queue和保守完成作用域，再按性能证据拆分。presentation资源退役沿用本卡既有独立规则，不能用扩大submit fence作用域替代present完成证明。
+
+**验证**：延迟一条compute支线、改变swapchain图像数、跳帧、timeout和pause/resume，逐项检查slot/present索引与generation；host状态机通过不等于Android/桌面设备通过。
+
+固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[cmdbuffers#commandbuffers-lifecycle](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/cmdbuffers.adoc#commandbuffers-lifecycle)；[synchronization#synchronization-fences-waiting](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-fences-waiting)。[SPEC]

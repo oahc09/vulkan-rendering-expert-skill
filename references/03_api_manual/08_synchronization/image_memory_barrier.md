@@ -165,7 +165,7 @@ Image 生产阶段（如 COLOR_ATTACHMENT_OUTPUT + COLOR_ATTACHMENT_WRITE）
 
 ### in-flight 风险
 
-- Barrier 只保证同 queue 内录制顺序；image 本身被跨 queue 使用时需 ownership transfer 或 semaphore。[SPEC]
+- Barrier 只保证同 queue 内录制顺序；image 被跨 queue 使用时需要访问同步；必要的ownership transfer不能与semaphore二选一。[SPEC]
 - Swapchain image 在 acquire semaphore signal 前不应被写入。[SPEC]
 
 ---
@@ -191,7 +191,7 @@ Image 生产阶段（如 COLOR_ATTACHMENT_OUTPUT + COLOR_ATTACHMENT_WRITE）
 
 ## 11. Android 注意点
 
-- Android 上 swapchain image 的 `PRESENT_SRC_KHR` layout transition 必须在 submit 前完成，并与 acquire semaphore 配对。[ANDROID]
+- Android 上 swapchain image 的 `PRESENT_SRC_KHR` layout transition 应预先正确录制，并在GPU执行中于present使用之前完成，并与 acquire semaphore 配对。[ANDROID]
 - Tile-based GPU 对 render pass 外 layout transition 敏感；尽量把 attachment 的 transition 放在 subpass dependency 中，避免额外的 store/resolve。[ENGINE][ANDROID]
 - 横竖屏切换后 swapchain image 已变化，旧 image 的 layout 状态不再相关，应按新 swapchain 重新处理。[ANDROID]
 
@@ -255,7 +255,7 @@ Vulkan 1.4 对 Image Memory Barrier 的主要变更：
 
 1.4 将 local read promote 为 mandatory feature（保证被支持，仍需启用 `VkPhysicalDeviceVulkan14Features.dynamicRenderingLocalRead`）。input attachment 的 layout transition **不会自动处理**，应用必须显式录制 image memory barrier：[SPEC]
 
-- attachment image 必须通过 `VkImageMemoryBarrier2` 转入 `VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR`；
+- attachment image使用合法的VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR或VK_IMAGE_LAYOUT_GENERAL；需要改变layout时显式transition，并单独满足访问同步；
 - 在 input-reading draw 与 attachment-writing draw 之间通过 by-region pipeline barrier 建立可见性（`vkCmdPipelineBarrier2` + `VkDependencyInfo`，`dependencyFlags` 含 `VK_DEPENDENCY_BY_REGION_BIT`）；
 - depth/stencil aspect 与 MSAA attachment 的 local read 受 `VkPhysicalDeviceVulkan14Properties.dynamicRenderingLocalReadDepthStencilAttachments` / `dynamicRenderingLocalReadMultisampledAttachments` 两个独立字段限制，需运行时查询（不存在独立的 `VkPhysicalDeviceDynamicRenderingLocalReadPropertiesKHR` 结构）。
 
@@ -273,3 +273,18 @@ Vulkan 1.4 对 Image Memory Barrier 的主要变更：
 4. Swapchain image 在 `vkAcquireNextImageKHR` 和 `vkQueuePresentKHR` 之间的 layout 要求。
 5. Multi-planar format 的 aspect mask 与 plane 映射关系。
 6. Vulkan 1.3 / synchronization2 中新增 layout（如 `ATTACHMENT_OPTIMAL`、`READ_ONLY_OPTIMAL`）的兼容性。
+
+
+<a id="image-layout-sync-contract"></a>
+
+## 18. Image subresource与layout执行合同
+
+**条件/正常路径**：按aspect/mip/layer跟踪layout和owner，transition是device执行操作，不是录制/submit前host已完成的状态。UNDEFINED作为旧layout丢弃旧内容但不免除与仍在访问该image的执行hazard。color、depth/stencil、multi-plane分别遵守合法aspect与layout/usage要求。[SPEC]
+
+**失败边界**：Sync2的VkImageMemoryBarrier2中srcQueueFamilyIndex==dstQueueFamilyIndex且oldLayout==newLayout时不是layout transition，相关布局值可被忽略但仍保留内存依赖语义；不要把通用“old必须等于当前”错误套到这条特例。跨queue同family仍需semaphore，不需要family ownership；跨family保内容遵循 [maintenance ownership合同](synchronization2.md#maintenance-ownership-contract)。外部API所有权不是此内部例外。[SPEC]
+
+**回退**：无法证明旧内容有效时明确discard后重新初始化，不能伪造旧layout；不支持独立depth/stencil layout或局部slice行为时选受支持的完整subresource路径。仅改变descriptor里声明的layout不会执行transition。
+
+**验证**：检查只改变一个mip/layer、错误aspect、discard但仍有旧writer、equal-layout Sync2、跨queue acquire→transition→consumer及present前执行顺序；保存subresource状态轨迹而非仅一张image一个全局layout。
+
+固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[synchronization#synchronization-image-layout-transitions](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-image-layout-transitions)；[synchronization#synchronization-image-barrier2-ignored-layout](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-image-barrier2-ignored-layout)；[synchronization#synchronization-image-memory-barriers](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-image-memory-barriers)。[SPEC]

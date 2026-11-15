@@ -327,3 +327,33 @@ vkCreateInstance
 能力快照同时记录 OS、GPU/deviceID、driverID/version、headers/SDK/loader、请求和实际 API、supported 与 enabled feature/extension 列表、profile 检查结果。未知项标“未核验”，禁止从设备品牌推断。
 
 官方：[instance version](https://docs.vulkan.org/refpages/latest/refpages/source/vkEnumerateInstanceVersion.html)、[device properties](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceProperties.html)、[device creation](https://docs.vulkan.org/refpages/latest/refpages/source/VkDeviceCreateInfo.html)、[Vulkan Profiles](https://github.com/KhronosGroup/Vulkan-Profiles)。[SPEC][TOOL]
+
+
+<a id="device-group-capability-contract"></a>
+
+## 16. Device group 与独立多设备合同
+
+**条件**：Vulkan 1.1 或对应 KHR device-group creation/device-group 路径，使用 vkEnumeratePhysicalDeviceGroups 查询真实 group；VkDeviceGroupDeviceCreateInfo 的设备必须来自同一枚举 group。两个分别创建的 VkDevice 不会自动共享对象或内存，多窗口/多 surface 也不等于 device group。[SPEC]
+
+**正常路径**：枚举 group → 核验成员能力 → 一个 logical device 的 group create 链 → 按 VkMemoryAllocateFlagsInfo 的 DEVICE_MASK_BIT/deviceMask 分配 → 按 resource bind 的 device indices 映射实例 → command buffer device mask 与提交 deviceMask/deviceIndex 一致。subsetAllocation 为 false 时不能任意仅给部分设备分配实例。跨成员读取前按 heapIndex、localDeviceIndex、remoteDeviceIndex 调用 vkGetDeviceGroupPeerMemoryFeatures。[SPEC]
+
+**访问判定**：COPY_SRC/COPY_DST 是跨成员 copy 访问，GENERIC_SRC/GENERIC_DST 才涵盖相应一般读取/写入；一个方向支持不推出反方向支持，一个 heap 支持不代表全部 heap 支持。远端内存可访问也不意味着同步已完成，仍需正确 device-group semaphore scope 和 barrier。[SPEC]
+
+**失败/回退**：无 group 或所需 peer 位缺失时选择单设备；必要时显式复制/合法外部互操作路径，不能把另一 VkDevice 的句柄直接传入。错误 mask、索引和成员配置在提交前拒绝。
+
+**验证**：记录 group 成员、subsetAllocation、每个访问方向的 peer flags 和有效 masks；分别验证 local-only、peer copy、generic 读取、缺少访问能力回退。未执行硬件测试不能标记跨 GPU PASS。
+
+固定依据：Vulkan 1.4.368，commit `fa30d4e312e843193601be7cb926c7e25d9ec885`；[devsandqueues#devsandqueues-devices](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/devsandqueues.adoc#devsandqueues-devices)；[memory#memory-peer-memory-features](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/memory.adoc#memory-peer-memory-features)；[synchronization#synchronization-device-group](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-device-group)。[SPEC]
+
+
+<a id="shared-memory-spirv-accounting"></a>
+
+## 17. maxComputeSharedMemorySize 与 SPIR-V 版本合同
+
+**条件/正常路径**：记录 shader 模块的实际 SPIR-V 版本、entry point、Workgroup 变量与布局，再对照查询所得 maxComputeSharedMemorySize。SPIR-V 1.4 及以后只计入 OpEntryPoint interface 列出的 Workgroup 变量；SPIR-V 1.4 之前计入模块内全部 Workgroup 变量，不能只统计所选入口可达的变量。[SPEC]
+
+**失败/回退**：不能因为设备支持 Vulkan 1.4 就把旧模块按新 SPIR-V 计量；超限则减小工作组缓存、拆分模块/算法，或在目标环境确实支持时重新编译，不能仅改版本头。non-Block 布局消耗有实现相关性，按规范上界核对；显式 Block 布局按其专门规则。[SPEC]
+
+**验证**：以两个入口分别使用不同 Workgroup 数组的模块，比较 SPIR-V 1.3 与 1.4 interface 计数；保留编译器、目标环境、validator 版本及实际设备 limits。文本审查不代表 shader 编译或设备运行已经通过。
+
+固定依据：[Vulkan 1.4.368 shaders.adoc#workgroup-padding](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/shaders.adoc#workgroup-padding)；[limits.adoc#limits-maxComputeSharedMemorySize](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/limits.adoc#limits-maxComputeSharedMemorySize)。

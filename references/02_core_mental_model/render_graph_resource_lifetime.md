@@ -208,25 +208,28 @@ Execute 阶段：barrier 后实际使用
 若两个 transient 资源 A、B 满足：
 
 ```text
-live_interval[A] 与 live_interval[B] 不相交
-  => A 和 B 可共享同一块 VkDeviceMemory（甚至同一个 VkImage alias）
+GPU实际使用区间不相交（包括多queue与跨帧使用）
+  + memoryTypeBits交集、size/alignment、bufferImageGranularity、dedicated与image alias条件满足
+  + 正确同步和内容/layout策略
+  => 才可选择共享底层VkDeviceMemory范围
 ```
 
 则称为 memory aliasing。实现方式：[SPEC][ENGINE]
 
 ```text
-方案 A（推荐）：VK_MEMORY_ALLOCATE_FLAGS_DEVICE_ADDRESS_BIT + VMA virtual allocator
+方案 A：按requirements组织transient allocation + VMA virtual allocator
+  - 仅当buffer device address路径需要时使用VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT；alias本身不要求该flag
   - 在 compile 阶段为整段 transient heap 申请大块 VkDeviceMemory
   - 用 bump / offset allocator 把每个 transient 资源 sub-allocate 到该 heap 的某段 offset
-  - 不同资源的 live_interval 不重叠时 offset 可重用
+  - 区间不重叠只是候选条件；全部使用完成且绑定/alias约束满足时offset才可重用
 
 方案 B：VkImage / VkBuffer 创建时绑定到同一 VkDeviceMemory 的不同 offset
   - 要求资源支持 bind to memory offset
   - VkBindImageMemoryInfo / vkBindBufferMemory2
   - 必须遵守 alignment 与 memory type 兼容性
 
-方案 C（不推荐）：VK_KHR_device_group + VK_EXT_image_drm_format_modifier 之类的 alias hint
-  - 仅在特定平台有意义
+方案 C：不alias，使用独立或不重叠分配作为正确性基线/回退
+  - device_group与image_drm_format_modifier不是通用alias hint，不授予内存重叠许可
 ```
 
 [SPEC][ENGINE][TOOL]
@@ -235,8 +238,8 @@ live_interval[A] 与 live_interval[B] 不相交
 
 ```text
 1. 同一 VkDeviceMemory offset 在新资源开始使用前，必须保证旧资源的 last_use 已通过 GPU 同步完成
-   - 由 graph 自动插入的 execution dependency 保证
-2. layout / format 切换的 alias 必须满足 VkImageFormatProperties 的 compatible usage
+   - RAW/WAW需要覆盖底层重叠内存的execution + memory dependency；WAR按实际访问判断
+2. 各资源独立满足requirements、format/usage、alias flag与dedicated约束；只有满足alias consistency才保留可解释内容，否则初始化新资源并转换其layout
 3. 移动端 tile-based GPU 上，alias 可能破坏 tile memory 复用，需实测
 ```
 
@@ -329,8 +332,8 @@ Vulkan 1.3+ 默认使用 dynamic rendering (vkCmdBeginRendering)：
 
 ```text
 sampled transient texture 若参与 bindless descriptor set：
-  - 在 pass execute 时通过 vkUpdateDescriptorSet（或 push descriptor）写入
-  - 必须保证 graph 已把 layout transition 到 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL（或 READ_ONLY_STORAGE）
+  - 在 pass execute 时通过 vkUpdateDescriptorSets（或 push descriptor）写入
+  - 必须保证 graph 已把 layout transition 到 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL等合法采样layout；storage image通常使用VK_IMAGE_LAYOUT_GENERAL，按descriptor type/usage分别选择
   - update-after-bind 模式下，descriptor 写入与 GPU 读取间仍需正确同步
 ```
 
@@ -422,7 +425,7 @@ Compute queue submit:
 
 graph 在 compile 阶段已确定 queue 边，execute 时自动生成 timeline semaphore wait/signal。[SPEC][ENGINE]
 
-注意：timeline value 必须单调递增，且不能在多个 submit 中复用同一 value。[SPEC]
+注意：同一timeline的signal执行值须严格递增并正确排序；wait可重复同一value，也可等待已满足值。[SPEC]
 
 ### Aliasing 切换点的强制 barrier
 
@@ -435,7 +438,7 @@ B.first_use_pass 入口：
   插入 VkMemoryBarrier2（make B visible）+ layout transition to B 的初始 layout
 ```
 
-这是 aliasing 安全的硬性要求。某些 graph 实现还要求 A 在 last_use 时 transition 到 `VK_IMAGE_LAYOUT_GENERAL` 或 `UNDEFINED`，作为"显式失效"标记。[ENGINE]
+上述只是依赖规划示意，不要求机械插入两个barrier：同queue可用一个覆盖A→B的memory dependency，跨queue可由正确semaphore和必要barrier组成。UNDEFINED可作为B的oldLayout表达丢弃，不能作为newLayout转换目标或“失效命令”；丢弃内容仍不免除与旧访问的执行同步。[SPEC]
 
 ### 自动 layout 的常见映射
 
@@ -446,7 +449,7 @@ color attachment (write)          COLOR_ATTACHMENT_OPTIMAL
 depth/stencil attachment          DEPTH_STENCIL_ATTACHMENT_OPTIMAL
 depth-only (sampled)              DEPTH_STENCIL_READ_ONLY_OPTIMAL
 shader read (texture)             SHADER_READ_ONLY_OPTIMAL
-shader read (storage image)       GENERAL（或 READ_ONLY_STORAGE_OPTIMAL 若支持）
+shader read (storage image)       GENERAL（storage image；不发明read-only-storage layout）
 transfer src                      TRANSFER_SRC_OPTIMAL
 transfer dst                      TRANSFER_DST_OPTIMAL
 present                           PRESENT_SRC_KHR
@@ -576,3 +579,6 @@ initial (未初始化)                 UNDEFINED
 - `../03_api_manual/08_synchronization/semaphore.md` — Timeline semaphore API 细节。
 - `../03_api_manual/08_synchronization/image_memory_barrier.md` — `VkImageMemoryBarrier2` 字段与 VUID。
 - `../03_api_manual/08_synchronization/buffer_memory_barrier.md` — `VkBufferMemoryBarrier2` 字段与 VUID。
+
+
+v1.0.17定向事实复核依据（不代表全文全域认证）：[resources#resources-memory-aliasing](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/resources.adoc#resources-memory-aliasing)；[resources#resources-memory-aliasing-consistency](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/resources.adoc#resources-memory-aliasing-consistency)；[resources#resources-image-layouts](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/resources.adoc#resources-image-layouts)；[synchronization#synchronization-dependencies-memory](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-dependencies-memory)。[SPEC]

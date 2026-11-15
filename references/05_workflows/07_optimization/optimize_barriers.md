@@ -130,7 +130,7 @@ Producer
 
 1. **审计现有 barrier**：列出所有 `vkCmdPipelineBarrier` 调用，记录资源、stage、access、layout、subresource range [TOOL]。
 2. **绘制资源依赖图**：标记每个资源的 producer 和 consumer，识别冗余 barrier [ENGINE]。
-3. **精确化 stage / access mask**：将 `VK_PIPELINE_STAGE_ALL_COMMANDS` 替换为实际涉及的 stage；将 `VK_ACCESS_MEMORY_READ_BIT` 替换为具体 `SHADER_READ_BIT` / `COLOR_ATTACHMENT_READ_BIT` 等 [SPEC]。
+3. **精确化 stage / access mask**：将 `VK_PIPELINE_STAGE_ALL_COMMANDS_BIT` 替换为实际涉及的 stage；将 `VK_ACCESS_MEMORY_READ_BIT` 替换为具体 `SHADER_READ_BIT` / `COLOR_ATTACHMENT_READ_BIT` 等 [SPEC]。
 4. **精确化 subresource range**：image barrier 的 `subresourceRange` 只包含必要的 mip level 和 array layer；buffer barrier 的 `offset`/`size` 精确 [SPEC]。
 5. **利用 subpass dependency**：在 RenderPass 中，将相邻 pass 的 dependency 通过 `VkSubpassDependency` 表达，设置 `srcSubpass` / `dstSubpass`、`srcStageMask` / `dstStageMask`、`srcAccessMask` / `dstAccessMask` [SPEC]。
 6. **使用 `BY_REGION_BIT`**：当依赖只需同一 framebuffer region 内同步时，设置 `VK_DEPENDENCY_BY_REGION_BIT` 允许 tile-based GPU 优化 [SPEC]。适用条件：src 和 dst 都在同一 render area 内，如 deferred shading 的 G-buffer 到 lighting [ANDROID]。

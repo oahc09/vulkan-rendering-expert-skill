@@ -73,7 +73,7 @@ Input Image (VK_IMAGE_USAGE_SAMPLED_BIT | STORAGE_BIT)
 → VkDescriptorSetLayout (input image + output image + params)
 → VkDescriptorSet
 → VkPipelineLayout (push constants / specialization constants)
-→ VkComputePipeline (blur shader module)
+→ VkPipeline (blur shader module)
 → vkCmdBindPipeline(COMPUTE)
 → vkCmdBindDescriptorSets
 → vkCmdDispatch(workgroupX, workgroupY, 1)

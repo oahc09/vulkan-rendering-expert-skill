@@ -124,8 +124,8 @@ Vulkan 1.4 新增必须支持：
 - 仍使用 input attachment 机制（subpassInput / subpassLoad），不是普通 texture read。
 - 需通过 VkRenderingInputAttachmentIndexInfo 建立 input attachment index 映射，
   通过 VkRenderingAttachmentLocationInfo 控制 attachment 位置映射。
-- image 必须处于 VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR layout，
-  并通过 pipeline barrier 建立可见性。
+- image使用满足当前usage/访问的layout：VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR
+  或符合规则的VK_IMAGE_LAYOUT_GENERAL；layout与内存依赖分别满足，不强制只用前者。
 - 深度 / 模板和 MSAA 的 local read 受独立 properties 限制，
   并非所有 1.4 设备都保证支持全部 local read 子特性。
   两个能力字段位于 VkPhysicalDeviceVulkan14Properties：
@@ -162,9 +162,10 @@ Vulkan 1.4 新增必须支持：
 
 ---
 
-## 4. 最低限制提升
+<a id="4-最低限制提升"></a>
+## 4. 最低限制与版本变化
 
-Vulkan 1.4 把若干 `VkPhysicalDeviceLimits` 字段的最低要求值上调。1.4 实现返回的 limit 不得低于下表。[SPEC]
+Vulkan 1.4 提高了部分最低限制，也有核心化而未提高数值的属性。下表同时列出两类；不是全部字段都位于 `VkPhysicalDeviceLimits`。1.4.368明确撤回“maxPushDescriptors提高到32”的旧版本说明，仍保留实际最低32。实现返回值必须满足各自条件。[SPEC]
 
 | Limit 字段 | 1.3 最低 | 1.4 最低 | 工程影响 |
 |---|---|---|---|
@@ -174,7 +175,7 @@ Vulkan 1.4 把若干 `VkPhysicalDeviceLimits` 字段的最低要求值上调。1
 | `maxImageArrayLayers` | 256 | **2048** | 区分 image array 层数与 framebuffer 层数 |
 | `maxColorAttachments` | 4 | **8** | 1.3 核心下限为 4，Roadmap 2022 才要求 7 |
 | `maxBoundDescriptorSets` | 4 | **7** | 可同时绑定 7 个 descriptor set（push descriptor + bindless 配合） |
-| `maxPushDescriptors` | 非 1.3 核心保证；扩展路径查询 | **>= 32** | 限制单个 push descriptor set 的 descriptor 总数，不是 binding 数 |
+| `maxPushDescriptors` | 非 1.3 核心保证；扩展路径查询 | **>= 32** | 限制单个 push descriptor set layout 的 descriptor 总数，不是 binding 数；32不是1.4新提高的数值 |
 | `maxPushConstantsSize` | 128 | **256** | push constants 容量翻倍，可放更多 per-draw 数据 |
 
 注意点：
@@ -348,3 +349,6 @@ if (props.apiVersion >= VK_API_VERSION_1_4) {
 - `frame_lifecycle.md` — frames-in-flight 与 1.4 limit 提升后的资源管理。
 - `../03_api_manual/05_descriptor/push_descriptor.md` — push descriptor API 细节。
 - `../03_api_manual/07_rendering/dynamic_rendering.md` — dynamic rendering 与 local read API。
+
+
+v1.0.17定向事实复核依据（不代表全文全域认证）：[resources#resources-image-layouts](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/resources.adoc#resources-image-layouts)。[SPEC]

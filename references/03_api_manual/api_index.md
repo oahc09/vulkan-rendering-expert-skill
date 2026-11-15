@@ -200,3 +200,34 @@ v1.0.12仅按章节扩展既有Android Surface、媒体采样与颜色输出内�
 - [Blend格式能力](06_pipeline/graphics_pipeline.md#blend-format-capability)
 - [透明附件精度](04_buffer_image_memory/image.md#transparent-target-precision)
 - [折射读写边界](07_rendering/render_target_layout.md#refraction-read-write-boundary)
+
+
+<a id="vulkan-domain-map"></a>
+## Vulkan 1.4.368 全域导航与覆盖边界
+
+先沿既有 API / implementation / debug / performance / architecture 路由确定任务，再只读下表命中领域的合同段落。此表是导航，不是“所有符号语义审计通过”的证书。范围冻结为标准 Vulkan Core1.0–1.4 与公开稳定扩展；preview 单列，disabled 和其他 API variant 明示排除；SC 不作本轮全覆盖或安全认证。每个扩展仍须核对独有语义、完整 depends、feature enable、limits/format/platform、失败和合法回退。
+
+| 领域 | 首选知识入口 | 尚需逐项核对 |
+|---|---|---|
+| VK01 初始化、加载与版本 | [合同入口](01_instance_device_queue/instance.md#loader-dispatch-contract) | Loader/ICD/layers、allocation callbacks、版本/alias细节仍需逐项复核 |
+| VK02 设备、队列与能力 | [合同入口](01_instance_device_queue/physical_device.md#device-group-capability-contract) | queue priority、全部features/limits/profiles组合 |
+| VK03 对象与命令管理 | [合同入口](03_command_buffer/command_buffer.md) | 各命令host sync、secondary/inheritance、conditional rendering组合 |
+| VK04 内存与驻留 | [合同入口](04_buffer_image_memory/memory_allocation.md#memory-host-alias-contract) | 全部allocation/BDA/sparse/protected/alias扩展差异 |
+| VK05 资源、格式与数据移动 | [合同入口](04_buffer_image_memory/image.md) | 逐format/多平面/压缩格式/usage/copy组合 |
+| VK06 同步与内存模型 | [合同入口](08_synchronization/synchronization2.md#cross-queue-host-contract) | 全部stage/access适用性和memory model交互 |
+| VK07 资源绑定与布局 | [合同入口](05_descriptor/push_descriptor.md#push-descriptor-count-lifetime) | 各binding model与pipeline layout兼容性的全量扩展合同 |
+| VK08 Shader / SPIR-V | [合同入口](06_pipeline/shader_module.md#shader-artifact-contract) | 全部capability/opcode/feature映射、grammar差异 |
+| VK09 Pipeline 与状态 | [合同入口](06_pipeline/shader_module.md#shader-object-contract) | 全部dynamic state/cache/binary/library/parallel create条件 |
+| VK10 光栅与帧缓冲 | [合同入口](07_rendering/mobile_tile_rendering.md#tile-capability-matrix) | raster/depth/stencil/blend/MSAA/FDM/FSR等逐扩展审计 |
+| VK11 绘制与 GPU 生成工作 | [合同入口](03_command_buffer/indirect_commands.md#device-generated-commands-contract) | DGC/transform feedback/mesh/task全部命令规则 |
+| VK12 Query 与测量 | [合同入口](04_buffer_image_memory/query_pool.md#query-generation-contract) | 性能query/calibrated timestamp全部扩展规则 |
+| VK13 WSI 与平台 | [合同入口](02_surface_swapchain/surface.md) | 每个公开平台扩展、present timing/id/wait/maintenance组合 |
+| VK14 完整光追 API 链 | [合同入口](06_pipeline/pipeline.md#ray-tracing-pipeline-contract) | 全量AS/SBT/RT条件扩展，未测设备 |
+| VK15 Vulkan Video | [合同入口](04_buffer_image_memory/image.md#vulkan-video-codec-differences) | codec全部valid usage和辅助扩展深层合同，未测codec设备 |
+| VK16 特殊计算与新扩展族 | [合同入口](06_pipeline/compute_pipeline.md#special-compute-contract) | optical/tensor/data graph/cooperative/地址类逐扩展差异 |
+| VK17 外部互操作与隔离 | [合同入口](04_buffer_image_memory/external_resource_interop.md#interop-handle-matrix) | 各平台handle消费/权限与跨API兼容完整组合 |
+| VK18 调试、鲁棒性与工程治理 | [合同入口](../04_debug_playbooks/02_crash_hang/device_lost.md#fault-report-order-1368) | 全部robustness/error/VUID/capture规则与真实宿主行为 |
+
+L0登记/可找到入口不等于 L1 的条件语义或 L2 的实施/排错流程；本候选仍存在稳定扩展逐项审计缺口。未审完不得用一个通用 modern_patterns 链接替代专有合同。不存在/拼错的符号与教学反例分别审查，不按字符串出现次数估算知识覆盖。Registry 分母、章节图、审计来源和状态保存在配套 tests 仓库，评估答案与rubric不进入运行时知识包。
+
+固定权威：[Registry vk.xml](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/xml/vk.xml)、[规范目录](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/vkspec.adoc)。遇到包内缺口时回查对应官方章节并如实声明未验证，不自行创造枚举/feature/VUID。

@@ -317,3 +317,13 @@ Vulkan 1.0 / 1.1 项目且驱动不支持 eds 扩展；单 pass 固定状态 dem
 5. 分别核对 `extendedDynamicState2LogicOp` 与 `extendedDynamicState3RasterizationSamples` 的支持、启用与对应 setter；它们不属于同一个 additional 扩展。[SPEC]
 6. tessellation / mesh shader 下动态切换 primitive topology 的合法性矩阵。
 7. 各 GPU 厂商对 eds3 子集的实际支持与性能开销（需查 vendor best practice + AGI trace）。
+
+
+<a id="shader-object-state-contract"></a>
+## Shader Object 动态状态不是“只设 viewport/scissor”
+
+Shader object 的 draw 前状态由固定规范 `shaders-objects-state` 按实际绑定 stage、topology、rasterizerDiscard、attachments 和启用 feature 条件逐项要求，不从普通 pipeline 的 pDynamicState 列表推断。基础有 viewport/scissor with count、rasterizer discard；vertex 路径还需 vertex input/topology/primitive restart。继续按条件设置 rasterization samples/sample mask/polygon mode、cull/front face、depth/stencil、color blend/write 等；feature 不支持的状态不能靠盲调 setter 补齐。[SPEC]
+
+以 command buffer 为单位记录状态 defined/undefined 与有效范围；pipeline ↔ shader object 切换按规范失效，draw 前缺任何适用状态就拒绝录制。状态 setter 不提供资源可见性，仍单独做 descriptor/image/buffer 同步。失败回退为已验证传统 pipeline，不带着不完整状态继续 draw。完整创建与二进制缓存见 [Shader Object 合同](shader_module.md#shader-object-contract)。[SPEC][ENGINE]
+
+固定规范（Vulkan 1.4.368，source-read；不是设备验证）：[conditional state list and pipeline interaction](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/shaders.adoc)。

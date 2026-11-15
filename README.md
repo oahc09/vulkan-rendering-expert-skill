@@ -6,6 +6,10 @@
 
 这是一个 Vulkan 渲染工程专家技能包。它不是 Vulkan 入门教程，而是为真实渲染工程任务准备的运行时知识库：用于在处理 Vulkan 设计、实现、调试、优化和验证问题时，按工程链路组织判断、引用规则、API 细节、调试路径和回归验证。
 
+## v1.0.17 候选状态
+
+本轮完成范围冻结、可重现 Registry 审计工具和一批高风险合同修正。**尚未达到全域覆盖目标**：稳定扩展逐项 L1/L2 语义审查、最终真实 Live 与实际宿主验收仍未关闭。导航和门禁见 [覆盖边界](references/07_integration_pack/README.md#vulkan-coverage-scope)；执行证据与精确配对版本在 tests 仓库。1.4.368 清单登记、静态通过或软件 Vulkan 结果都不能单独证明全能力完成。
+
 ## 适用场景
 
 - 设计 Vulkan 渲染管线、Render Pass、Dynamic Rendering、Render Graph 或 RHI 抽象。

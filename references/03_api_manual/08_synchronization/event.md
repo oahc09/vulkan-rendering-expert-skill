@@ -87,7 +87,7 @@ vkCreateEvent
 
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
-| `pEvents` | 等待的 event 数组；每个 event 必须已被设置。[SPEC] | 等待未设置或已重置的 event。[TOOL] |
+| `pEvents` | 等待的 event 数组；每个 event 须有符合规范的 signal 来源与先后关系；GPU signal 不要求 host 录制 wait 时已经执行完成。[SPEC] | 等待未设置或已重置的 event。[TOOL] |
 | `srcStageMask` / `dstStageMask` | wait events 的 execution dependency 范围。[SPEC] | stage 过宽或过窄。[TOOL] |
 | `pMemoryBarriers` / `pBufferMemoryBarriers` / `pImageMemoryBarriers` | 与 wait events 关联的 memory dependency。[SPEC] | 只 wait 不 barrier，导致内存不可见。[TOOL] |
 | `signal stage`（vkCmdSetEvent 的 stage mask） | event 在哪个 stage 完成后被设置。[SPEC] | signal stage 早于 producer 实际完成 stage。[TOOL] |
@@ -119,7 +119,7 @@ vkCreateEvent
 1. `vkCmdWaitEvents` 只等待 event 但忘记提供 memory barrier，导致数据不可见。[TOOL]
 2. `vkCmdSetEvent` 的 stage mask 过早，producer 尚未完成就触发 event。[TOOL]
 3. 在 `vkCmdWaitEvents` 之前 event 已被 `vkCmdResetEvent` 重置。[TOOL]
-4. 跨 queue 使用 event 却没有 semaphore 保证提交顺序。[TOOL]
+4. 把 event 用作跨 queue 依赖；即使另加 semaphore 也不能把跨 queue event 依赖变合法，应由 semaphore 承担该依赖。[TOOL]
 5. CPU 轮询 `vkGetEventStatus` 导致 CPU 开销。[TOOL]
 6. 未重置 event 就再次 set，导致状态混乱。[TOOL]
 
@@ -170,7 +170,7 @@ vkCreateEvent
 ### CPU-GPU 同步
 
 - `vkGetEventStatus` 可用于 CPU 查询，但通常不建议轮询；CPU 等待应使用 fence。[SPEC]
-- `vkSetEvent` 可从 CPU 触发 event，用于 CPU-GPU 协作场景。[SPEC]
+- `vkSetEvent` 可用于 host→queue 协作，但必须在提交等待该 event 的 command buffer 之前完成 host signal。[SPEC]
 
 ### GPU-GPU 同步
 
@@ -244,3 +244,22 @@ Event 适合“同一 queue 内、局部资源、可预测时序”的同步场�
 3. Event 在 secondary command buffer 中的使用限制。
 4. `vkGetEventStatus` 在不同驱动上的阻塞行为。
 5. Event 与 render pass 内部 subpass dependency 的交互规则。
+
+
+<a id="event-generation-contract"></a>
+
+## 18. Event set/wait/reset 与线程合同
+
+**条件**：event 只同步同 queue 命令或 host→queue，不能在两个 queue 间建立 event 依赖；DEVICE_ONLY event 禁止 vkSetEvent/vkResetEvent/vkGetEventStatus。选择 legacy set/wait 或 Sync2 set2/wait2 成对路径，不能混配。[SPEC]
+
+**正常路径**：producer → set → 不相关工作 → wait及访问依赖 → consumer → 有执行依赖的 reset → 下一代 set。普通 vkCmdSetEvent2 与 vkCmdWaitEvents2 的对应 VkDependencyInfo 各值必须完全一致；维护不可变 dependency 描述供两端使用。set/reset 命令之间没有天然直接排序保证，不能只因录制先后就重用 event。[SPEC]
+
+**Host 路径**：vkSetEvent 必须在提交等待它的 command buffer 之前执行；host-signal 对应 wait 的第一作用域只包含 HOST operations。host status 只是当时状态，不证明所有消费者完成，不能拿它回收 CB/event；host 操作按各 API 的外部同步要求序列化。[SPEC]
+
+**maintenance9 分支**：启用 maintenance9 且 Sync2 可用时，可用 VK_DEPENDENCY_ASYMMETRIC_EVENT_BIT_KHR。set2 仅一个 memory barrier，srcStageMask 为信号源，srcAccessMask/dstStageMask/dstAccessMask 均0，buffer/image barrier 数0；wait2 也带该 flag，所有 source stages 的并集必须等于 set2 的源 mask。不能以此省掉 consumer memory dependency。[SPEC]
+
+**失败/回退**：缺少 feature 使用普通完全匹配 set2/wait2 或 legacy 成对路径；跨队列直接改 semaphore。已 signal 时再次 set 不创建新 signal operation，不是复用 generation 的方式。避免 host signal 晚于提交导致非法或前进性问题；无法证明复用顺序时用新的 event 或普通 pipeline barrier。
+
+**验证**：分别核对匹配/错配 API、两端 dependency 等值、host-before-submit、DEVICE_ONLY host拒绝、reset→set执行边及多消费者退役。非敏感测试运行 validation；只写出状态机不等于已验证 GPU。
+
+固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[synchronization#synchronization-events](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-events)；[synchronization#synchronization-events-signaling-host](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-events-signaling-host)；[synchronization#synchronization-events-waiting-device](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-events-waiting-device)。[SPEC]

@@ -57,7 +57,7 @@ VkApplicationInfo（app name / engine name / apiVersion）
 |---|---|
 | `vkCreateInstance` | 创建 Vulkan instance。[SPEC] |
 | `vkDestroyInstance` | 销毁 instance；需先销毁所有子对象。[SPEC] |
-| `vkEnumerateInstanceExtensionProperties` | 查询 loader 支持的 instance extensions。[SPEC] |
+| `vkEnumerateInstanceExtensionProperties` | 查询实现或指定 layer 暴露的 instance extensions。[SPEC] |
 | `vkEnumerateInstanceLayerProperties` | 查询可用的 instance layers。[SPEC] |
 | `vkEnumeratePhysicalDevices` | 通过 instance 枚举物理设备。[SPEC] |
 
@@ -87,7 +87,7 @@ VkApplicationInfo（app name / engine name / apiVersion）
 
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
-| `pApplicationInfo->apiVersion` | 应用请求的 Vulkan API 版本；物理设备可能不高于此版本。[SPEC] | 设为 1.3 但设备只支持 1.1。[TOOL] |
+| `pApplicationInfo->apiVersion` | 应用设计使用的最高 API 版本；instance 与每个 physical device 的实现版本须分别查询。[SPEC] | 把 apiVersion=1.3 当成所有设备都支持并启用 1.3 feature。[TOOL] |
 | `ppEnabledExtensionNames` | 必须包含后续需要的 instance extensions，如 surface。[SPEC] | 漏开 `VK_KHR_surface` 导致无法创建 surface。[TOOL] |
 | `ppEnabledLayerNames` | Validation layer 等；release 版本通常关闭。[SPEC] | 发布包仍开启 validation。[ENGINE] |
 | `pNext` | 可接 `VkDebugUtilsMessengerCreateInfoEXT` 等。[SPEC] | 结构体类型链错误。[TOOL] |
@@ -117,7 +117,7 @@ VkApplicationInfo（app name / engine name / apiVersion）
 
 ## 7. 高频错误
 
-1. `apiVersion` 设置过高导致旧设备无法运行。[TOOL]
+1. Vulkan 1.0 实现可能拒绝高于 1.0 的请求；1.1+ instance 与低版本 physical device 可共存，不能把所有低版本设备都判定为 instance 创建失败。[TOOL]
 2. 漏开 `VK_KHR_surface` 或平台相关的 surface extension。[TOOL]
 3. 启用未安装的 validation layer，创建 instance 失败。[TOOL]
 4. 在 release 版本中未移除 validation layer。[ENGINE]
@@ -240,3 +240,27 @@ VkApplicationInfo（app name / engine name / apiVersion）
 3. Debug messenger 在 `vkCreateInstance` 时通过 `pNext` 启用的规则。
 4. `apiVersion` 与 physical device 版本的关系。
 5. 不同 Android 版本与 OEM 对 instance extensions 的差异。
+
+<a id="loader-dispatch-contract"></a>
+## Loader、版本与 dispatch 归属合同
+
+**条件 [SPEC]**：冻结 Vulkan 1.4.368。SDK/headers 编译版本、loader/instance 支持版本、每个 physical device 的 `apiVersion`、应用最高目标版本、extension/feature enable 是不同条件。`vkGetInstanceProcAddr(NULL, "vkEnumerateInstanceVersion")` 返回 NULL 时按 1.0 loader 路径处理；否则检查查询结果。`VkApplicationInfo.apiVersion` 的 patch 不参与 instance 版本判断，variant 必须匹配；NULL application info 或版本0等同 Vulkan1.0。Vulkan SC 是独立 variant，不能混作本轮标准 Vulkan 能力或安全认证。
+
+**正常路径**：枚举 layer/instance extensions → 定义应用实际使用的最高版本 → 创建 instance → 查询每个 device 的版本/扩展/features/properties → 按支持且启用的路径建 device。1.1+ instance 可以配不同版本 physical device；不能仅按 loader 版本截断一切 device 功能，也不能超过应用声明目标与对应实现的使用边界。扩展晋升到 core 不等于同名 feature 无条件开启；alias 名称的入口可见性按启用版本/扩展分别核实。
+
+`vkGetDeviceProcAddr` 得到的函数指针只可用其查询 device 或该 device 的 dispatchable child 调用。共享同一个 device 的渲染器可以共享同一张受控 dispatch 表；另一独立 device 必须隔离表的来源、所有 handle 的 owner 与销毁世代。NULL 指针不能调用，非NULL也不是越过版本/feature 合法性的许可。启用 `maintenance5` 时，高于应用请求版本的 core 命令须返回 NULL；没有该 feature 时即使返回非NULL也不得调用超出声明版本的命令。physical-device-level 命令不属于此 device-only 查询表。
+
+**失败与回退**：缺必需 layer/extension 时在创建前报告精确缺项，保留未启用诊断层的产品路径只限产品允许的配置；不是偷偷启用未知名称。1.0 loader 无新入口时选择支持的 1.0/扩展路径，或拒绝高版本必需任务。跨 device handle/表混用先在应用边界拦截，不能靠捕获 device lost 证明可用。创建失败按已成功创建的对象回滚，不能继续使用未初始化句柄。
+
+**验证**：覆盖1.0入口缺失、1.1 instance+不同版本physical device、未启用扩展、同device共享表/不同device拒绝四组；保存实际查询与启用清单。此合同是规范推理，实际 loader/driver/宿主未运行即未验证。[SPEC: initialization](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/initialization.adoc) 的 `vkGetInstanceProcAddr`、`vkGetDeviceProcAddr`、`VkApplicationInfo`；[REGISTRY](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/xml/vk.xml)。
+
+<a id="host-allocation-contract"></a>
+## Host allocation callbacks 合同
+
+`VkAllocationCallbacks` 管 host 内存分配，不是 `VkDeviceMemory` heap 预算或 GPU suballocator。**条件**：创建时传自定义 allocator，则对应销毁使用兼容 allocator；兼容指一方分配可被另一方正确释放，不等于结构体地址必须相同。创建用NULL则销毁也用NULL。pool分配的对象继承pool allocator，不能给每个 command buffer虚构独立allocator参数。[SPEC]
+
+**正常路径**：提供有效 allocation/reallocation/free，internal allocation/free 通知要么都NULL要么都有效；遵守 size/alignment、reallocation失败保留原分配等合同。实现只在引起调用的API线程且API执行期间回调，但两个并行API线程仍可并发进入同一allocator，应用需提供所需同步。结构体可由实现复制，callback函数与依赖数据必须活到关联对象生命周期结束，不应以“栈上结构体已返回”推导userdata也可释放。
+
+**失败与回退**：分配失败返回NULL并检查Vulkan返回码，按成功对象集合回收；不得返回未对齐或不足size的假成功指针。allocation callbacks 不得调用任何 Vulkan 命令；也不以人为GPU故障作为allocator诊断步骤。无法保证兼容销毁/并发安全时从对象创建起使用NULL默认allocator；不能中途对已有对象换为不兼容allocator。
+
+**验证**：Host 单测覆盖 alignment、分配失败、并发统计、跨兼容实例释放与userdata寿命；真实Vulkan创建/销毁需另跑，Host单测不是driver证明。[SPEC: memory host allocation](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/memory.adoc) 的 `memory-host`、`VkAllocationCallbacks`、`PFN_vkAllocationFunction` 与兼容allocator规则。

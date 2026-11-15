@@ -27,7 +27,7 @@ VkPipelineLayout (其中某个 set 的 layout 创建时带 VK_DESCRIPTOR_SET_LAY
 → vkCmdPushDescriptorSetKHR  /  vkCmdPushDescriptorSet2  /  vkCmdPushDescriptorSetWithTemplate2
    (传入 VkWriteDescriptorSet / VkDescriptorUpdateTemplate / VkPushDescriptorSetInfo / VkPushDescriptorSetWithTemplateInfo)
 → Command Buffer 录制 push
-→ Shader Access（按 pipeline layout 中指定的 set index）
+→ 后续 GPU Shader Access（按 pipeline layout 中指定的 set index）
 ```
 
 ### 上游依赖
@@ -39,8 +39,8 @@ VkPipelineLayout (其中某个 set 的 layout 创建时带 VK_DESCRIPTOR_SET_LAY
 
 ### 下游影响
 
-- Push 之后该 set slot 在当前 command buffer 中即处于“已绑定”状态，shader 可立即访问。[SPEC]
-- 再次 push 同一 set 会覆盖之前的内容；不需要 unbind。[SPEC]
+- Push 之后该 set slot 在当前 command buffer 中即处于“已绑定”状态，后续执行的 shader 按已录制状态访问。[SPEC]
+- 再次 push 只更新指定 descriptors；同一兼容 layout 下未写的部分不因此自动初始化。改变 layout/其他绑定导致的 disturbance 按 pipeline-layout compatibility 检查。[SPEC]
 - Command buffer reset / rerecord 时 push 状态随之失效。[SPEC]
 
 ---
@@ -61,7 +61,7 @@ VkPipelineLayout (其中某个 set 的 layout 创建时带 VK_DESCRIPTOR_SET_LAY
 | API | 作用 |
 |---|---|
 | `vkCmdPushDescriptorSetKHR` | 旧版命令：用一组 `VkWriteDescriptorSet` 直接 push 一个 set 到 command buffer。[SPEC] |
-| `vkCmdPushDescriptorSet2` | Vulkan 1.4 新增：基于 `VkPushDescriptorSetInfo`，与 `VkDependencyInfo` 体系对齐，支持 layout 关联与 `VK_KHR_maintenance6` 风格。[SPEC] |
+| `vkCmdPushDescriptorSet2` | Vulkan 1.4 新增：基于 `VkPushDescriptorSetInfo`，使用 `VkPushDescriptorSetInfo` 的 stageFlags/layout/set 等字段；属于 maintenance6 路径，不产生同步依赖。[SPEC] |
 | `vkCmdPushDescriptorSetWithTemplate2` | Vulkan 1.4 新增：基于 `VkPushDescriptorSetWithTemplateInfo`，用 update template + raw data 指针 push。[SPEC] |
 | `vkCmdPushDescriptorSetWithTemplateKHR` | 旧版 template push 命令（与 `vkCmdPushDescriptorSetKHR` 同期）。[SPEC] |
 | `vkCreateDescriptorUpdateTemplate` / `vkDestroyDescriptorUpdateTemplate` | 创建 / 销毁 push template。[SPEC] |
@@ -70,7 +70,7 @@ VkPipelineLayout (其中某个 set 的 layout 创建时带 VK_DESCRIPTOR_SET_LAY
 
 - `VK_KHR_push_descriptor`：原始扩展，1.0 起作为扩展可用。
 - Vulkan 1.1 / 1.2 / 1.3：仍作为扩展，需启用。
-- Vulkan 1.4：push descriptor 的 API promote 进 core 并提升为 mandatory feature（保证被支持）；**仍需在 `VkDeviceCreateInfo.pNext` 中通过 `VkPhysicalDeviceVulkan14Features.pushDescriptor = VK_TRUE` 显式启用** 后才能调用相关 API（无需再启用 `VK_KHR_push_descriptor` 扩展字符串）；同时新增 `vkCmdPushDescriptorSet2` / `vkCmdPushDescriptorSetWithTemplate2`，配合 `synchronization2` 风格。[SPEC]
+- Vulkan 1.4：push descriptor 的 API promote 进 core 并提升为 mandatory feature（保证被支持）；**仍需在 `VkDeviceCreateInfo.pNext` 中通过 `VkPhysicalDeviceVulkan14Features.pushDescriptor = VK_TRUE` 显式启用** 后才能调用相关 API（无需再启用 `VK_KHR_push_descriptor` 扩展字符串）；同时新增 `vkCmdPushDescriptorSet2` / `vkCmdPushDescriptorSetWithTemplate2`，maintenance6 的结构化命令与 synchronization2 是独立能力，push 不建立资源内存依赖。[SPEC]
 - 与 `VK_KHR_descriptor_update_template` 强绑定（template 路径）。
 - 与 `VK_EXT_descriptor_buffer` 互斥：同一 set slot 不可同时是 push descriptor 与 descriptor buffer set。[SPEC]
 
@@ -91,7 +91,7 @@ VkPipelineLayout (其中某个 set 的 layout 创建时带 VK_DESCRIPTOR_SET_LAY
        set, descriptorWriteCount, pDescriptorWrites)
    或 Vulkan 1.4:
    vkCmdPushDescriptorSet2(commandBuffer, &VkPushDescriptorSetInfo)
-5. vkCmdDraw* / vkCmdDispatch*  → shader 立即访问 push 进来的 set
+5. vkCmdDraw* / vkCmdDispatch*  → GPU 执行时 shader 访问已录制的 descriptor 状态
 ```
 
 ### 路径 B：update template
@@ -116,7 +116,7 @@ VkPipelineLayout (其中某个 set 的 layout 创建时带 VK_DESCRIPTOR_SET_LAY
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
 | `VkDescriptorSetLayoutCreateInfo::flags` 中的 `PUSH_DESCRIPTOR_BIT_KHR` | 启用 push descriptor 必加。[SPEC] | 漏加导致后续 push 调用 validation error。[TOOL] |
-| `VkPhysicalDevicePushDescriptorPropertiesKHR::maxPushDescriptors` | 单次 push 最多 binding 数（实现可能低至 32）。[SPEC] | 超过上限导致 push 失败。[TOOL] |
+| `VkPhysicalDevicePushDescriptorPropertiesKHR::maxPushDescriptors` | push descriptor set layout 中所有 binding 的 descriptorCount 总和上限（包含数组元素，不是 binding 个数）。[SPEC] | 超过上限导致 push 失败。[TOOL] |
 | `vkCmdPushDescriptorSetKHR::layout` | 用于解析 set index 与 binding layout。[SPEC] | 传入与 pipeline 不一致的 layout。[TOOL] |
 | `vkCmdPushDescriptorSetKHR::set` | 必须是 pipeline layout 中标记为 push 的 set index。[SPEC] | set slot 不是 push 类型却尝试 push。[TOOL] |
 | `VkWriteDescriptorSet::dstArrayElement` / `descriptorCount` | 写入数组内的起始位置与数量。[SPEC] | 与 layout 中声明的 array size 不一致。[TOOL] |
@@ -133,7 +133,7 @@ VkPipelineLayout (其中某个 set 的 layout 创建时带 VK_DESCRIPTOR_SET_LAY
 - [ ] `VkDescriptorSetLayout` 是否带 `PUSH_DESCRIPTOR_BIT_KHR`？
 - [ ] `VkPipelineLayout` 中该 set index 是否唯一对应到 push descriptor layout？
 - [ ] Push descriptor set 不再带 `VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT` 等不兼容 flag。[SPEC]
-- [ ] 单 set binding 数量是否 ≤ `maxPushDescriptors`？
+- [ ] 该 push set layout 的 descriptorCount 总和是否 ≤ `maxPushDescriptors`？只有两个 binding 但数组各32项仍是64个 descriptors。
 - [ ] Update template 的 `templateType`、`descriptorSetLayout`、`pipelineLayout`、`set` 是否一致？
 
 ### 使用阶段
@@ -155,14 +155,14 @@ VkPipelineLayout (其中某个 set 的 layout 创建时带 VK_DESCRIPTOR_SET_LAY
 
 1. `VkDescriptorSetLayout` 漏加 `PUSH_DESCRIPTOR_BIT_KHR`，导致 push 调用 validation error。[TOOL]
 2. push 到一个非 push 类型的 set slot（layout 没标记 push）。[TOOL]
-3. 单次 push binding 数超过 `maxPushDescriptors`。[TOOL]
+3. push layout 的 descriptorCount 总和超过 `maxPushDescriptors`。[TOOL]
 4. `vkCmdPushDescriptorSetKHR` 的 `layout` 与当前 pipeline 的 pipeline layout 不兼容（set 数量或 binding layout 不一致）。[TOOL]
 5. Image descriptor 的 `imageLayout` 与实际 layout 不一致。[TOOL]
 6. Push 之后没有再 push 也没有 bind，下一帧 reset command buffer 后误以为 push 状态保留。[ENGINE]
 7. Update template 的 `templateType` 选错，使用了 descriptor set 模板而非 push 模板。[TOOL]
 8. 同一 set slot 既尝试 `vkCmdBindDescriptorSets` 又尝试 `vkCmdPushDescriptorSetKHR`。[SPEC]
-9. Vulkan 1.4 上忘记 `vkCmdPushDescriptorSet2` 与 `synchronization2` / `VkDependencyInfo` 风格的关联关系。[ENGINE]
-10. 多线程录制 command buffer 时 push 的 `pData` 生命周期未覆盖到 GPU 完成时刻。[ENGINE]
+9. 把 `vkCmdPushDescriptorSet2` 当作 `VkDependencyInfo` 或同步命令；它更新 descriptor 状态，资源可见性与 layout 仍由真实 producer/consumer 依赖负责。[ENGINE]
+10. 把调用期 host 的 `pData`/write 数组与其引用的 GPU 资源寿命混淆；host 输入须在命令调用期间有效，buffer/image/view/sampler 则须满足所有 GPU 使用的寿命。[ENGINE]
 
 ---
 
@@ -199,7 +199,7 @@ VkPipelineLayout (其中某个 set 的 layout 创建时带 VK_DESCRIPTOR_SET_LAY
 
 ### 使用时机
 
-- 在 command buffer 录制时 push；push 即生效，shader 可立即访问。
+- 在 command buffer 录制时 push；push 即生效，后续执行的 shader 按已录制状态访问。
 - Push 之后该 set slot 在 command buffer 内一直保持该状态，直到下次 push 或 command buffer 结束。[SPEC]
 
 ### 销毁阶段
@@ -265,7 +265,7 @@ VkPipelineLayout (其中某个 set 的 layout 创建时带 VK_DESCRIPTOR_SET_LAY
 ## 13. 专家经验
 
 **经验**：
-push descriptor 是 per-pass / per-draw 频繁变化的小 descriptor set 的最优解：把 view UBO + 几个 attachment 引用放进一个 push set，每个 pass 开始时 push 一次即可；material / bindless 仍走传统 descriptor set 或 descriptor buffer。务必先打印 `maxPushDescriptors`，移动端可能只有 32，需要把 binding 数量控制在低位。Vulkan 1.4 上推荐直接使用 `vkCmdPushDescriptorSet2` / `vkCmdPushDescriptorSetWithTemplate2`，便于后续扩展与 `VkDependencyInfo` 风格一致；老路径作为 fallback。固定 push 模式（per-pass view + per-draw transform）优先用 update template，CPU 端只剩一次 `memcpy`。
+push descriptor 是 per-pass / per-draw 频繁变化的小 descriptor set 的候选方案：把 view UBO + 几个 attachment 引用放进一个 push set，每个 pass 开始时 push 一次即可；material / bindless 仍走传统 descriptor set 或 descriptor buffer。务必先打印 `maxPushDescriptors`，移动端可能只有 32，需要限制 layout 中 descriptorCount 总和。Vulkan 1.4 上推荐直接使用 `vkCmdPushDescriptorSet2` / `vkCmdPushDescriptorSetWithTemplate2`，按 maintenance6 的 stageFlags 与 layout 合同使用，不与 Sync2 混同；老路径作为 fallback。固定 push 模式（per-pass view + per-draw transform）优先用 update template，CPU 端只剩一次 `memcpy`。
 
 **适用条件**：
 Vulkan 1.0+ 启用 `VK_KHR_push_descriptor` 或 Vulkan 1.4；binding 数量小、更新频繁；不需要 update-after-bind。
@@ -297,3 +297,15 @@ bindless / 大型 texture 数组（用 descriptor indexing 或 descriptor buffer
 4. `VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR` 与其他 flag（`UPDATE_AFTER_BIND_POOL_BIT`、`DESCRIPTOR_BUFFER_BIT_EXT`）的兼容矩阵。
 5. Update template 的 push 路径下，`pData` 内存对齐与字段布局规则。
 6. Vulkan 1.4 在 Android 驱动上的普及时间线与 `vkCmdPushDescriptorSet2` 的可用性。
+
+
+<a id="push-descriptor-count-lifetime"></a>
+## 全域审计：数量、版本与录制寿命（1.4.368）
+
+**条件与正常路径**：`maxPushDescriptors` 约束带 PUSH_DESCRIPTOR 标志的 **set layout 的 descriptor 总数**，包括每个 binding 的 `descriptorCount` 数组数量；不是 write 次数、binding 个数或本次只更新的项数。先查实际属性，再验证 layout 和每次 write 的类型/范围；分多次 push 不能让超限 layout 变合法。该属性的最低保证32不在1.4提高：1.4.368撤回的是“提高到32”的版本变化说法，不是把当前最低值改小。[SPEC]
+
+`vkCmdPushDescriptorSet2` / `vkCmdPushDescriptorSetWithTemplate2` 的扩展路径属于 `maintenance6`，不是 synchronization2。命令的 CPU 参数（write 数组、template 的 `pData` 原始数据及描述信息）在调用期间有效；默认 host 参数寿命不能机械延长到 GPU 完成。描述符引用的资源与内存必须一直合法到所有使用完成。录制新 command buffer 时 push 状态 undefined；不完整更新只对已定义且未 disturbed 的项目保留含义。模板不能修复 layout 不匹配，也不替代资源 barrier。
+
+**失败与回退**：无 push 能力时选用已有 descriptor set/pool 路线，保留同一资源寿命和同步合同。未知/不支持的 descriptor type、超总数、模板不兼容或失效引用在 host 配置阶段拒绝；不靠执行越界来测试。**验证**：评审检查一个数组 binding 大于限制、多个小数组总和超限、只写部分数组、录制调用返回后复用 CPU staging 描述信息、GPU 仍引用旧 image 的退休时机。性能推荐必须实测，不把 push/template 宣称为普适最优。
+
+固定权威：[Limits](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/limits.adoc#limits-maxPushDescriptors)、[push descriptors](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/descriptorsets.adoc#descriptorsets-push-descriptors)、[host 参数寿命](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/fundamentals.adoc#fundamentals-validusage)。

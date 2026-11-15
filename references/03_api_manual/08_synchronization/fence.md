@@ -39,7 +39,7 @@ Command Buffer 录制完成
 
 ### 下游影响
 
-- Fence signal 后，CPU 可回收该次提交引用的 in-flight 资源。[SPEC]
+- Fence signal 后，只能回收全部使用均被该完成点覆盖的提交资源；其他 queue 或 presentation 引用须另外证明结束。[SPEC]
 - Fence 状态决定下一帧是否可以复用 per-frame 资源池。[ENGINE]
 
 ---
@@ -108,7 +108,7 @@ Command Buffer 录制完成
 - [ ] `vkQueueSubmit` 是否正确传入 fence handle？
 - [ ] 等待前是否确认 fence 已被提交？
 - [ ] `vkWaitForFences` 是否处理了 `VK_TIMEOUT`？
-- [ ] 批量 reset 前是否确认所有目标 fence 已 signal？
+- [ ] 批量 reset 前是否确认所有目标 fence 均不关联未完成的 queue 命令（不要求都已 signal）？
 
 ### 销毁阶段
 
@@ -201,7 +201,7 @@ Command Buffer 录制完成
 
 ### GPU 侧
 
-- Fence 本身不增加 GPU 负载；它仅暴露 completion 信号。[SPEC]
+- Fence 暴露完成信号，但实现与等待策略可能带来调度/同步开销，应实测而非保证零成本。[SPEC]
 
 ### 移动端
 
@@ -240,3 +240,20 @@ Command Buffer 录制完成
 2. 多线程并发调用 `vkGetFenceStatus`、`vkWaitForFences`、`vkResetFences` 的线程安全规则。
 3. 与 external fence（`VK_KHR_external_fence`）交互时的导入/导出语义。
 4. 特定驱动在 `VK_TIMEOUT` 后的恢复行为。
+
+
+<a id="fence-completion-contract"></a>
+
+## 18. Fence 完成范围与失败状态机
+
+**条件**：submit fence 必须 unsignaled 且没有关联未完成队列命令；reset 允许非 pending 的 unsignaled fence，不要求先 signaled。初始 signaled 只服务应用首帧等待约定，不代表真实 GPU 工作完成。[SPEC]
+
+**正常路径**：slot 完成确认 → acquire/录制成功 → reset → submit成功记录 associated → wait成功 → 回收该完成点覆盖的使用。vkQueueSubmit/Submit2 fence 覆盖该次 batches 及同 queue 更早 submission-order 命令；其他独立 queue 和 presentation 不自动包含。waitAll=false 只证明至少一个完成，须 get-status 确认哪个 slot 可回收。[SPEC]
+
+**内存与线程**：fence signal 定义 device-access memory dependency，但 host wait 本身不保证写入对 host 可见。回读仍需 HOST_READ barrier/相应内存依赖及 non-coherent invalidate。对 reset/destroy/提交关联等需外部同步的访问用锁；不能仅因同一 fence 允许多个等待者就允许与 reset/destroy 竞争。[SPEC]
+
+**失败**：VK_TIMEOUT 不是 GPU 失败或完成，不回收、不 reset；submit 失败后先判定返回值与设备状态，禁止继续等待无关联工作的 unsignaled fence。device loss 时 vkWaitForFences 须有限时间返回 VK_SUCCESS 或 VK_ERROR_DEVICE_LOST，不能把无限 timeout 描述成规范保证永久死锁，也不保证立刻返回。设备丢失后结果数据不能视为正常有效。[SPEC]
+
+**回退/验证**：用 queue/device idle 作保守提交完成证明，或覆盖全部使用的 timeline；仍单独处理 presentation。测试首轮无提交、acquire失败、录制失败、submit失败、timeout、wait-any和多queue尾部工作；检查所有状态都不导致错误复用。
+
+固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[synchronization#synchronization-fences-signaling](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-fences-signaling)；[synchronization#synchronization-fences-waiting](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-fences-waiting)；[synchronization#synchronization-fences-unsignaling](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-fences-unsignaling)。[SPEC]

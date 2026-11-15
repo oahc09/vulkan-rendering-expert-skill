@@ -252,3 +252,20 @@ vkEnumeratePhysicalDevices
 创建前使用 [physical device 六层证据](physical_device.md)；将 supported-feature 查询结构与 enabled-feature 请求结构分离，避免把所有 true 无意开启。使用 `VkPhysicalDeviceFeatures2` 放入 device `pNext` 时，`pEnabledFeatures` 必须为空；避免 promoted 核心结构和对应扩展 feature 结构重复表达同一能力。保存最终 create-info 快照与拒绝原因。
 
 `vkDestroyDevice` 前必须销毁/释放要求显式销毁的子对象并确保工作完成，不能以“device 会自动释放子对象”作为生命周期策略。[VkDeviceCreateInfo](https://docs.vulkan.org/refpages/latest/refpages/source/VkDeviceCreateInfo.html)、[vkDestroyDevice](https://docs.vulkan.org/refpages/latest/refpages/source/vkDestroyDevice.html)。[SPEC]
+
+
+<a id="protected-resource-contract"></a>
+
+## 16. Protected 端到端隔离合同
+
+**条件**：查询并启用 protectedMemory；选择 VK_QUEUE_PROTECTED_BIT family，以 VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT 创建队列，用匹配 flags 的 vkGetDeviceQueue2 获取。protected command pool 使用 VK_COMMAND_POOL_CREATE_PROTECTED_BIT；资源创建用相应 PROTECTED_BIT 并绑定 VK_MEMORY_PROPERTY_PROTECTED_BIT 内存，不能 host map。[SPEC]
+
+**正常路径**：protected pool → protected command buffer → 匹配 protected submit（legacy VkProtectedSubmitInfo 或 submit2 的 VK_SUBMIT_PROTECTED_BIT）→ protected-capable queue。该队列也可执行合法的 unprotected 提交，不应将“protected-capable”误解成每次提交必定 protected。资源格式、usage、surface/swapchain 保护支持分别检查。[SPEC]
+
+**失败边界**：protectedNoFault 为 false 时，不得在 protected operations 写 unprotected memory、在规范不允许阶段访问 protected memory、执行 query；为 true 也只是规定相关读返回 undefined、写丢弃或 undefined，不是可信导出权限。protected operations 仍不得执行 indirect operations。任何情况下 protected 内容不得成为 host 可见数据，也不得通过 unprotected 输出泄露。[SPEC]
+
+**回退**：链上任一能力不满足时拒绝该受保护内容路径，或使用业务许可的非敏感替代内容；不得关闭保护后继续原内容、抓帧、读回或导出。调试只记录非敏感能力/状态/错误信息，不以截取 protected payload 验证正确性。[ENGINE]
+
+**验证**：静态核对 feature→queue→pool→resource→memory→submit 完整链；用非敏感测试素材验证正常路径、缺少 family/内存类型时拒绝、错误组合被预检查阻止。不故意在实际受保护素材上制造非法泄漏或 fault。
+
+固定依据：Vulkan 1.4.368，commit `fa30d4e312e843193601be7cb926c7e25d9ec885`；[memory#memory-protected-memory](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/memory.adoc#memory-protected-memory)；[memory#memory-protected-access-rules](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/memory.adoc#memory-protected-access-rules)；[devsandqueues#devsandqueues-queue-creation](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/devsandqueues.adoc#devsandqueues-queue-creation)。[SPEC]

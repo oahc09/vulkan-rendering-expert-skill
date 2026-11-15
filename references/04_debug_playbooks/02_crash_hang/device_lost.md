@@ -262,3 +262,13 @@ KHR 不是把 EXT 函数改后缀：不存在应当照抄的 `vkGetDeviceFaultIn
 ## 仿真故障的安全缩小范围
 
 保存world/topology/snapshot、queue提交、容量/overflow、最后成功kernel与原始fault。先用host配置拒绝/写集合检查、SPIR-V验证和有界输入测试 [kernel合同](../../03_api_manual/06_pipeline/compute_pipeline.md#simulation-kernel-portability)，再查 [全消费者退休](../../05_workflows/05_resource_management/manage_frame_resources.md#simulation-snapshot-retirement)。不要为证明检测有效在用户设备运行已知死锁、无限busy-wait或越界shader；host模拟失败须标fixture，不叫真实GPU fault。
+
+
+<a id="fault-report-order-1368"></a>
+## Fault 查询次序：KHR 与 EXT 不能叠加成相同证据
+
+固定规范1.4.368明确：若已对某 device 调用 `vkGetDeviceFaultReportsKHR`，后续该 device 的 `vkGetDeviceFaultInfoEXT` 返回值是 implementation-dependent。因此不能先消费 KHR reports，再把 EXT 空值或变化判为驱动无故障、报告丢失或规范违例；也不能在两套 API 之间要求相同报告逐字节重现。该条件不消除其它合法调用时机、feature/enable、计数/容量与返回码要求。[SPEC]
+
+**正常路径**：诊断选定一条已支持并启用的报告路径，记录调用次序及原始返回码。仅EXT路径下的重复查询保证按其规范条件使用；混合路径在日志中标记实现相关，不将差异自动合并为新故障。**失败与回退**：能力缺失保留提交/资源代际/设备日志，停止普通GPU工作后走合法恢复；不故意制造device loss，也不捕获受保护内容。对照测试以host模拟调用序列与诊断分类验证，实际fault能力保持独立设备证据。
+
+权威：[debugging / vkGetDeviceFaultInfoEXT](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/debugging.adoc)、[1.4.368 ChangeLog](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/ChangeLog.adoc)。

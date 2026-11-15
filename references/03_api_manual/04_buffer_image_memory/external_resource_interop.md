@@ -177,3 +177,13 @@ latest 策略要给丢帧保留至少两个 image 的获取余量：`maxImages -
 - [OpenCL runtime 规范固定源码](https://github.com/KhronosGroup/OpenCL-Docs/blob/0027b7f1a5e97b1bf5256888757479e012a5cb59/api/opencl_runtime_layer.asciidoc)：external memory/semaphore FD ownership。[SPEC]
 - [Qualcomm 2026-10-22 教程](https://www.qualcomm.com/developer/blog/2026/10/how-to-share-vulkan-opencl-workloads-android-adreno-gpus)：opaque-FD 路径范围；完整 AHB 流程并不在本文中。[REF]
 - [固定样例能力查询](https://github.com/SnapdragonGameStudios/adreno-gpu-vulkan-code-sample-framework/blob/60a13ff4bfa2eb4e5b293babbeccb9be9e4bfc4f/samples/opencl_interop/code/main/interop_common.cpp)。样例不是无需补错误处理的生产实现。[SAMPLE]
+
+
+<a id="vulkan-video-boundary"></a>
+## Vulkan Video 与外部媒体边界
+
+Camera/MediaCodec 的 AImage/AHB lease、acquire/release fence 与 FOREIGN ownership 合同仍由本卡 Android 段负责。它们不创建 Vulkan video session，也不证明 `VK_KHR_video_queue` 或任何 decode/encode profile 可用。Vulkan 内 codec 操作转到 [Video session / DPB 合同](image.md#vulkan-video-contract)；回退到 MediaCodec 必须保留两套能力与证据状态。[SPEC][ENGINE]
+
+跨平台 external handle 必须分别查询 external buffer/image、semaphore/fence 的 import/export 与 compatible handle types。POSIX FD 成功导入的接管规则不能推广到 Win32：OPAQUE_WIN32 NT handle 导入不转移应用 handle 所有权，应用仍需 CloseHandle；OPAQUE_WIN32_KMT 不持有 payload 引用，必须保持原始资源存活。内存共享不共享执行顺序，不同 API 的 queue ownership、layout 和同步载荷必须逐项约定；不支持匹配 handle 或保护属性时拒绝零拷贝，使用允许的显式复制路径。protected 内容不能用回读或无保护复制作为通用回退。[SPEC]
+
+固定规范（Vulkan 1.4.368，source-read；不是设备验证）：[external memory Win32 ownership](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/memory.adoc)；[external semaphore and fence](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc)。

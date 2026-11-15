@@ -114,7 +114,7 @@ Producer 命令（如 vkCmdCopyBuffer / vkCmdDispatch 写入 buffer）
 3. 跨 queue 时只发 release barrier 未发 acquire barrier，或 family index 填反。[TOOL]
 4. `offset` / `size` 未对齐，触发 validation error。[TOOL]
 5. 对 host-visible buffer 的 CPU 写入未使用 `VK_ACCESS_HOST_WRITE_BIT`。[TOOL]
-6. `dstStageMask` 设为 `TOP_OF_PIPE_BIT`，consumer 过早开始执行。[TOOL]
+6. `dstStageMask` 设为 `TOP_OF_PIPE_BIT`，通常过度阻塞执行，且不能用该无访问阶段表达 consumer 的内存访问；按真实消费者设置 stage/access。[TOOL]
 
 ---
 
@@ -155,7 +155,7 @@ Producer 命令（如 vkCmdCopyBuffer / vkCmdDispatch 写入 buffer）
 
 ### in-flight 风险
 
-- Barrier 只保证录制它的 command buffer 内部及同一 queue 的提交顺序；不能跨 queue 同步（跨 queue 需 semaphore + ownership transfer）。[SPEC]
+- Barrier 只保证录制它的 command buffer 内部及同一 queue 的提交顺序；不能跨 queue 同步（跨 queue 需 semaphore；仅在跨 family 且该资源需要显式ownership时另做transfer）。[SPEC]
 
 ---
 
@@ -199,14 +199,14 @@ Producer 命令（如 vkCmdCopyBuffer / vkCmdDispatch 写入 buffer）
 ### 移动端
 
 - 减少每帧 buffer barrier 数量；对 per-frame uniform/storage buffer 可考虑使用 triple-buffering 而非每帧 barrier。[ENGINE]
-- 不要对只读 buffer（如静态 vertex/index buffer）插入 barrier。[HEUR]
+- 连续只读访问通常无需额外内存依赖；静态vertex/index buffer首次上传写→读仍需正确同步。[HEUR]
 
 ---
 
 ## 13. 专家经验
 
 **经验**：
-写 buffer barrier 前先回答四个问题：谁写、写什么范围、谁读、读什么范围。若 producer 与 consumer 在同一 queue family，直接用 `VK_QUEUE_FAMILY_IGNORED` 即可，不要炫技做 ownership transfer。若必须跨 queue，牢记 release 与 acquire 必须成对，并且目标 queue 的提交必须等待源 queue 的 semaphore signal。
+写 buffer barrier 前先回答四个问题：谁写、写什么范围、谁读、读什么范围。若 producer 与 consumer 在同一 queue family，直接用 `VK_QUEUE_FAMILY_IGNORED` 即可，不要炫技做 ownership transfer。若跨 queue 但同 family，不做ownership transfer；若跨 family 且需保留内容、没有maintenance9例外，release 与 acquire 必须成对，并且目标 queue 的提交必须等待源 queue 的 semaphore signal。
 
 **适用条件**：
 同 queue buffer 读写切换、compute dispatch 之间的数据传递、跨 queue family 的 buffer 共享。
@@ -238,3 +238,18 @@ CPU-GPU 同步（用 fence）；跨 queue 全局顺序（用 semaphore）；只�
 3. `VK_WHOLE_SIZE` 与 offset 的对齐要求。
 4. Synchronization2 中 `VkBufferMemoryBarrier2` 的扩展 access flag。
 5. 不同驱动对 buffer barrier 的缓存行为差异。
+
+
+<a id="buffer-range-sync-contract"></a>
+
+## 18. Buffer 范围与queue/family分离合同
+
+**条件/正常路径**：buffer barrier offset相对buffer，不是allocation；offset小于buffer size，size为非零合法范围或WHOLE_SIZE。它不继承nonCoherentAtomSize的host flush对齐约束。producer TRANSFER_WRITE→consumer VERTEX_ATTRIBUTE_READ/INDEX_READ/SHADER_READ分别选真实stage/access，不能因最终用途只读而漏掉首次上传依赖。[SPEC]
+
+**失败**：不同queue但同family需要semaphore访问同步，不需要ownership release/acquire。不同family的EXCLUSIVE保内容基线才需成对transfer；CONCURRENT仍需访问同步；maintenance9按 [ownership合同](synchronization2.md#maintenance-ownership-contract) 判断。buffer handle范围barrier不是所有底层alias的通用内存依赖。
+
+**回退**：范围分析不充分时使用覆盖实际共享访问的global memory barrier并保持正确stage/access，或隔离alias；不能把host fence当device消费者的自动可见性保证。stage语义遵循 [barrier合同](pipeline_barrier.md#barrier-scope-contract)。
+
+**验证**：测试非零bindOffset、子buffer范围边界、首次静态上传、同family两queue、跨family功能开关与alias；每种路径分别记录同步和所有权条件。
+
+固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[synchronization#synchronization-buffer-memory-barriers](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-buffer-memory-barriers)；[resources#resources-sharing](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/resources.adoc#resources-sharing)。[SPEC]

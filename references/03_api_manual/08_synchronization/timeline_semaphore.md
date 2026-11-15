@@ -28,7 +28,7 @@ VkDevice（启用 timelineSemaphore feature）
   → GPU 侧：vkQueueSubmit2 通过 VkSemaphoreSubmitInfo.value 递增 counter
   → CPU 侧：vkGetSemaphoreCounterValue 查询 / vkWaitSemaphores 阻塞等待 / vkSignalSemaphore 主动推进
   → 下游 submit 或 CPU 逻辑通过更高 value 建立依赖
-  → vkDestroySemaphore（counter 不再被任何 wait 引用）
+  → vkDestroySemaphore（所有已提交 signal/wait 引用结束）
 ```
 
 ### 上游依赖
@@ -65,7 +65,7 @@ VkDevice（启用 timelineSemaphore feature）
 | `vkWaitSemaphores` | CPU 侧阻塞等待一个或多个 timeline semaphore 达到指定 value。[SPEC] |
 | `vkSignalSemaphore` | CPU 侧主动 signal timeline semaphore 到指定 value（必须大于当前 counter）。[SPEC] |
 | `vkQueueSubmit2` | 通过 `VkSemaphoreSubmitInfo.value` 在 GPU 侧 signal/wait timeline value。[SPEC] |
-| `vkDestroySemaphore` | 销毁 semaphore；必须确保 GPU 已无任何 wait 引用该 value 区间。[SPEC] |
+| `vkDestroySemaphore` | 销毁 semaphore；必须确保所有引用该 semaphore 的已提交命令（signal/wait）均已完成。[SPEC] |
 
 ### 相关扩展 / 版本
 
@@ -112,7 +112,7 @@ vkGetSemaphoreCounterValue(semaphore, &current)
 ### 与 vkQueueSubmit2 配合
 
 ```text
-VkSemaphoreSubmitInfo signalInfo = { .semaphore = tlSem, .value = frameId, .stageMask = ALL_GRAPHICS_BIT };
+VkSemaphoreSubmitInfo signalInfo = { .semaphore = tlSem, .value = frameId, .stageMask = ALL_COMMANDS_BIT };
 VkSemaphoreSubmitInfo waitInfo   = { .semaphore = tlSem, .value = frameId - FRAMES_IN_FLIGHT, .stageMask = ALL_COMMANDS_BIT };
 VkSubmitInfo2 submit = { ..., pSignalSemaphoreInfos = &signalInfo, pWaitSemaphoreInfos = &waitInfo };
 vkQueueSubmit2(queue, 1, &submit, fence_optional);
@@ -127,7 +127,7 @@ vkQueueSubmit2(queue, 1, &submit, fence_optional);
 | `VkSemaphoreTypeCreateInfo.semaphoreType` | 必须为 `VK_SEMAPHORE_TYPE_TIMELINE`；创建后不可切换。[SPEC] | 创建 binary semaphore 后却按 timeline 用 `vkGetSemaphoreCounterValue`。[TOOL] |
 | `VkSemaphoreTypeCreateInfo.initialValue` | Counter 起始值；通常设 0；signal 执行时须大于当前 counter；wait value 可以重复，也可以小于或等于当前 counter（此时已满足）。[SPEC] | initialValue 设非 0 但 wait 逻辑默认从 0 开始递增，导致首帧错位。[ENGINE] |
 | `VkSemaphoreSubmitInfo.value` | submit2 中直接嵌入 timeline value；signal value 必须严格单调递增。[SPEC] | 同一 semaphore 的两次 signal value 相同或回退，触发 VUID。[TOOL] |
-| `VkSemaphoreSubmitInfo.stageMask` | signal 阶段 mask；wait 阶段 mask 控制阻塞 pipeline stage。[SPEC] | wait stage 设为 `TOP_OF_PIPE_BIT` 使同步失效或语义错误；应按真实消费阶段设置。[HEUR] |
+| `VkSemaphoreSubmitInfo.stageMask` | signal 阶段 mask；wait 阶段 mask 控制阻塞 pipeline stage。[SPEC] | wait stage 设为 `TOP_OF_PIPE_BIT` 通常过早阻塞，并非天然失效；按真实最早消费阶段设置。[HEUR] |
 | `VkSemaphoreSignalInfo.value` | CPU signal 目标值；必须严格大于当前 counter。[SPEC] | signal 一个 ≤ 当前 counter 的 value → 违反有效使用约束并可能触发 validation 诊断；不存在保证返回的专用错误码。[TOOL] |
 | `VkSemaphoreWaitInfo.pSemaphores` / `pValues` | 多 semaphore 等待时的 value 数组与 semaphore 数组必须按索引对齐。[SPEC] | 数组顺序错位导致等待错误的目标 value。[TOOL] |
 
@@ -153,7 +153,7 @@ vkQueueSubmit2(queue, 1, &submit, fence_optional);
 
 ### 销毁阶段
 
-- [ ] 是否确认 GPU 已无任何 wait 引用当前及未来 value？[SPEC]
+- [ ] 是否确认所有已提交 signal/wait 命令及相关 host 调用都已结束？[SPEC]
 - [ ] 是否在 device destroy 之前完成 semaphore destroy？[SPEC]
 - [ ] 是否避免在 `vkDeviceWaitIdle` 之前销毁仍被 pending submit 引用的 timeline semaphore？[ENGINE]
 
@@ -221,7 +221,7 @@ vkQueueSubmit2(queue, 1, &submit, fence_optional);
 ### in-flight 风险
 
 - Wait value 引用的 counter 区间未达到前，不能销毁 semaphore。[SPEC]
-- CPU `vkWaitSemaphores` 持有引用时，GPU 侧销毁语义不会被强制同步；必须显式 idle 后销毁。[SPEC]
+- CPU `vkWaitSemaphores` 仍在执行时不得并发销毁；完成相关 host 调用及全部已提交引用后才能销毁，device idle 是一种保守实现而非唯一完成证明。[SPEC]
 - Frames-in-flight 模型下，counter `value - FRAMES_IN_FLIGHT` 之前的资源才能安全释放。[ENGINE]
 
 ---
@@ -241,7 +241,7 @@ vkQueueSubmit2(queue, 1, &submit, fence_optional);
 
 ### 资源访问同步
 
-- Semaphore 仅建立执行依赖，不保证 memory availability / visibility；跨 queue 资源访问仍需正确 stage mask / access mask（synchronization2 中 `VkSemaphoreSubmitInfo.stageMask`）。[SPEC]
+- Queue semaphore signal/wait 建立 memory dependency，包含作用域内的 availability / visibility；`VkSemaphoreSubmitInfo.stageMask` 限定执行作用域，并没有 accessMask 字段。跨 family ownership transfer 与 image layout transition 仍须单独满足。[SPEC]
 - Frames-in-flight 模型下，资源 release 必须在 wait value 完成之后进行，否则 hazard。[ENGINE]
 
 ### Swapchain 交互风险
@@ -278,7 +278,7 @@ vkQueueSubmit2(queue, 1, &submit, fence_optional);
 
 - 移动 GPU 跨 queue 同步代价高；tile-based renderer 上 timeline semaphore 应避免在 render pass 内部引用。[ANDROID]
 - Frames-in-flight 数量建议 ≤ 2，避免移动端内存压力与 tile memory 翻倍。[ANDROID]
-- Swapchain acquire 的 stage mask 设为 `COLOR_ATTACHMENT_OUTPUT_BIT` 即可，避免 `ALL_COMMANDS_BIT` 造成不必要阻塞。[HEUR]
+- 若首次swapchain访问是color attachment写，acquire 的 stage mask 可设为 `COLOR_ATTACHMENT_OUTPUT_BIT` ；copy/compute等首次访问须选择对应最早消费者stage，不能一律套用。避免 `ALL_COMMANDS_BIT` 造成不必要阻塞。[HEUR]
 
 ---
 
@@ -294,7 +294,7 @@ vkQueueSubmit2(queue, 1, &submit, fence_optional);
 - 跨 graphics / compute / transfer queue 的精确事件依赖。
 - 长异步任务链需要 counter 追踪（如流式上传、texture decoding）。
 - 目标设备支持 Vulkan 1.2+ 或启用 `VK_KHR_timeline_semaphore`。
-- Vulkan 1.4 设备上可无条件使用。
+- Vulkan 1.4 仍须显式启用 timelineSemaphore，并满足 submit 与生命周期约束。
 
 **不适用情况**：
 - 目标设备为旧 Android 驱动，仅支持 Vulkan 1.1 且未实现 `VK_KHR_timeline_semaphore`。
@@ -325,3 +325,16 @@ vkQueueSubmit2(queue, 1, &submit, fence_optional);
 5. Timeline semaphore 与 `VK_KHR_external_semaphore` / `VK_KHR_external_semaphore_fd` 跨进程传递的 counter 语义和同步点。[SPEC]
 6. Android 的 WSI binary semaphore 与应用 timeline 之间如何通过提交建立显式依赖；不得依赖 present 隐式推进 counter。[SPEC]
 7. `vkSignalSemaphore` 在 GPU 已 pending signal 但未完成时的精确语义（是否允许 host 提前推进）。[SPEC]
+
+
+<a id="timeline-retirement-contract"></a>
+
+## 16. Timeline 完成点不是任意 counter 合同
+
+**条件/正常路径**：给每个 GPU 工作分配受控 value，signal 作用域必须覆盖要退役资源的全部最后使用；通用帧退役示例用 ALL_COMMANDS，而非只覆盖图形的 ALL_GRAPHICS。signal/wait 的 memory dependency 见 [同步合同](synchronization2.md#cross-queue-host-contract)。跨 queue 的多个 signal 必须安排合法执行顺序，不能仅靠 host 分配递增整数假定 GPU 执行递增。[SPEC]
+
+**失败**：host vkSignalSemaphore 推进计数不证明之前 GPU 工作已完成，不能用它伪造回收完成点；也不得越过 pending signal 的限制。wait timeout 仍保留资源。首帧 frameId−framesInFlight 不得发生 unsigned 下溢，未存在的历史 wait 应省略或等待初始已满足值。[SPEC][ENGINE]
+
+**回退/验证**：无 timeline feature 时用 fence + binary semaphore 的显式状态机；WSI acquire/present 仍用 binary。模拟多 queue 完成乱序、CPU signal、timeout、首次和末次帧；销毁 semaphore 前所有引用它的已提交命令（包括 signal 和 wait）及相关 host 调用都必须结束，不能仅检查“无未来 wait”。
+
+固定依据：Vulkan 1.4.368，commit `fa30d4e312e843193601be7cb926c7e25d9ec885`；[synchronization#synchronization-semaphores-signaling](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-semaphores-signaling)；[synchronization#synchronization-semaphores-hostops](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-semaphores-hostops)。[SPEC]
