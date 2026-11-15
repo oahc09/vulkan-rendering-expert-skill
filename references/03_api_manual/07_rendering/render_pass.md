@@ -118,7 +118,7 @@ VkAttachmentDescription[]
 
 - [ ] `vkCmdBeginRenderPass` 指定的 framebuffer 与 render pass 兼容？
 - [ ] `renderArea` 是否合理？（过小不能裁剪所有渲染工作，过大增加 load/store 开销）[TOOL]
-- [ ] Clear value 数量与 attachment 数量匹配？
+- [ ] `clearValueCount` 是否大于使用 CLEAR 的 attachment 最大索引（包括适用的 stencilLoadOp CLEAR）？它不要求等于总 attachment 数量；没有 CLEAR 附件时可为零（VUID-VkRenderPassBeginInfo-clearValueCount-00902）。[SPEC]
 - [ ] Draw 使用的 pipeline 与当前 subpass 的 attachment 数量/格式兼容？
 
 ### 销毁阶段
@@ -170,7 +170,7 @@ VkAttachmentDescription[]
 
 ### 使用时机
 
-- 在 command buffer 录制阶段通过 `vkCmdBeginRenderPass` 进入，draw 命令必须在其内部。[SPEC]
+- 传统路径通过 `vkCmdBeginRenderPass` 进入 render-pass instance；普通 draw 也可位于合法 dynamic-rendering instance，不要求一律使用传统 RenderPass。[SPEC]
 
 ### 销毁时机
 
@@ -196,7 +196,7 @@ VkAttachmentDescription[]
 
 ### 资源访问同步
 
-- Attachment 的 layout transition 通常由 render pass begin/end 自动处理，但仍需正确设置 `initialLayout` / `finalLayout`。[SPEC]
+- 传统 RenderPass 按 initial/subpass/final layout 描述执行所需的隐式 transition；相同 layout 不凭空发生转换，也不替代 producer/consumer 内存依赖。本比较两端都为 COLOR_ATTACHMENT_OPTIMAL，scope 外使用显式屏障。[SPEC]
 - Input attachment 的读取需要 `INPUT_ATTACHMENT_READ_BIT` 与对应 stage。[SPEC]
 
 ---
@@ -268,3 +268,11 @@ VkAttachmentDescription[]
 3. Self-dependency 与 `VK_DEPENDENCY_BY_REGION_BIT` 的精确限制。
 4. Dynamic rendering 与 render pass 混合使用时的兼容性规则。
 5. 特定驱动对 render area 的优化行为。
+
+### delivery19-render-organization：受限实际绘制比较
+
+Tests `cases19/render_organization/run.py` 在 CPU ICD 上运行传统 RenderPass → dynamic rendering →传统恢复；同一 vertex/fragment shader、非对称 4×4 图案与逐像素 CPU 参考。两路径均先显式转换至 COLOR_ATTACHMENT_OPTIMAL，再写入并显式转换供拷贝读回；传统 attachment initial/final 保持该 layout。各自 pipeline 合法，不声称两 pipeline/layout 可互换。[ENGINE]
+
+记录的是一次场景创建的 RP/Framebuffer/pipeline 对象与 begin/draw 调用数，不是每帧重建成本、驱动内存或性能。默认保留传统基线；只有调用者明确禁止应用 RP 对象时，才在已通过输出门的候选中选择 dynamic。性能要求返回 NEEDS_MEASUREMENT。缺动态能力会阻塞整个比较，不能据此宣称传统路径不合法；未实测不支持设备回退。[HEUR]
+
+单提交、单颜色附件、单样本，无 subpass/local-read/tile/深度/物理硬件性能结论；两路径错误参考均必须真实失败。原始完整日志与来源哈希由 runner 保留，不把此例当外部工程或全 C2 完成。[ENGINE]

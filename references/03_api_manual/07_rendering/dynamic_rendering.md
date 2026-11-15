@@ -189,7 +189,7 @@ VkImageView（color / depth / resolve）
 
 - Dynamic rendering 在 Android 上可减少 `VkRenderPass`/`VkFramebuffer` 对象数量，但需确认版本/扩展路径可用且 dynamicRendering feature 已启用。[ANDROID]
 - Tile-based GPU 仍受 load/store op 与 render area 影响；不要误以为 dynamic rendering 消除了这些约束。[ANDROID][ENGINE]
-- 部分旧 Mali/Adreno 驱动对 dynamic rendering 的优化可能不如传统 render pass，建议通过 AGI 验证实际开销。[TOOL]
+- 不同驱动的成本需在同一工作负载下测量，不能凭 GPU 品牌推断传统或 dynamic 路径更快。[TOOL]
 
 ---
 
@@ -202,8 +202,8 @@ VkImageView（color / depth / resolve）
 
 ### GPU 侧
 
-- 与传统 render pass 在 GPU 侧行为类似；load/store op 仍是主要带宽杠杆。[ENGINE]
-- 没有 subpass dependency，跨 pass 同步需要显式 barrier，设计不当容易引入气泡。[HEUR]
+- 两路径可满足相同输出合同，但对象数或本例像素相同不证明 GPU 执行成本相同；load/store、同步与 tile 驻留影响需独立测量。[ENGINE]
+- 普通 dynamic rendering 不通过传统 subpass dependency 描述跨 scope 依赖；按实际访问和执行路径选择 pipeline barrier、semaphore 等适当同步机制，不能把所有跨 pass 同步统一为 barrier。过宽依赖的性能影响需实测。[HEUR]
 
 ### 移动端
 
@@ -422,3 +422,11 @@ Git blob `77c199718a6d74d179af4536df47f3cdc5fe25ad`，CC-BY-4.0，本节为释�
 精确 VUID 来自前节固定的独立 1.4.309 validusage.json。实际工具结果与具体
 运行范围以配对 tests 证据为准，不用规范链接代替设备验收。此路径仍为 CPU
 software ICD 正确性，不宣称物理 GPU、移动端画质/性能、外部工程或盲测完成。
+
+### delivery19-render-organization：受限实际绘制比较
+
+Tests `cases19/render_organization/run.py` 在 CPU ICD 上运行传统 RenderPass → dynamic rendering →传统恢复；同一 vertex/fragment shader、非对称 4×4 图案与逐像素 CPU 参考。两路径均先显式转换至 COLOR_ATTACHMENT_OPTIMAL，再写入并显式转换供拷贝读回；传统 attachment initial/final 保持该 layout。各自 pipeline 合法，不声称两 pipeline/layout 可互换。[ENGINE]
+
+记录的是一次场景创建的 RP/Framebuffer/pipeline 对象与 begin/draw 调用数，不是每帧重建成本、驱动内存或性能。默认保留传统基线；只有调用者明确禁止应用 RP 对象时，才在已通过输出门的候选中选择 dynamic。性能要求返回 NEEDS_MEASUREMENT。缺动态能力会阻塞整个比较，不能据此宣称传统路径不合法；未实测不支持设备回退。[HEUR]
+
+单提交、单颜色附件、单样本，无 subpass/local-read/tile/深度/物理硬件性能结论；两路径错误参考均必须真实失败。原始完整日志与来源哈希由 runner 保留，不把此例当外部工程或全 C2 完成。[ENGINE]
