@@ -326,3 +326,11 @@ Sources checked 2026-11-15:
 Normative source content is not vendored here; summaries and scoped rules are
 original. Latest online pages and the frozen standard registry are distinct
 sources, not silently relabeled as one SC release snapshot.
+
+### v1.0.19 实际 loader 准入与场景交付
+
+[能力协商场景合同](physical_device.md#delivery19-capability-admitted-scene)
+将 loader/设备查询与真实间接绘制连通。头文件版本、loader 可用版本、请求
+instance 版本和设备版本不是同一个事实；只有查询数据不足以证明 feature
+已启用或场景通过。入口固定 core1.3、单 CPU device 的保守范围，未知/多设备
+拒绝，缺工具或执行失败不降格成 PASS；不宣称通用 loader/ICD/平台组合验收。
