@@ -26,7 +26,7 @@
 VkDevice
 → VkQueryPool (Create，指定 queryType + queryCount)
 → 命令录制:
-   ├─ vkCmdResetQueryPool (重置为可用)
+   ├─ vkCmdResetQueryPool (重置为 unavailable，等待后续写入)
    ├─ vkCmdBeginQuery / vkCmdEndQuery (occlusion / pipeline stats)
    ├─ vkCmdWriteTimestamp (timestamp)
    └─ vkCmdCopyQueryPoolResults (GPU 侧拷贝到 buffer)
@@ -43,7 +43,7 @@ VkDevice
 
 ### 下游影响
 
-- query 结果需通过 fence / semaphore 或 `VK_QUERY_RESULT_WAIT_BIT` 同步才能被安全读取。[SPEC]
+- query 可在确认本轮 reset 已执行后非阻塞读取，并检查 `VK_NOT_READY` / availability；完成等待是另一种路径，不是每次 host 读取的强制前提。[SPEC]
 - 复用 query 前必须 reset（`vkCmdResetQueryPool` 或 `vkResetQueryPool`）。[SPEC]
 
 ---
@@ -74,7 +74,7 @@ VkDevice
 - `VK_EXT_host_query_reset`（Vulkan 1.2 核心 `vkResetQueryPool`）：host 侧批量重置，避免占用 command buffer。[SPEC]
 - `VK_KHR_performance_query`：性能计数器查询（厂商 / Counter-based profiling）。[SPEC]
 - `VK_EXT_transform_feedback`：与 `VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT` 配合。
-- Android 可用性：核心 occlusion / timestamp / pipeline stats 全部可用；`vkResetQueryPool` 在 Vulkan 1.2+ 设备可用；performance query 受驱动支持。[ANDROID]
+- Android 可用性必须按设备与队列查询：timestamp 需该队列非零 validBits，pipeline statistics 需支持并启用 feature；host reset 需对应版本/扩展及 hostQueryReset 启用；performance query 另查扩展、counter 与 pass。[ANDROID]
 
 ---
 
@@ -94,7 +94,7 @@ VkDevice
 4. vkWaitForFences(fence)
 5. vkGetQueryPoolResults(pool, firstQuery, queryCount, dataSize, pData,
                          stride, flags = VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT)
-   - 返回值为通过 depth/stencil 测试的 sample 数（uint64）
+   - flags=0 不保证精确样本计数；精确结果另需 occlusionQueryPrecise feature 支持并启用，且 query 设置 PRECISE flag
 ```
 
 ### 4.2 Timestamp Query
@@ -108,8 +108,11 @@ VkDevice
    vkCmdWriteTimestamp(cmd, pipelineStage = BOTTOM_OF_PIPE, pool, query = 1)
 3. 提交 + wait fence
 4. vkGetQueryPoolResults(..., flags = VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT)
-5. 计算耗时 = (timestamps[1] - timestamps[0]) * timestampPeriod (ns)
-   - timestampPeriod 来自 VkPhysicalDeviceLimits
+5. 同一计时域、同一代且结果已就绪，确认区间短于可消歧回绕周期后：
+   ticks = (timestamps[1] - timestamps[0]) mod 2^timestampValidBits
+   duration_ns = ticks * timestampPeriod
+   - validBits 来自所用 queue family；period 来自 VkPhysicalDeviceLimits
+   - 64_BIT 只决定读取位宽，不扩展硬件计数器；未知回绕/时钟关系不输出时长
 ```
 
 ### 4.3 Pipeline Statistics Query
@@ -148,7 +151,7 @@ VkDevice
 
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
-| `pipelineStage` | 时间戳在指定 stage 完成时写入；常选 `TOP_OF_PIPE`（命令开始）与 `BOTTOM_OF_PIPE`（命令结束）。[SPEC] | 用 host 阶段或不可用 stage 触发 VUID。[SPEC] |
+| `pipelineStage` | 时间戳按指定 stage 的执行作用域写入；`TOP_OF_PIPE` / `BOTTOM_OF_PIPE` 用于包络工作，但不等于单条命令的精确开始/结束时间。[SPEC] | 用 host 阶段或不可用 stage 触发 VUID。[SPEC] |
 | `query` | 必须落在 pool 范围内。[SPEC] | 越界。[TOOL] |
 
 ---
@@ -179,16 +182,16 @@ VkDevice
 
 ## 7. 高频错误
 
-1. 未在每次使用前 reset query，导致结果累加或 `VK_NOT_READY`。[SPEC]
+1. 未将普通 timestamp query 重置到 unavailable 就再次写入，违反使用约束；不能把非法使用解释成合法累加或保证返回 NOT_READY。[SPEC]
 2. timestamp 未使用 `VK_QUERY_RESULT_64_BIT`，32 位结果可能截断 / wrap / saturate，影响测量精度（规范允许 32 位，但工程上不推荐）。[SPEC]
 3. 对 timestamp 使用 `PARTIAL_BIT` 触发 VUID。[SPEC]
 4. 非阻塞读取时未检查 `VK_NOT_READY` / availability，或把上一轮 availability 当成本轮结果。[SPEC]
 5. pipeline statistics query 未启用 feature。[SPEC]
-6. occlusion query 在 render pass 外调用 begin / end（部分场景合法但需注意 layout）。[ENGINE]
+6. 将 occlusion 查询作用域误当作 image layout 问题；应按 query 类型、render-pass/subpass 与 begin/end 对应关系逐项检查。[ENGINE]
 7. 同一 query index 被 in-flight 多帧并发使用，结果错乱。[ENGINE]
 8. `stride` 与 flags 不一致，造成数据错位读取。[TOOL]
 9. `vkGetQueryPoolResults` 在未 wait 时返回 `VK_NOT_READY` 被误判为错误。[ENGINE]
-10. `vkResetQueryPool` 在 command buffer 引用 query 期间调用。[SPEC]
+10. `vkResetQueryPool` 在已提交且未完成的命令仍引用该范围时调用，或并发 get/reset 同一范围而未满足 host 同步。[SPEC]
 
 ---
 
@@ -204,9 +207,8 @@ VkDevice
 
 ### RenderDoc / AGI
 
-- AGI Profiler 可直接显示 query 结果与时间戳区间，无需应用层 polling。[TOOL]
-- AGI Timeline 中 timestamp query 对应的 GPU 时长可作为基准。[TOOL]
-- RenderDoc 可在 draw call inspector 中查看 occlusion 结果（需应用正确录制 query）。[TOOL]
+- 先核验目标版本、平台与采集模式是否实际提供 query/timing 数据；没有采集记录时不保证工具视图或可用指标。[TOOL]
+- 工具时间线不是天然基准；区分采集扰动、CPU/设备计时域及校准误差，不把不同域直接相减。[TOOL]
 
 ### 日志 / 代码检查
 
@@ -237,7 +239,7 @@ VkDevice
 
 ### in-flight 风险
 
-- Query pool 本身也受已提交引用的生命周期约束；query index 必须按 frame-in-flight 分槽，否则上一帧未完成时下一帧 reset 会污染结果。[ENGINE]
+- Query pool 本身也受已提交引用的生命周期约束；query index 必须保护代际与引用完成；按 frame-in-flight 分槽是可选实现，不能覆盖未完成的引用。[ENGINE]
 
 ---
 
@@ -257,8 +259,8 @@ VkDevice
 ### Stage 选择
 
 - `vkCmdWriteTimestamp` 的 pipelineStage 决定时间戳记录的语义位置：
-  - `TOP_OF_PIPE`：命令开始执行时刻。
-  - `BOTTOM_OF_PIPE`：命令完成时刻。
+  - `TOP_OF_PIPE`：顶部执行作用域边界，非单条命令精确开始时刻。
+  - `BOTTOM_OF_PIPE`：底部执行作用域边界，非单条命令精确结束时刻。
   - `VERTEX_SHADER` / `FRAGMENT_SHADER` / `COMPUTE_SHADER` / `TRANSFER` / `COLOR_ATTACHMENT_OUTPUT` 等：对应 stage 完成。[SPEC]
 - 配对 stage 必须能正确包络被测量的 GPU 工作。[ENGINE]
 
@@ -284,14 +286,14 @@ VkDevice
 
 ### GPU 侧
 
-- occlusion query 在 tile-based GPU 上有额外开销（需 flush tile）；避免对每个 draw 启用。[ENGINE]
-- timestamp query 数量本身无显著开销，但读取时机影响 CPU 路径。[ENGINE]
-- pipeline statistics query 通常无显著 GPU 开销，可用于调试期统计。[ENGINE]
+- occlusion query 可能扰动 tile-based GPU 的执行；是否导致额外 tile 工作及其成本需目标实现实测，按采样需要选择频率。[ENGINE]
+- timestamp query、同步和读取都可能扰动工作负载；不预设开销可忽略，需同条件对照启用/禁用测量。[ENGINE]
+- pipeline statistics 的开销随实现与统计项变化；仅在实测后报告，不做普适低开销保证。[ENGINE]
 
 ### 移动端
 
 - 减少每帧 query 数量；按需开启 occlusion（如粒子 / 遮挡剔除验证）。[ENGINE]
-- 用 AGI Profiler 替代手写 timestamp 测量 GPU 段耗时，避免应用层 polling。[TOOL]
+- 可比较平台工具与应用内计时路径，但先确认实际支持、时钟关联及测量扰动；不默认工具可替代全部应用查询。[TOOL]
 - 性能 counter query（`VK_KHR_performance_query`）受厂商驱动支持，使用前需确认可用的 counter 与 pass 数。[ANDROID]
 
 ---
@@ -301,11 +303,11 @@ VkDevice
 **经验**：
 Query pool 是 Vulkan 中少有的“GPU 写、host 读”对象，最容易出错的不是 API 调用本身，而是同步语义：
 - 默认情况下 `vkGetQueryPoolResults` 不会等待 GPU 完成；不带 `WAIT_BIT` 时返回 `VK_NOT_READY` 是合法状态，不是错误。
-- in-flight 多帧时，必须按 frame index 分配 query 槽，否则下一帧 reset 会污染上一帧尚未读取的结果。
+- in-flight 多帧时，槽分配必须保护 generation 与所有引用的完成点；按 frame index 分区是可选方案，不是规范唯一方案。
 - timestamp query 工程上推荐用 64 位结果（规范允许 32 位但可能截断 / wrap / saturate）；`timestampPeriod` 是 ns-per-tick，需用浮点 / double 换算。[SPEC]
 - `vkResetQueryPool`（1.2+）相比 `vkCmdResetQueryPool` 的优势在于不占用 command buffer，可在 host 完成批量重置，简化录制路径。
 - occlusion query 的 Vulkan 保证不会因 TBDR/IMR 而失效；按是否启用 occlusionQueryPrecise 和 PRECISE flag 区分精确计数要求与保守结果。
-- 与 AGI / Profiler 集成时，应用层 query 与 profiler timeline 应对齐，便于交叉验证 GPU 段耗时。
+- 与 profiler timeline 关联前先证明计时域关系并保留校准不确定度；没有校准/关联证据，不声称 CPU、GPU 或不同队列时间线已对齐。
 
 **适用条件**：
 所有需要 GPU 侧计数 / 时间戳测量的场景，包括性能分析、遮挡剔除反馈、调试 GPU 段耗时。
@@ -358,3 +360,72 @@ Query pool 是 Vulkan 中少有的“GPU 写、host 读”对象，最容易出�
 **回退与验证**：不支持 timestamp/counter 时禁用该项或标记 CPU wall-time 为 CPU 测量，不伪称 GPU 时间。测试 reset 前旧 availability、延迟写入、两帧竞争、validBits 回绕、缺少 feature 和 profiling-lock timeout；对照有/无测量开销，工具捕获本身可能扰动结果。
 
 固定依据：Vulkan 1.4.368，commit `fa30d4e312e843193601be7cb926c7e25d9ec885`；[queries#queries-operation](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/queries.adoc#queries-operation)；[queries#queries-timestamps](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/queries.adoc#queries-timestamps)；[queries#profiling-lock](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/queries.adoc#profiling-lock)；[synchronization#calibrated-timestamps](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#calibrated-timestamps)。[SPEC]
+
+<a id="delivery19-timestamp-query-family"></a>
+
+## 17. Delivery19 普通 timestamp 查询族：有界 L1/L2
+
+本合同覆盖普通 `VK_QUERY_TYPE_TIMESTAMP`、单设备单队列、command reset 与
+host `vkGetQueryPoolResults`。不把 performance query、calibrated timestamp、
+Video status、多队列时钟关联或 Vulkan SC 当作已完成。上节 1.4.368 范围合同
+与本节实际工具 **1.4.309** 队列必须分开，不混合规范快照分母。
+
+### 能力、状态与可执行决策
+
+1. 先查询实际 queue family 的 `timestampValidBits` 和设备 `timestampPeriod`。
+   validBits 为零即该队列不支持，不能借其他队列或品牌推定；缺失能力事实为
+   UNKNOWN。验证 stage 对该队列合法；本族仅使用已检查队列上的 TOP/BOTTOM。
+2. 普通新建 query 不能直接当成有结果。先录制并执行 reset，证明 reset 完成，
+   再做不带 WAIT 的查询；本轮 unavailable 应作为 NOT_READY/availability=0
+   处理，不读取结果占位值为耗时，也不视为错误修复成功。
+3. 写入两 query、提交、完成等待后，读取同轮结果与 availability。读取成功和
+   非零 availability 仍不能单独证明属于期望 generation；应用维护槽代际、
+   reset 执行证明和所有引用完成点。旧 available + 新 reset 尚未执行即拒绝消费。
+4. 普通 timestamp 只含一个结果整数。设元素宽度 W=4 或 8，带 availability
+   时每 query 占 2W，否则 W；多 query 首址间距为 stride。本族只接收 count>=1，dataSize 至少覆盖
+   `(queryCount-1)*stride + 单query字节数`。另查指针/stride对齐、池范围、
+   availability空间、queryCount>1时非零stride，不能仅用 count*W 判断。
+5. timestamp 禁止 PARTIAL；本族不静默忽略未知 flag。支持状态与 device API
+   调用许可、查询结果就绪以及统计解释资格分别返回，不用一个 PASS 混淆。
+
+| 1.4.309 规范义务 | 精确依据 / 边界 |
+|---|---|
+| firstQuery 在池内、firstQuery+count 不越界 | `VUID-vkGetQueryPoolResults-firstQuery-09436` / `09437` |
+| count>1 的 stride 非零 | `VUID-vkGetQueryPoolResults-queryCount-09438` |
+| timestamp 不允许 PARTIAL | `VUID-vkGetQueryPoolResults-queryType-09439` |
+| 被读取 query 不得 uninitialized | `VUID-vkGetQueryPoolResults-None-09401` |
+| 32/64 位数据指针及 stride 对齐 | `VUID-vkGetQueryPoolResults-flags-02828` / `00815` |
+| availability 也必须容纳 | `VUID-vkGetQueryPoolResults-stride-08993` |
+| 输出存储覆盖最后一项 | `VUID-vkGetQueryPoolResults-dataSize-00817` |
+| 写入队列支持 timestamp、索引有效、query unavailable | `VUID-vkCmdWriteTimestamp-timestampValidBits-00829` / `query-04904` / `None-00830` |
+
+代际一致、测量可解释性和短于回绕周期是明确的消费策略，不伪造额外 VUID。
+该表是所列 API 的受限规则，不声称覆盖所有 query 类型或扩展 valid usage。
+
+### 时间解释与证据
+
+本族只对 64_BIT 结果进行时长换算；32 位结果仅验证布局/就绪，不假定截断或饱和行为可逆。
+只有两端属于同一已证明计时域、同代且可用，并有独立区间上界证明其短于
+`2^validBits * timestampPeriod`，才将模差换算为纳秒。缺少这些条件返回
+UNKNOWN / NOT_READY / STALE，而不是输出零、负数或未经证明的百分比收益。
+32 位读取不能保留超过其位宽的信息；64 位读取也不能扩大硬件 validBits。
+TOP/BOTTOM 包络区间不等于某条 fill/dispatch 的独占执行时间。
+
+配对测试执行 reset 完成→未写 query 读取→两 timestamp 包络 fill→fence→结果
+与内容 readback，并独立检测非法 stride、dataSize、PARTIAL 的真实 Validation
+拒绝。故障调用由 callback 中止；缺少期望诊断不能算负控通过。CPU 规则还应
+拒绝旧代、缺失 reset 完成、不同计时域、回绕不明与未知 feature。CPU ICD 的
+时间戳仅为该软件实现的 API 行为证据，不能称作物理 GPU 耗时或性能优化收益。
+
+### 来源与兼容修正
+
+- 正文：[Vulkan-Docs v1.4.309 queries](https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.309/chapters/queries.adoc)，
+  Git blob `fb4d544cba26c0bbbe982c1a82dbf45fc06d28fb`；重点为 query operation、
+  results、wait-bit-not-set 与 timestamps 段。来源为 Khronos，CC-BY-4.0；本节为释义。
+- 实际 VUID：SDK/Headers 的 `validusage.json` API 1.4.309，SHA256
+  `f61afea8ca6097342cae1b65bfab81675ee7fdc2d809403e083329b7d56597a7`。
+  其中源 revision `43d153dd7f9f5e8b9f79d26d868c82a82b9ef80b` 不是本页正文的
+  Vulkan-Docs commit，不能构造错误链接或宣称同一仓库 revision。
+- 本次同步修正旧卡片中的 reset可用、所有Android功能可用、flags0精确计数、
+  必须等待才能读取、无显著开销与直接时钟对齐等过度表述。保留合法非阻塞读取，
+  将平台与测量成本改为查询/实测条件，不改变 Vulkan API，只收紧错误推断。
