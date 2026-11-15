@@ -279,3 +279,19 @@ Uniform 数据极少或完全不变化的场景。
 **验证**：上传后 GPU 校验与 GPU 写后 CPU 校验分别验证 coherent/non-coherent 两条路径；测试帧槽不足时是否等待/扩容/跳过，而不是破坏 pending 数据。
 
 固定依据：Vulkan 1.4.368，commit `fa30d4e312e843193601be7cb926c7e25d9ec885`；[memory#memory-device-hostaccess](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/memory.adoc#memory-device-hostaccess)；[synchronization#synchronization-submission-host-writes](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-submission-host-writes)。[SPEC]
+
+<a id="delivery19-robust-buffer-access"></a>
+## v1.0.19：普通 SSBO robustness2 的可执行语义边界
+
+`cases19/robust_buffer` / `tools/robust_buffer19.py` 冻结 Vulkan 1.4.309，针对普通 descriptor 引用、uint32 非原子 SSBO 访问；不是 BDA、cooperative 指令、完整 robustness/debug 或物理 GPU 性能验收。
+
+- **核心 robustness 不等于严格零值。** `robustBufferAccess` 的越界读可能返回绑定范围内其他数据或规范允许值，写也可能修改该 buffer 绑定范围内别处。不能给 core-only 路径套“读零、写丢弃”的严格测试，也不能用它代替算法索引正确性。
+- **robustness2 先查询，再启用。** 实际检查 `VK_EXT_robustness2`、core `robustBufferAccess`、`robustBufferAccess2` 和独立 `nullDescriptor`；启用 robust2 必须同时启用 core robust（04000）。本路径无 per-pipeline robustness override；pipeline/shader override、其他指令或未启用状态不得沿用本结论。
+- **descriptor range 与 padding 分开。** storage descriptor 边界可按实际 `robustStorageBufferAccessSizeAlignment` 向上取整，Vulkan 1.4.309 的合法取值仅1或4，不能套用 uniform 对齐的较大范围。range 到 rounded range 之间不能强制读零。本例将 range 设为实际 alignment 与4的公倍数（至少16），独立底层 buffer 继续保留16字节非零 guard；完整越界 uint32 load 在 rounded range 外读零，store 不修改任何内存。CPU 规则覆盖 padding/部分跨界时明确拒绝严格 oracle，而不是把不确定结果算失败。
+- **同 invocation 顺序有例外。** 非 Volatile load 若读取同 invocation 先前 store 的地址且期间没有对该地址的其他访问，允许返回该 store 值，即使地址越界。实际 shader 先读越界 index，再写另一个越界 index；不能从 store→load 的零值断言推导普遍保证。atomic 返回值另有未定义规则，本例不使用。
+- **NULL descriptor 不是越界。** 启用 nullDescriptor 后真正 `VK_NULL_HANDLE` buffer 的读取按 null 语义返回零，写不生效；不是随意留一个未初始化 descriptor。NULL buffer 必须 offset=0 且 range=VK_WHOLE_SIZE（02999）。禁用 nullDescriptor 时更新 NULL buffer 是02998；负控由 callback 安全中止，后续不 bind/dispatch 未定义 descriptor，不执行关闭保护的 GPU 越界。
+- **零值不足以证明执行。** 同次 dispatch 输出还包含 source 正常范围内的非零首/末值；独立 CPU oracle 验证完整 source（包括 guard）不变及输出。实际 coherent memory requirements/type、shader→host 依赖、fence 退休、编译/验证/反汇编及原始 Validation 日志共同配对。错误参考值必须失败；“没有 VUID”不是结果正确。
+
+规则 `ROBUST2_BUFFER_WITHIN_SCOPE` 只准入限定 metadata，实际 shader 指令顺序、工具与 readback 由 runner 另验。当前 CPU ICD 的支持不推广至手机/物理 GPU、protected、device lost、跨平台或 Vulkan SC。完整 VK18 与原计划外部/盲测仍未完成。
+
+固定来源：[features.adoc / v1.4.309](https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.309/chapters/features.adoc)，blob `e8e07194550ac4f2a28c58939c1df42631338f60`；[descriptorsets.adoc / v1.4.309](https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.309/chapters/descriptorsets.adoc)，blob `3cad5740ff176cbef473b1c4914d56c7810281d0`。[limits.adoc / v1.4.309](https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.309/chapters/limits.adoc)，blob `51bc3b389fa50433fa17164982866c1e2237eb6e`。Khronos CC-BY-4.0，以上为概述；runner 的 compact VUID 与完整 frozen validusage 对照，具体运行范围见 tests 仓 `coverage/v1.0.19/robust-buffer.json`。
