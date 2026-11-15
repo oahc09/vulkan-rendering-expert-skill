@@ -375,3 +375,16 @@ Slug 的解析路径可作知识与画质对照。官网演示、论文、示例
 ### 离屏采样最小可执行参考（候选，非完整 graphics workflow 验收）
 
 先用 [限定纹理采样合同](../../03_api_manual/05_descriptor/sampled_image_descriptor.md#delivery19-texture-sampling) 和测试仓 `cases19/texture_sampling/run.py` 验证上传、采样 descriptor、实际 sampler 访问、依赖与完整像素参考，再接入自己的 graphics material pass。该参考使用 compute sampled read + storage output，不具备 mesh/fragment/呈现功能，不能据此宣布本工作流所有步骤已验收。保留实际输入格式、坐标规则与设备限制，切勿把 nearest 端点色的精确结果推广为线性过滤精度保证。
+
+<a id="delivery19-text-choice"></a>
+### 有限实测：真实字体 bitmap / MSDF 的共同输入与质量门
+
+既有 Scene A 七行实验使用实际 FreeType 无 hint 栅格、同一已加载 glyph 的轮廓、HarfBuzz 布局、固定字体/face/完整变量轴。包含中文、连字、组合标记、双向文本、变量字体与 bitmap-only emoji。不能把不同 ppem、hinting、字体或每表示重新拟合后的结果当作公平 A/B。[ENGINE]
+
+Tests 的 `checks19/run_text_choice.py` 保持原 board、refined、compact 三个 lab 源及数值阈值不变，一次 fresh 顺序执行；之后多 policy 只重用同一份证据，不计为多次独立执行。CPU sampler 一致性与独立轮廓几何误差分开：曲线轮廓参考仍是细分与采样，不是全部像素的解析面积，也不是第二个独立 shaping 引擎。emoji 保留独立 CBDT PNG 解码参考。[ENGINE]
+
+用于有限决策的域仅为六个单色行、四个共同变换。原 65×49 图与 refined/compact 的 y+8 配准窗口使用相同 3185 像素分母计算 `common_crop_mae` 和最大误差；这不是 ink ROI，也不能与不同尺寸 full-tile MAE 混用。原六行 rotate90 的 `UNSUPPORTED_CLIPPING` 不因后续增大画布被改写；新增 square-rotate 与一个有限 perspective 条件单独验采样，不推广到一般透视、近裁剪或整板产品质量。[ENGINE]
+
+没有显式产品质量目标时返回 `NEEDS_QUALITY_TARGET`，不能用 sampler 数值相符或 PASS 字串替代目标。显式目标与逐行 payload 预算共同筛出合格集合，或保留指定基线；没有额外权重，不凭空选“最优”。质量门不等于性能门，性能要求仍需可比帧测量。bitmap fallback 可能降低几何质量；mesh、MTSDF 与其他字体/尺度不自动获得资格。[HEUR]
+
+此链成本是实际纹理 `W*H*16` 格式 payload（含压紧 header/padding），不是 `VkMemoryRequirements.size`、VRAM 驻留、CPU 峰值或整板同时存活内存。压紧前仍生成完整 4× CPU 源；每 compact 行/预算独立 Device。400000/200000/4096 是预登记实验输入，不是通用移动产品预算。软件 Vulkan 结果不证明物理移动设备性能、功耗或热稳定性。[ENGINE]
