@@ -92,7 +92,7 @@ Command Buffer 录制完成
 | `flags`（`VK_FENCE_CREATE_SIGNALED_BIT`） | 控制初始状态；per-frame fence 常初始为 signaled，避免第一帧等待特殊处理。[ENGINE] | 未设置 signaled bit 却在未提交前调用 `vkWaitForFences` 导致死锁。[TOOL] |
 | `fenceCount`（`vkResetFences` / `vkWaitForFences`） | 可批量处理；reset 的 fence 不得关联未完成的 queue 命令，非 pending 的 unsignaled fence 也可 reset。[SPEC] | 对仍关联 pending 命令的 fence reset，或 reset 后跳过 submit 导致后续 wait 死锁。[TOOL] |
 | `waitAll`（`vkWaitForFences`） | `VK_TRUE` 等待全部；`VK_FALSE` 等待任意一个。[SPEC] | 需要等待全部完成却误设为 `VK_FALSE` 导致资源回收时机错误。[ENGINE] |
-| `timeout`（`vkWaitForFences`） | 单位为纳秒；`UINT64_MAX` 为无限等待。[SPEC] | 超时时间过短在低端设备触发 `VK_TIMEOUT`，却未处理该返回值。[TOOL] |
+| `timeout`（`vkWaitForFences`） | 参数为 `uint64_t`，单位纳秒；`UINT64_MAX` 常用作工程上的近似无限等待，并非必然成功或不可取消的保证。[SPEC][ENGINE] | 超时时间过短在低端设备触发 `VK_TIMEOUT`，却未处理该返回值。[TOOL] |
 
 ---
 
@@ -257,3 +257,20 @@ Command Buffer 录制完成
 **回退/验证**：用 queue/device idle 作保守提交完成证明，或覆盖全部使用的 timeline；仍单独处理 presentation。测试首轮无提交、acquire失败、录制失败、submit失败、timeout、wait-any和多queue尾部工作；检查所有状态都不导致错误复用。
 
 固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[synchronization#synchronization-fences-signaling](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-fences-signaling)；[synchronization#synchronization-fences-waiting](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-fences-waiting)；[synchronization#synchronization-fences-unsignaling](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-fences-unsignaling)。[SPEC]
+
+
+<a id="delivery19-external-fence-timeout"></a>
+## 外部历史工程：64 位 timeout 边界与任务隔离
+
+[SPEC] 固定 Vulkan 1.4.368 的 `vkWaitForFences` 文本将 timeout 定义为纳秒时间段，实际精度由实现决定，等待时间可长于请求值。0 表示立即查询；条件未满足可返回 `VK_TIMEOUT`。设备丢失时必须在有限时间内返回 `VK_SUCCESS` 或 `VK_ERROR_DEVICE_LOST`，不保证立即返回。因此不要从 `UINT64_MAX` 推导永不返回、一定成功、已退休或可以销毁资源。
+
+[ENGINE] 包装 API 的形参、默认值、配置解析和调用点都必须保留完整 64 位值。`UINT32_MAX` 仅为 4,294,967,295 ns（约 4.295 秒），不是 64 位最大值。更大请求经过 32 位无符号形参会截断；只改默认值但保留 32 位形参不能修复。短超时本身合法，错误在于违背调用者的等待策略或忽略结果。取消/预算策略应使用可检查结果的有界等待循环，而不是把一个最大 timeout 当成宿主的取消机制。
+
+[EXTERNAL HISTORY] KhronosGroup/Vulkan-Samples PR #1328 / commit `02d3010a3517620e7eedd919217e169c4a188de3` 将原始 `FencePool::wait` 的声明、定义及默认值改为 64 位。前置版本为 `dca8e0842417ef14440135ee48a09870a05d5bff`。可执行准备入口应直接编译这两个版本的原类，并显式标注替身依赖和 API 捕获边界。不能把 HOST 传参回归称为完整 Renderer 构建、真实 GPU 等待超时或设备修复。
+
+[PROCESS] 这个修复历史已经公开且开发者已读答案，仅作为开发/开放答案任务。真正盲测需要项目/根因/修复历史分离、独立 solver 与 reviewer 权限隔离，不能只把答案从报告隐藏后称为盲测。另一个上游 Amber 深度屏障候选要求实际设备的 `depthClampZeroOne`；feature 不可用时保持未运行，不删除需求或更改原始 oracle 后冒称上游复现。
+
+来源与配对：
+- https://github.com/KhronosGroup/Vulkan-Samples/commit/02d3010a3517620e7eedd919217e169c4a188de3
+- https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc
+- tests 仓 `docs/external-fence-task19.md` 记录精确输入、构建替身、前后判据、回滚、负控与剩余门槛。外部工程准备不自动关闭 E2E19、Live、知识或发布封板。
