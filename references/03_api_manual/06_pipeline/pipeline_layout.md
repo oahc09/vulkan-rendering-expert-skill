@@ -90,9 +90,9 @@ Shader resource declaration
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
 | `setLayoutCount` / `pSetLayouts` | set 0..N-1 的顺序必须与 shader 中 set 声明一致。[SPEC] | shader 用 set=1，但 pipeline layout 只提供 set 0。[TOOL] |
-| `pushConstantRangeCount` / `pPushConstantRanges` | offset/size 必须覆盖 shader 中 `layout(push_constant)` 范围；多个 range 的 stage 不能重叠。[SPEC] | 两个 range 在同一 stage 上 offset/size 重叠。[TOOL] |
+| `pushConstantRangeCount` / `pPushConstantRanges` | offset/size 必须覆盖 shader 中 `layout(push_constant)` 范围；任意两个 range 的 stageFlags 不得含同一 stage，即使字节范围不相交；不同 stage 的字节范围可重叠。[SPEC] | 同一 stage 出现在两个 range 中；是否字节重叠不是该创建约束的判据。[TOOL] |
 | `stageFlags` (push constant) | 必须覆盖访问该 push constant 的所有 shader stage。[SPEC] | fragment shader 用 push constant 但 stageFlags 只填 VERTEX。[TOOL] |
-| `layout` compatibility | 绑定 descriptor set 时，当前 pipeline layout 必须与创建 pipeline 时的 layout “兼容”。[SPEC] | 重新创建了“等价”但 handle 不同的 layout，仍被判定不兼容导致 bind 失败。[TOOL] |
+| `layout` compatibility | descriptor set 绑定时核对应 set 定义；pipeline 使用已绑定 set N 时核 compatible for set N 与未被扰乱状态，不要求先绑定 pipeline。[SPEC] | 以 handle 不同判不兼容，或仅比较 set N 而遗漏 0..N、push ranges 和 INDEPENDENT_SETS 标志。[TOOL] |
 
 ---
 
@@ -102,14 +102,14 @@ Shader resource declaration
 
 - [ ] `pSetLayouts` 顺序是否与 shader 中 set index 一致？
 - [ ] 每个 set layout 是否与对应 shader set 的 binding 兼容？
-- [ ] push constant range 是否覆盖所有 stage 且不重叠？
+- [ ] push constant range 是否覆盖实际使用的字节/stage，且任意两 range 的 stageFlags 没有重复 stage？不同 stage 的字节重叠不自动非法。
 - [ ] push constant offset / size 是否满足 `maxPushConstantsSize` 限制？
 
 ### 使用阶段
 
 - [ ] `vkCmdBindDescriptorSets` 的 `firstSet` / `setCount` 是否在此 layout 范围内？
 - [ ] 绑定的 descriptor set 的 layout 是否与 pipeline layout 中对应 set 兼容？
-- [ ] 当前绑定的 pipeline 的 layout 是否与 bind 时使用的 layout 兼容？
+- [ ] 使用已绑定 set N 时，pipeline layout 是否与该 set 的绑定 layout compatible for set N，且该 set 未因其他绑定被扰乱？
 
 ### 销毁阶段
 
@@ -122,8 +122,8 @@ Shader resource declaration
 
 1. Pipeline layout 中 set layout 顺序与 shader set 不一致。[TOOL]
 2. Push constant range stageFlags 未覆盖实际使用 stage。[TOOL]
-3. Push constant range 在同一 stage 重叠。[TOOL]
-4. 重新创建了“看起来一样”的 pipeline layout，但 Vulkan 要求兼容性是严格基于创建参数判定的。[SPEC]
+3. 同一 stage 被列入多个 push constant range，即使这些 range 的字节区间互不相交。[TOOL]
+4. 仅凭 handle 或表面相似性判断 layout compatibility；不同 handle 可以兼容，须按相应兼容关系检查定义。[SPEC]
 5. `vkCmdBindDescriptorSets` 的 set index 超出 pipeline layout 范围。[TOOL]
 6. Descriptor set layout 的 binding 与 shader 不一致，导致 bind 时报 compatibility 错。[TOOL]
 
@@ -275,3 +275,37 @@ runtime/tool identity. Hardware, performance, broader layout features, SC, Live
 and original-plan external-engine acceptance remain separate.
 
 Source: [compute pipeline interface requirements](https://docs.vulkan.org/refpages/latest/refpages/source/VkComputePipelineCreateInfo.html).
+
+<a id="delivery19-layout-push-contract"></a>
+
+### delivery19-layout-push-contract
+
+这是本卡前后表述与创建/更新跨步骤的限定修正，不宣称另一张卡存在反话。
+兼容性不要求相同 handle。普通 pipeline layout 的 **compatible for set N**
+要求 sets 0..N 的 descriptor set layout identically defined、相同 push constant
+ranges，且双方 `VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT` 标志一致。
+**compatible for push constants** 只要求相同 push constant ranges；
+不能把它代替 set N 兼容性。绑定 descriptor set 不要求先绑定 pipeline；
+pipeline 使用旧 set 时仍须满足兼容性及未被其他绑定扰乱的条件。
+
+创建 `VkPipelineLayout`：任意两 range 不得重复同一 stage（00292），
+不是“只禁止同 stage 的字节交叠”。例如 VERTEX[0,4) 与 VERTEX[16,20)
+仍违反此条件；VERTEX[0,16) 与 FRAGMENT[0,16) 不因字节重叠违反此条件，
+但仍须满足范围、stage 有效性及其他创建规则。
+
+更新 `vkCmdPushConstants` 是独立合同：01795 要求更新的每个 byte/stage
+都由 layout range 覆盖；01796 要求每个更新 byte 所重叠的所有 range 的
+stageFlags 都包含在本次更新 stageFlags 中。上述 VERTEX/FRAGMENT 同字节
+范围即使创建合法，也不能只用 VERTEX 更新该重叠区域。还须另核
+offset/size 的 4 字节粒度、设备限额及命令录制条件。创建合法不推出更新合法。
+
+固定正文：Vulkan-Docs commit `fa30d4e312e843193601be7cb926c7e25d9ec885`
+（Registry API 1.4.368），`chapters/descriptorsets.adoc`
+SHA256 `3de692bf6e4f8579de50175be94c564a4580e1b8f0a59ed1e1267e1c3ca88950`，
+`[[descriptors-compatibility]]`、`[[descriptors-push-constants]]`，
+及正文中的 `VUID-VkPipelineLayoutCreateInfo-pPushConstantRanges-00292`。
+另以 API 1.4.309 validusage SHA256
+`f61afea8ca6097342cae1b65bfab81675ee7fdc2d809403e083329b7d56597a7`
+核对 `VUID-VkPipelineLayoutCreateInfo-pPushConstantRanges-00292`、
+`VUID-vkCmdPushConstants-offset-01795`、`VUID-vkCmdPushConstants-offset-01796`。
+两份版本来源分别绑定，不合称同版本完整规范、自动语义或 GPU 验收。
