@@ -300,3 +300,39 @@ and [write conditions](https://docs.vulkan.org/refpages/latest/refpages/source/V
 checked 2026-11-15. Rule IDs 00340–00342, 00327, 00329–00330 and00332 are retained
 for traceability. Local Validation1.4.309 and latest reference pages are recorded
 as different versioned evidence, not one fully validated normative snapshot.
+
+### delivery19-ordinary-ubo-lifetime: retirement is not reusable recording
+An ordinary binding used by a pending command buffer cannot be updated
+(VUID03047). The same descriptor value is not an exemption. A fence that actually
+covers that submission can establish retirement; a stale generation or unrelated
+queue's fence cannot. Track every referencing command buffer and serialize host
+updates. Unknown reference inventory is not safe-to-update evidence.
+
+After retirement, updating a set referenced by a recording/executable command
+buffer can invalidate that command buffer. Reset/re-record the affected commands
+before submission; merely observing a signaled fence does not restore their
+recorded validity. Retain referenced resource lifetime and memory dependencies
+separately. Advanced binding flags require their own enabled-feature and usage
+contracts; this ordinary-binding planner deliberately refuses that scope.
+
+The companion lifecycle planner distinguishes WAIT_RETIREMENT from
+UPDATE_REQUIRES_RERECORD, and marks incomplete/stale scopes UNKNOWN. It consumes
+caller-observed states; it does not discover queue completion or authorize raw
+GPU operations by itself.
+
+Normative: [update lifetime, recording invalidation and host synchronization](https://docs.vulkan.org/refpages/latest/refpages/source/vkUpdateDescriptorSets.html).
+
+The opt-in descriptor_lifetime experiment now checks one concrete joint path:
+compile/validate a compute shader reading a UBO into an SSBO, hold its submission
+behind an unsignaled timeline wait, observe NOT_READY, and try the forbidden
+ordinary update. Validation must report03047 before the callback aborts it.
+Host signaling releases the wait; fence retirement and mapped output42 establish
+that the first submission actually executed. A legal subsequent descriptor
+replacement requires reset/re-record before the second submission returns99.
+A wrong-output oracle must fail even with no validation diagnostic. Timeline
+support is queried and explicitly enabled; absent capability blocks this test.
+
+This measures one authored compute path on a CPU ICD, not generic multiqueue
+retirement, production renderer integration, image quality or physical GPU
+performance. No old “no shader executed” statement about the earlier update-only
+probe should be interpreted as applying to this separate lifecycle experiment.
