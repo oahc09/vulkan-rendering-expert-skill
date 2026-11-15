@@ -112,7 +112,7 @@ CPU Constant Struct
 必须说明：
 
 - 对 host-visible UBO，CPU 写入后若内存非 `HOST_COHERENT`，需 `vkFlushMappedMemoryRanges`；读取前（若 CPU 读回）需 `vkInvalidateMappedMemoryRanges` [SPEC]。
-- device-local UBO 需通过 transfer queue 或 graphics queue 上传，并插入 `VkBufferMemoryBarrier`：producer stage=`TRANSFER`，access=`TRANSFER_WRITE`；consumer stage=`VERTEX_SHADER | FRAGMENT_SHADER`，access=`UNIFORM_READ` [SPEC]。
+- 当选用 staging copy 路径时需通过支持 copy 的 queue 上传，并插入 `VkBufferMemoryBarrier`：producer stage=`TRANSFER`，access=`TRANSFER_WRITE`；consumer stage按实际消费者（如 `VERTEX_SHADER | FRAGMENT_SHADER`，compute 消费为 `COMPUTE_SHADER`），access=`UNIFORM_READ` [SPEC]。
 - per-frame ring buffer通过 `vkWaitForFences(frameFence)` 保证 CPU 不覆盖 GPU 正在读取的帧 slot [ENGINE]。
 
 ---
@@ -122,14 +122,14 @@ CPU Constant Struct
 1. **定义常量结构体**：按 std140 / std430 布局，使用 `alignas` 或手动 padding 保证字段对齐 [SPEC]。
 2. **查询限制**：调用 `vkGetPhysicalDeviceProperties` 获取 `minUniformBufferOffsetAlignment`、`maxUniformBufferRange`、`limits.nonCoherentAtomSize` [SPEC]。
 3. **计算 aligned size**：`alignedSize = ((rawSize + alignment - 1) / alignment) * alignment`；ring buffer 总大小 = `alignedSize * frameInFlight`（动态 offset 时还需乘 object 数量）。
-4. **创建 buffer**：`VkBufferCreateInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT`；若 device-local 还需 `TRANSFER_DST_BIT`。
-5. **分配内存**：host-visible 选择 `HOST_VISIBLE | HOST_COHERENT`（方便每帧 map）；device-local 选择 `DEVICE_LOCAL` 并准备 staging buffer [ENGINE]。
+4. **创建 buffer**：`VkBufferCreateInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT`；若实际执行 transfer copy 写入还需 `TRANSFER_DST_BIT`；direct host write本身不需要。
+5. **分配内存**：host-visible 选择 `HOST_VISIBLE | HOST_COHERENT`（方便每帧 map）；device-local 可同时 host-visible；仅在选择 copy 路径时准备 staging buffer，不由 DEVICE_LOCAL 单一位强制 [ENGINE]。
 6. **创建 descriptor set layout**：对每个 UBO binding，填写 `VkDescriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER` 或 `VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC`，`stageFlags` 按实际 shader stage 设置 [SPEC]。
 7. **分配 descriptor set**：从对应 pool 分配，确保 pool size 中 `type` 和 `descriptorCount` 足够。
 8. **更新 descriptor（静态数据）**：填写 `VkDescriptorBufferInfo`（buffer + offset + range），调用 `vkUpdateDescriptorSets`。
 9. **更新 descriptor（dynamic 数据）**：`VkDescriptorBufferInfo.offset = 0`、`range = alignedSize`；绑定命令 `vkCmdBindDescriptorSets` 时传入 `pDynamicOffsets` [SPEC]。
 10. **CPU 更新（host-visible）**：每帧 `vkMapMemory` 对应 slot 偏移，写入数据；非 coherent 时 `vkFlushMappedMemoryRanges`。
-11. **上传（device-local）**：staging buffer 写入 → `vkCmdCopyBuffer` → buffer barrier `TRANSFER_WRITE → UNIFORM_READ` → 提交。
+11. **上传（选用 staging 路径时）**：staging buffer 写入 → `vkCmdCopyBuffer` → buffer barrier `TRANSFER_WRITE → UNIFORM_READ` → 提交。
 12. **绑定渲染**：`vkCmdBindDescriptorSets` 前确保当前 frame 的 fence 已 signaled（ring buffer）。
 13. **接入销毁**：frame-in-flight UBO 在 renderer 销毁时统一释放；per-object dynamic offset 不额外分配 buffer。
 14. **接入 recreate**：UBO 通常不随 swapchain 重建；若 UBO 中包含 viewport 相关数据，在 resize callback 中更新。

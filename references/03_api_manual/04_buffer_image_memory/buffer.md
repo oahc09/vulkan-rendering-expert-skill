@@ -88,7 +88,7 @@ vkCreateBuffer(..., &createInfo, ..., &buffer)
     或 vkCmdCopyBuffer / vkCmdUpdateBuffer
 → 用于 vertex / index / uniform / storage / transfer
 → 销毁时:
-    等待 GPU idle
+    等待覆盖该 buffer 使用的完成点（不必全设备 idle）
     → 销毁 buffer
     → 释放 memory
 ```
@@ -100,10 +100,10 @@ vkCreateBuffer(..., &createInfo, ..., &buffer)
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
 | `size` | buffer 字节大小；为 0 非法。[SPEC] | 分配的 size 小于实际数据。[TOOL] |
-| `usage` | 必须覆盖实际用途：`TRANSFER_SRC` / `TRANSFER_DST` / `UNIFORM_BUFFER` / `STORAGE_BUFFER` / `INDEX_BUFFER` / `VERTEX_BUFFER` / `INDIRECT_BUFFER` 等。[SPEC] | usage 缺少 `TRANSFER_DST` 但做 upload；缺少 `STORAGE_BUFFER` 但 compute 要写。[TOOL] |
+| `usage` | 必须覆盖实际用途：`TRANSFER_SRC` / `TRANSFER_DST` / `UNIFORM_BUFFER` / `STORAGE_BUFFER` / `INDEX_BUFFER` / `VERTEX_BUFFER` / `INDIRECT_BUFFER` 等。[SPEC] | 执行 transfer copy 写入但缺少 `TRANSFER_DST`（直接 host 写不要求它）；缺少 `STORAGE_BUFFER` 但 compute 要写。[TOOL] |
 | `sharingMode` | `EXCLUSIVE` 或 `CONCURRENT`。[SPEC] | 多 queue 访问但未正确处理 ownership。[SPEC] |
-| `flags` | 通常为 0；`SPARSE_BINDING` / `BUFFER_DEVICE_ADDRESS` 等需特殊处理。[SPEC] | 使用 device address 但未在 usage 中加 `BUFFER_DEVICE_ADDRESS`。[TOOL] |
-| `memoryTypeBits` | 决定可用 memory type index。[SPEC] | 选择不满足需求的 memory type（如需 CPU visible 但选 DEVICE_LOCAL）。[TOOL] |
+| `flags` | 通常为 0；`SPARSE_BINDING` 等创建 flags 需特殊处理；device address 是 usage/分配能力，不是同名 create flag。[SPEC] | 使用 device address 但未在 usage 中加 `BUFFER_DEVICE_ADDRESS`。[TOOL] |
+| `memoryTypeBits` | 决定可用 memory type index。[SPEC] | 未同时满足 requirements 位与所需 HOST_VISIBLE 等属性；DEVICE_LOCAL 可与 HOST_VISIBLE 同时存在。[TOOL] |
 
 ---
 
@@ -134,7 +134,7 @@ vkCreateBuffer(..., &createInfo, ..., &buffer)
 
 1. `usage` 缺少实际需要的 flag。[SPEC]
 2. Uniform buffer offset 不满足 alignment。[TOOL]
-3. CPU 写入 buffer 后未 flush（非 coherent memory）或缺少 barrier。[SPEC]
+3. CPU 写入未按需 flush（非 coherent）或与 device 访问发生无序冲突；普通提交前已完成写可由提交提供 host→device 可见性，不能一概要求额外 HOST barrier。[SPEC]
 4. Storage buffer 写入后 graphics 读取缺少 barrier。[TOOL]
 5. Buffer 被 GPU 使用期间 CPU 覆盖数据。[ENGINE]
 6. Vertex / index buffer 的 offset / stride 与 pipeline 不匹配。[TOOL]

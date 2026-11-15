@@ -82,7 +82,7 @@ VkImage / VkBuffer
 → 根据 memoryTypeBits 和需求选择 memoryTypeIndex:
     需要 CPU 写入: HOST_VISIBLE
     需要 CPU 无需 flush: HOST_COHERENT
-    需要 GPU 最优: DEVICE_LOCAL
+    需要设备本地属性: DEVICE_LOCAL（不是性能最优保证）
     需要 CPU 读取: HOST_VISIBLE (可能还需 HOST_CACHED)
 → vkAllocateMemory(..., &allocInfo, ..., &memory)
 → vkBind*Memory(resource, memory, offset)
@@ -102,7 +102,7 @@ VkImage / VkBuffer
 | `size` | 绑定范围须容纳 requirements.size；绑定 offset 按 requirements.alignment 对齐，不据此要求 allocationSize 为该 alignment 的整数倍。[SPEC] | allocationSize − offset 小于 requirements.size。[TOOL] |
 | `alignment` | 绑定 offset 必须是 alignment 的倍数。[SPEC] | offset 未对齐导致 validation error 或崩溃。[TOOL] |
 | `memoryTypeBits` | 32 位掩码，表示该资源可使用的 memory type index。[SPEC] | 选择不在掩码中的 memory type。[TOOL] |
-| `propertyFlags` | `DEVICE_LOCAL` / `HOST_VISIBLE` / `HOST_COHERENT` / `HOST_CACHED` / `LAZILY_ALLOCATED`。[SPEC] | 需要 CPU map 但选非 HOST_VISIBLE；需要 GPU 性能但选非 DEVICE_LOCAL。[TOOL] |
+| `propertyFlags` | `DEVICE_LOCAL` / `HOST_VISIBLE` / `HOST_COHERENT` / `HOST_CACHED` / `LAZILY_ALLOCATED`。[SPEC] | 需要 CPU map 但选非 HOST_VISIBLE；仅按 DEVICE_LOCAL 标签断言性能最优，未实测访问路径。[TOOL] |
 | `allocationSize` | 可分配多个资源到同一块 memory 的不同 offset，普通子分配须满足alignment与范围隔离；显式alias需遵循单独的alias合同。[SPEC] | sub-allocation 未对齐或重叠。[SPEC] |
 
 ---
@@ -204,7 +204,7 @@ VkImage / VkBuffer
 
 ## 11. Android 注意点
 
-- Android 设备通常有 device-local 和 host-visible 两个主要 heap。[ANDROID]
+- Android 的 heap/type 拓扑必须查询；多个 memory types 可指向同一 heap，HOST_VISIBLE 与 DEVICE_LOCAL 可同时出现，不能假设固定两个 heap。[ANDROID]
 - 移动端 OOM 风险高，应使用 `VK_EXT_memory_budget` 监控 heap 使用。[ANDROID]
 - 大纹理上传应使用 staging buffer（host-visible）→ device-local image。[ENGINE]
 
@@ -219,8 +219,8 @@ VkImage / VkBuffer
 
 ### GPU 侧
 
-- Device-local memory 通常 GPU 访问最快。[ENGINE]
-- Host-visible memory 可能通过 PCIe / 统一内存访问，带宽较低。[HEUR]
+- DEVICE_LOCAL 表示设备本地属性，不是该负载的最快访问保证；结合实际 heap/type 和测量选型。[ENGINE]
+- HOST_VISIBLE 可对应离散系统的互连路径，也可同时 DEVICE_LOCAL；带宽和访问成本必须按实际拓扑测量。[HEUR]
 
 ### 移动端
 
@@ -420,3 +420,11 @@ bind_image_common.adoc；`chapters/memory.adoc` SHA256
 vkBindBufferMemory 的07459/01031/01035/01036/01037/01444/01508及
 vkFreeMemory-memory-00677；368 alignment/bounds 条款已随 tile-memory 分支改号，
 两版本不能混用编号或推断全部条款等价。此处不是实际分配成功、内存驻留或整族验收证明。
+
+## delivery19-upload-choice：实际 direct / staging 路径比较
+
+配对测试在同一设备/driver、同一固定 input/SPIR-V/compute/output 下执行 direct→staging→direct。direct 使用满足 input buffer requirements 的 HOST_VISIBLE|HOST_COHERENT storage memory；staging 先写 coherent TRANSFER_SRC，再 copy 到满足 DEVICE_LOCAL 属性的 STORAGE_BUFFER|TRANSFER_DST input，明确 TRANSFER_WRITE→COMPUTE_SHADER/SHADER_READ 依赖。两路输出都需 device→HOST_READ 依赖和覆盖写入的完成等待。coherent 只免 flush/invalidate，不免退休或冲突同步。
+
+这两个选择可能落在同一个同时具备上述 flags 的 memory type；实际 CPU 统一内存结果不能冒充独显 staging 带宽收益。比较记录 logical bytes、各 VkMemoryRequirements.size、选中 type/heap/flags/typeBits 和同时存活的请求分配总量。该总量不等于 residency、driver峰值显存或性能。只在所有输出完整通过且事实可比时，用明确的请求字节预算选择最小足用路径；未测帧时间/热功耗/目标硬件收益保持未知。
+
+负控可在独立参考输出层检验不匹配，不能为了构造错误而向 GPU 提交已知缺失依赖。当前 coherent CPU 路径不替代非coherent、sparse、external 或多queue ownership 验收。固定368 memory/resources/synchronization 原始正文与工具输入由配对报告给出，不扩张旧历史证据范围。

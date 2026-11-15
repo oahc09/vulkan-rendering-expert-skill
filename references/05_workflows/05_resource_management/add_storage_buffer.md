@@ -91,13 +91,13 @@ CPU Data / Compute Output
 |---|---|---|---|
 | set=0,binding=0 | `STORAGE_BUFFER` | SSBO 整个 buffer | Compute / Vertex / Fragment |
 | set=0,binding=0 | `STORAGE_BUFFER_DYNAMIC` | SSBO + dynamic offset | Compute / Vertex / Fragment |
-| set=1,binding=0 | `STORAGE_BUFFER` | indirect draw buffer | Vertex（间接消费） |
+| 仅当 shader 同时访问时需要 descriptor | `STORAGE_BUFFER`（可选 shader 用途） | indirect 参数 buffer 另需 INDIRECT_BUFFER usage | 间接命令读取是 DRAW_INDIRECT，不是 vertex shader descriptor读取 |
 
 设计说明：
 
-- compute shader 写 SSBO 后，同 queue 内通常需要 `memoryBarrier()` + `barrier()` 在 GLSL 中同步；跨 queue 需要 Vulkan buffer memory barrier [SPEC]。
-- graphics 读取 compute 输出的 SSBO，必须插入 `VkBufferMemoryBarrier`：`ACCESS_SHADER_WRITE_BIT` → `ACCESS_SHADER_READ_BIT` / `ACCESS_INDIRECT_COMMAND_READ_BIT` [SPEC]。
-- 若 shader 中使用 `atomicAdd` 等，buffer memory 必须支持 `DEVICE_LOCAL` 且 descriptor 类型正确 [SPEC]。
+- GLSL workgroup 控制/内存屏障仅覆盖其合法 invocation scope，不是跨 workgroup、跨 dispatch 或 queue 同步。跨命令依赖使用匹配实际 producer/consumer 的 Vulkan 同步；跨 queue 另需 semaphore 等依赖，barrier本身不建立队列间执行顺序 [SPEC]。
+- graphics 消费 compute 输出时建立匹配真实读写的执行/内存依赖；可按路径选择 buffer/global barrier 或跨队列 semaphore 等。shader读取与 DRAW_INDIRECT 参数读取的 stage/access 不同，不能一律当 vertex descriptor访问 [SPEC]。
+- shader atomic 的数据类型/存储类/作用域/能力、descriptor与访问合法性必须满足要求；普通 SSBO atomic 不因原子性而要求 memory type 带 DEVICE_LOCAL [SPEC]。
 
 ---
 
@@ -105,17 +105,18 @@ CPU Data / Compute Output
 
 | Producer | Resource | Barrier / Layout | Consumer |
 |---|---|---|---|
-| CPU upload / transfer copy | SSBO | `TRANSFER_WRITE` → `SHADER_READ` / `SHADER_WRITE` | compute / graphics shader |
+| 提交前 CPU mapped write | SSBO | host write happens-before submit；非coherent按需flush；无in-flight冲突 | compute / graphics shader |
+| transfer copy | SSBO | `TRANSFER_WRITE` → `SHADER_READ` / `SHADER_WRITE`，stage匹配实际消费者 | compute / graphics shader |
 | compute shader write | SSBO | `SHADER_WRITE` → `SHADER_READ` / `INDIRECT_COMMAND_READ` | graphics shader / draw indirect |
 | graphics shader write | SSBO | `SHADER_WRITE` → `SHADER_READ` / `TRANSFER_READ` | compute / transfer copy |
-| CPU readback（调试） | SSBO | `SHADER_WRITE` → `TRANSFER_READ` → host map | CPU |
+| device写入后的CPU回读 | SSBO或copy目的 | 实际device写→HOST_READ依赖→完成等待→非coherent invalidate；map不等待 | CPU |
 
 必须说明：
 
 - producer stage / access：根据实际 producer 设置，如 `VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT` + `VK_ACCESS_SHADER_WRITE_BIT`。
 - consumer stage / access：如 `VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT` + `VK_ACCESS_SHADER_READ_BIT`；间接绘制时为 `VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT` + `VK_ACCESS_INDIRECT_COMMAND_READ_BIT` [SPEC]。
-- 同 pipeline 内 workgroup 间同步需 `memoryBarrier()` / `barrier()`；跨 command 或 queue 必须 Vulkan barrier [SPEC]。
-- storage buffer 没有 image layout，仅需 `VkBufferMemoryBarrier` 或 global memory barrier。
+- workgroup `barrier()` 不能构成全 dispatch 的跨 workgroup rendezvous。需要全局阶段边界时拆成正确依赖的 dispatch 等路径；不同 queue 不得仅靠 buffer barrier 假定顺序 [SPEC]。
+- storage buffer 没有 image layout，但仍需核执行/内存依赖与必要 ownership；buffer/global barrier 不是跨 queue 执行同步的替代。
 
 ---
 
