@@ -416,3 +416,5 @@ Normative reading: [Khronos synchronization examples](https://docs.vulkan.org/gu
 and [synchronization and cache control](https://docs.vulkan.org/spec/latest/chapters/synchronization.html).
 These live links are supporting references, not an assertion that the complete
 v1.0.19 source denominator has been frozen or audited.
+
+普通 non-sparse 的 requirements/typeBits、绑定 offset/范围、不可重绑定及 dedicated 目标条件见 [普通资源绑定合同](memory_allocation.md#delivery19-ordinary-memory-binding)。对象创建尺寸不代替 memory requirements；内存释放与对象销毁顺序按该合同区分规范和工程策略。

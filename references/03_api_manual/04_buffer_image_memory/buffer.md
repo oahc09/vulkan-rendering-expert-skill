@@ -295,3 +295,5 @@ Uniform 数据极少或完全不变化的场景。
 规则 `ROBUST2_BUFFER_WITHIN_SCOPE` 只准入限定 metadata，实际 shader 指令顺序、工具与 readback 由 runner 另验。当前 CPU ICD 的支持不推广至手机/物理 GPU、protected、device lost、跨平台或 Vulkan SC。完整 VK18 与原计划外部/盲测仍未完成。
 
 固定来源：[features.adoc / v1.4.309](https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.309/chapters/features.adoc)，blob `e8e07194550ac4f2a28c58939c1df42631338f60`；[descriptorsets.adoc / v1.4.309](https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.309/chapters/descriptorsets.adoc)，blob `3cad5740ff176cbef473b1c4914d56c7810281d0`。[limits.adoc / v1.4.309](https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.309/chapters/limits.adoc)，blob `51bc3b389fa50433fa17164982866c1e2237eb6e`。Khronos CC-BY-4.0，以上为概述；runner 的 compact VUID 与完整 frozen validusage 对照，具体运行范围见 tests 仓 `coverage/v1.0.19/robust-buffer.json`。
+
+普通 non-sparse 的 requirements/typeBits、绑定 offset/范围、不可重绑定及 dedicated 目标条件见 [普通资源绑定合同](memory_allocation.md#delivery19-ordinary-memory-binding)。对象创建尺寸不代替 memory requirements；内存释放与对象销毁顺序按该合同区分规范和工程策略。

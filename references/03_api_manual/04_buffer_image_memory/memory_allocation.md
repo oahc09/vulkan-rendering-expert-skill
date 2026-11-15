@@ -99,7 +99,7 @@ VkImage / VkBuffer
 
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
-| `size` | 必须满足 resource 的 memory requirements size，且按 alignment 对齐。[SPEC] | 分配 size 小于 requirement。[TOOL] |
+| `size` | 绑定范围须容纳 requirements.size；绑定 offset 按 requirements.alignment 对齐，不据此要求 allocationSize 为该 alignment 的整数倍。[SPEC] | allocationSize − offset 小于 requirements.size。[TOOL] |
 | `alignment` | 绑定 offset 必须是 alignment 的倍数。[SPEC] | offset 未对齐导致 validation error 或崩溃。[TOOL] |
 | `memoryTypeBits` | 32 位掩码，表示该资源可使用的 memory type index。[SPEC] | 选择不在掩码中的 memory type。[TOOL] |
 | `propertyFlags` | `DEVICE_LOCAL` / `HOST_VISIBLE` / `HOST_COHERENT` / `HOST_CACHED` / `LAZILY_ALLOCATED`。[SPEC] | 需要 CPU map 但选非 HOST_VISIBLE；需要 GPU 性能但选非 DEVICE_LOCAL。[TOOL] |
@@ -136,7 +136,7 @@ VkImage / VkBuffer
 3. 非 coherent memory 写入后未 flush，GPU 读到旧数据。[TOOL]
 4. 绑定 offset 未按 alignment 对齐。[TOOL]
 5. 同一块 memory sub-allocate 时发生重叠。[SPEC]
-6. 销毁 memory 前未销毁绑定的 image / buffer。[SPEC]
+6. memory 仍被设备使用就 free，或 free 后继续使用仍绑定的 image / buffer。[SPEC]
 7. 分配大量小 memory 对象导致分配失败或开销高。[ENGINE]
 8. 未处理 `VK_ERROR_OUT_OF_DEVICE_MEMORY`。[TOOL]
 
@@ -177,12 +177,12 @@ VkImage / VkBuffer
 
 ### 销毁时机
 
-- 所有绑定 resource 销毁后。
-- 必须等 GPU 完成访问。[SPEC]
+- 工程上可选择先销毁所有绑定 resource 再 free，便于管理；这是保守策略，不是规范强制顺序。[ENGINE]
+- free 前必须确认全部设备访问已结束；允许 memory 仍绑定资源，但这些资源之后不得再使用。[SPEC]
 
 ### in-flight 风险
 
-- Memory 被 command buffer 引用后，fence signal 前不能 free。[SPEC]
+- Memory 的所有已提交引用必须完成；覆盖这些使用的 fence/timeline/idle 可提供完成证明，不要求某个特定 fence 必须 signal。[SPEC]
 - 即使 resource 已销毁，若 memory 仍被 pending command buffer 引用，free 也会出问题。[SPEC]
 
 ---
@@ -380,3 +380,43 @@ Sources: [mapped-range VUIDs](https://docs.vulkan.org/refpages/latest/refpages/s
 [invalidate dependency chain](https://docs.vulkan.org/refpages/latest/refpages/source/vkInvalidateMappedMemoryRanges.html).
 These live normative pages are distinct from the frozen registry snapshot and
 from the actual Validation layer version recorded by the probe.
+
+
+<a id="delivery19-ordinary-memory-binding"></a>
+
+### delivery19-ordinary-memory-binding
+
+普通 non-sparse、非 external/protected/disjoint/tile-memory 绑定先核资源自身查询到的
+requirements：memoryTypeIndex 对应位必须位于 memoryTypeBits，memoryOffset 小于
+allocationSize 且为 alignment 的整数倍，requirements.size <= allocationSize − memoryOffset。
+不能用 buffer 创建 size 或 texture 像素字节估计代替 requirements.size，
+不能从 offset alignment 推导 allocationSize 必须同样对齐。
+非 sparse 资源一旦绑定过 memory 不可用再次 bind 来重定位，free 原 memory 也不恢复可绑定资格。
+
+requiresDedicatedAllocation 为真时必须使用该资源专属分配；仅 prefersDedicatedAllocation
+不等同强制要求。普通 dedicated 绑定还须核对分配记录中的目标对象一致、memoryOffset=0。
+dedicated image alias 等扩展例外另行证明，不能从此普通合同默认放行。
+专属 allocationSize 还须按版本单独核验：普通 dedicated 的02964/02965在固定368
+要求 >= requirements.size，而独立309同编号要求等于 requirements.size；
+不能把368允许的额外字节分配直接下推到309合同。
+
+普通非 alias 子分配不能仅检查字节范围不重叠：同 allocation 中同时使用的相邻
+linear/non-linear 资源还须检查 bufferImageGranularity 页隔离。此值不是
+nonCoherentAtomSize，也不是每个 allocationSize 的通用对齐单位；同类资源或
+不同时使用的受控 alias 路径条件不同，需分别证明。
+
+free 前所有已提交、经 buffer/image 引用 memory 的命令必须完成（00677）。
+规范允许 memory 仍绑定资源时 free，但之后不得继续使用那些资源；实现可延迟实际
+payload 释放到全部绑定对象销毁。先销毁对象再 free 是可选保守工程策略，不是唯一合法顺序。
+这也不批准销毁正在使用的资源、保留失效 mapped pointer 或伪造完成证明。
+
+固定 Vulkan-Docs1.4.368 commit `fa30d4e312e843193601be7cb926c7e25d9ec885`：
+`chapters/resources.adoc` SHA256 `de7c50943e022c508b369a605ce05b20cc7376274d1e4ecb1d67234698732a7a`，
+Resource Memory Association / bufferImageGranularity 原文及 commonvalidity/bind_buffer_common.adoc、
+bind_image_common.adoc；`chapters/memory.adoc` SHA256
+`a7f291992b45e3c783afd7f379361a1b20471c0d0675267b841e24395c3c593d` 的 vkFreeMemory。
+另独立1.4.309 validusage SHA256
+`f61afea8ca6097342cae1b65bfab81675ee7fdc2d809403e083329b7d56597a7` 中
+vkBindBufferMemory 的07459/01031/01035/01036/01037/01444/01508及
+vkFreeMemory-memory-00677；368 alignment/bounds 条款已随 tile-memory 分支改号，
+两版本不能混用编号或推断全部条款等价。此处不是实际分配成功、内存驻留或整族验收证明。
