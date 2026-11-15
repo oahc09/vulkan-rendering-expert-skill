@@ -366,3 +366,14 @@ No human-facing PASS label may silently promote those original plan gates.
 - Headless WSI：两代extent、图像字节、渲染及present fence退役；不等于物理显示、并行帧节奏或延迟实测。
 
 预算、取消、子进程失败、证据不匹配或任一必需案例缺失必须使整组非成功，并保留已收集的partial evidence。重试新目录，不复用失败产物。进程取消只承诺本入口拥有的进程组回收，不承诺GPU故障复位或逃逸进程管理。不可用的Video/专用计算族仍按独立能力清单保持未运行；本资源suite通过不解除release BLOCKED。
+
+<a id="delivery19-external-history-suite"></a>
+## Delivery19 外部历史任务的重复交付闭环
+
+配对 tests 的外部历史 suite 固定按 FencePool HOST 原类边界、Amber #951 完整引擎软件 Vulkan、相关上游原始回归执行。前两者是两项已知历史缺陷；相关三种输入在前后引擎上的六次运行只是上下文回归，不是六个新缺陷或新的硬件覆盖。既有 Amber #1119 缺 feature 的原测试保持未运行，不加入成功分母。公开修复与标准答案已读，不能计为独立模型盲测。
+
+启动与结束须核两仓完整 HEAD、clean 状态、pair、固定源、工具及原输入身份；每次使用新目录与唯一 run ID。只接受固定 child entry，不接收任意 shell 或以旧 PASS 报告替代运行。完整结果必须从原始日志、输入和实际退出/负控重算；HOST 替身边界、完整引擎软件 ICD、普通回归与未运行条件分栏，不拼成共享资源图或物理设备成功率。
+
+预算、取消或证据失败时保留已验证完成前缀、当前失败/中断步骤及未启动项，总状态必须非成功。恢复重跑使用新目录，旧轮迟到报告不能归入新 run。仅承诺本次拥有进程组的回收，不能推广为 GPU 挂死、device lost 或逃逸进程恢复。不得过滤已有驱动 warning 或错误清理诊断来制造零诊断报告。
+
+M3/C6 的限定工具与实战可靠性进展不能越过 M0 尚缺的全量语义分母、M1/M2 全域深度及 M5/M6 的 Live、物理/移动设备和发布封板。实际执行、独立核验、公开答案状态和剩余门槛须同时交付。入口与分类见[配对 tests 的外部任务闭环](https://github.com/oahc09/vulkan-rendering-expert-skill-tests/blob/feat/v1.0.19-final-delivery/docs/external-suite19.md)。
