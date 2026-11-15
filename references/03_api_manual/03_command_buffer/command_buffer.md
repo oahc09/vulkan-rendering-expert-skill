@@ -290,3 +290,39 @@ VkDevice
 **验证**：覆盖普通 serial resubmit、ONE_TIME invalid、pending reset拒绝、pool reset跨CB完成检查、两个线程同pool拒绝与分pool允许、secondary失效传播。确认完成点覆盖每一次并行使用；验证层与host线程检测都保留日志。
 
 固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[cmdbuffers#commandbuffers-lifecycle](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/cmdbuffers.adoc#commandbuffers-lifecycle)；[cmdbuffers#commandbuffers-pools](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/cmdbuffers.adoc#commandbuffers-pools)；[cmdbuffers#commandbuffers-recording](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/cmdbuffers.adoc#commandbuffers-recording)。[SPEC]
+
+## Delivery19 ordinary descriptor / command-buffer joint lifecycle (bounded L1/L2)
+
+This contract connects ordinary descriptor updates to command-buffer retirement
+and invalidation. A completed submission is not permission to reuse a recording
+after its referenced ordinary descriptor binding has changed.
+
+- **Preconditions:** primary command buffer, ordinary descriptor bindings (neither
+  UPDATE_AFTER_BIND nor UPDATE_UNUSED_WHILE_PENDING), known complete reference
+  inventory, externally serialized command buffer/pool/set host access. Identify
+  objects and generations; a reused handle or unrelated fence is not proof.
+- **Pending:** wait for every relevant submission to retire. Individual reset is
+  forbidden while pending (`VUID-vkResetCommandBuffer-commandBuffer-00045`). A
+  descriptor update is separately forbidden (03047); resetting does not bypass it.
+- **Retired/executable:** an ordinary referenced-binding update invalidates the
+  recorded command buffer. Reset/re-record before submitting it again. A fence
+  wait fixes pending ownership but does not restore an invalid recording.
+- **Reset:** individual reset requires the pool's RESET_COMMAND_BUFFER flag
+  (00046); otherwise use an appropriate pool lifecycle after all its uses retire.
+  Resetting a secondary can also invalidate referencing primaries; this experiment
+  does not cover that graph or pool-wide reset.
+- **Data correctness:** re-recording alone does not establish memory visibility.
+  Retain the workload's resource dependencies, coherent/noncoherent readback
+  handling and fence ownership. Do not infer a GPU memory barrier from host state.
+- **Failure:** a validation callback configured to abort invalid commands provides
+  a safe diagnostic experiment, not evidence that an invalid driver submission
+  executed successfully. Unsupported timeline or missing layers must fail closed.
+
+Paired tests source: `cases19/descriptor_lifetime`, exact versions and hashes in
+`coverage/v1.0.19/descriptor-lifetime.json`. This is an authored CPU-ICD compute
+experiment, not production-engine discovery, hardware/SC/Live acceptance or full
+VK03 coverage. Consult that checked record for actually exercised branches.
+
+Normative sources (live pages, separate from the frozen registry snapshot):
+[vkResetCommandBuffer](https://docs.vulkan.org/refpages/latest/refpages/source/vkResetCommandBuffer.html),
+[vkUpdateDescriptorSets](https://docs.vulkan.org/refpages/latest/refpages/source/vkUpdateDescriptorSets.html).
