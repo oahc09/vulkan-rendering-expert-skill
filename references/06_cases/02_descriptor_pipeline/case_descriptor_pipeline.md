@@ -857,3 +857,9 @@ index 0 正常常会掩盖 stride 错误。可见字节正确不证明 shader �
 本地 synthetic 复现设计：两个 localID 重叠但材质/transform 不同的 set，另加 opaque mesh/第二View；记录颜色、picked tuple、材质与 depth proxy。故意把 sorted index 或 localID 当 global ID 应暴露错配；颜色正确不证明整数ID附件正确。选定贡献者规则必须同步用于 picked ID、材质和深度，颜色本身仍可能由多个贡献者混合。[ENGINE]
 
 修复边界：[Gaussian合同](../../05_workflows/03_compute_workflows/add_compute_pass.md#gaussian-preproject-sort) 的 (setID,localID,generation) 与完整状态失效；所有属性消费者同步且资源最后使用后退休。缺 interlock 仍可用明确 selection pass/排序基线。验证多集合交错、资源重载、单View关闭；本节是公开问题映射与未执行实验设计，不是本地 PASS 记录。
+
+
+<a id="text-atlas-synthetic-case"></a>
+## TEXT18 合成待执行案例：同 glyph ID 不同 face
+
+[ENGINE] 类型：设计的合成回归，不是已发生或已完成 GPU 复现。输入 A/B font face 均有 glyph ID 42，延迟 A 上传后切换 B。错误假设：ID 相同可复用 UV；区分证据：face generation、run 字体归属、upload completion、draw snapshot。预期最小修复：完整键与过期发布拒绝，旧 GPU 使用退休前不覆写。CPU 模拟通过只证明状态合同；实际平台字体、MRT 与设备观察仍需独立执行。见 [atlas 合同](../../05_workflows/05_resource_management/add_texture_resource.md#dynamic-glyph-atlas)。

@@ -1,5 +1,13 @@
 # Change Log
 
+## v1.0.18 candidate — Text, Vector & 2D/3D Composition（2026-11-15）
+
+- 基于已合入 v1.0.17；原 K/B/P 未完成项不因合并或版本升级关闭。
+- C1 provider/font/glyph/单位与能力边界；C2 Bitmap/MSDF/MTSDF/颜色与过滤；C3 有界矢量、clip、空间标签和有限挤出；C4 动态图集代际、上传退休、多 Device、MRT 与时域合成。
+- 保持八模块、运行时知识文件净增0、原19硬规则/模型配置及最小启动；只增按需锚点。
+- TEXT18 配套测试、CPU参考与各层验收独立；不把文档、Host 或历史回归当真实平台/模型/GPU/视觉/设备通过。
+
+
 ## v1.0.17 candidate — Vulkan Coverage & Consolidation（2026-11-08）
 
 - 冻结标准 Vulkan1.0–1.4 / 规范1.4.368，配套tests生成Registry、章节、域候选和来源审计；清单登记不计作L1/L2完成。

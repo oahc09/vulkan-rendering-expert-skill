@@ -377,3 +377,29 @@ Application Object
 回归：mesh 缺页、预算突降、上传后取消、索引越界/错 signedness、迁移旧地址、Engine A 销毁而 B 继续、反复装卸后待退休列表平台化。Host 模拟不是 Vulkan draw/dispatch 证据。
 
 规范依据：[Vulkan-Docs v1.4.328 resources](https://github.com/KhronosGroup/Vulkan-Docs/blob/d38733398a4bec673bd5d24c904d4739a45f020d/chapters/resources.adoc)、[descriptor 生命周期](https://github.com/KhronosGroup/Vulkan-Docs/blob/d38733398a4bec673bd5d24c904d4739a45f020d/chapters/descriptorsets.adoc)。状态/阈值是 ENGINE 策略，source-read 不代表设备通过。
+
+
+<a id="glyph-generation-retirement"></a>
+## TEXT18 C4：字形代际与多消费者退休
+
+```text
+Requested
+→ Raster/Outline/DistanceField Pending
+→ CPU Ready
+→ Upload Submitted
+→ GPU Ready
+→ Referenced by Draw Snapshot
+→ Evict Requested
+→ All consumers complete
+→ Reusable
+```
+
+取消任务、切语言、换字体、Surface 销毁、Device 重建均带 generation。过期任务不发布；已提交的上传和消费仍按其实际完成状态退休。图集搬迁/repack 不允许直接修改旧 draw snapshot 的 UV；需要旧新 page 代际或等价的稳定间接层。
+
+同一 atlas slot 正被旧 command buffer 采样时，即使 CPU 已不引用字符串，也不能立刻放入另一个 glyph。采用 page/slot 级退休记录，不能仅按“第 N 帧”猜测 GPU 完成。[SPEC]
+
+每条消费记录绑定 device、queue、submission/completion token 和 page/slot generation。合并所有读取者，不以某一视图/队列完成推断全部完成。取消请求只阻止新发布；已提交工作仍需退休。Device Lost 后按设备故障协议隔离对象，不能伪造 timeline 已完成。 [ENGINE]
+
+依据（接口事实与工程策略分开；平台/设备执行未验证）：
+- [SPEC] [Vulkan synchronization](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc)
+- [SPEC] [Vulkan descriptors](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/descriptorsets.adoc)

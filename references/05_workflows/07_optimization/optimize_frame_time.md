@@ -331,3 +331,16 @@ A/B顺序：同算法CPU小oracle→软件/桌面Vulkan正确性→目标手机�
 分层验收：Static/Host合同、Numerical Host、Shader编译/SPIR-V、真实Vulkan dispatch/draw/readback、Live/宿主、Android持续质量分开。缺设备、能力或授权标BLOCKED/UNSUPPORTED/UNVERIFIED；可选atomic/FP16/async/软体不测就不算通过。文档完成不等于移动仿真完整验收，SIM16独立计量不新增原12题token目标。关联hard_rules 8/10/17与G1–G6；[持续性能](#sustained-mobile-performance) 继续适用。
 
 来源：[规范查询与timestamp](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/queries.adoc)、[Small Steps精度限制](https://matthias-research.github.io/pages/publications/smallsteps.pdf)、[Arm shader profiling](https://support.arm.com/documentation/102693/2026-5/Analyze-your-frames/Analyze-shader-programs)。社区复盘中的等待时间/性能数字只能提出测量假设，不替代目标设备数据。
+
+
+<a id="text-quality-cost-budget"></a>
+## TEXT18 C4：文字工作预算与同质量成本
+
+为每次请求设可观察的 glyph 数、轮廓段数、paint graph 深度、细分层级、输出顶点/索引数、atlas bytes、CPU 任务数和每帧上传字节预算。[ENGINE]
+
+字体或路径不可信时使用受维护 parser/平台实现；不自写完整 TTF/CFF/COLR parser 来达成“零依赖”。检测溢出、NaN/Inf、重复递归引用、过大工作请求，拒绝或降级并保留原因。测试可用已授权合成边界输入，不自动下载来源不明字体或进行真实 GPU crash 注入。
+
+[ENGINE] 分别测 shaping、raster、distance generation、triangulation、JNI、upload、draw、全帧 p50/p95/p99、峰值内存与持续热状态。质量比较固定字体版本/hash、locale、DPI、相机、字形 ROI 和亚像素移动序列；禁止以背景稀释文字误差。无设备计数标 UNMEASURED；CPU reference 不代表平台/GPU/手机吞吐。回退 mask/bitmap 同样有尺寸、时间和内存预算。
+
+依据（接口事实与工程策略分开；平台/设备执行未验证）：
+- [ENGINE] [HarfBuzz 15.0.0 NEWS](https://github.com/harfbuzz/harfbuzz/blob/15.0.0/NEWS)

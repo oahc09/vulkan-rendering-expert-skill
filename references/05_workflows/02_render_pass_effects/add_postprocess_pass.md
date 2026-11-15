@@ -325,3 +325,30 @@ resolve：若 accum.a>epsilon，`mean=accum.rgb/accum.a`，否则 mean=0；`A=1-
 雨雪复用既有粒子模拟。soft intersection 在同一线性空间比较 scene depth 与 particle depth，用声明软化距离衰减 opacity，再按 straight/premultiplied 合同输出；与 alpha-cutout、sample coverage 分开。记录 near/far 尺度、排序与亚像素闪烁；软交界不是解决所有透明互遮挡。验证步长/深度反 Z、前后雾层、移动粒子/相机突变、低分辨率轮廓与持续序列。
 
 [REF] [GPU Gems 39 Volume Rendering](https://developer.nvidia.com/gpugems/gpugems/part-vi-beyond-triangles/chapter-39-volume-rendering-techniques)（积分背景，不是近期移动测量）。
+
+
+<a id="text-overlay-composition"></a>
+## TEXT18 C4：Overlay、MRT、时域和颜色交接
+
+CPU 字体/轮廓只读缓存可在明确线程与 owner 条件下共享；GPU atlas、descriptor、pipeline、函数表和完成记录按对应 Device/context 隔离。不能将来自 Device A 的 image view/descriptor 传给 Device B。[ENGINE] [SPEC]
+
+Overlay 进入已有 Dynamic Rendering 或 RenderPass 时，使用实际 attachment formats/count/samples、view mask、layout 和 blend/depth/clip 状态，不复制“只有一个 color attachment”的独立 demo pipeline。
+
+如果只写 color0，必须证明其他 color、motion vector、ID 和 depth/stencil 输出不变。不同附件状态涉及的 feature/扩展与兼容性需查询；不能一律修改 attachmentCount 或依靠驱动容错。能力不足时用独立 overlay pass 并保留必要附件，不强制全引擎迁移。[ENGINE] [SPEC] [REF]
+
+保护非目标附件不能仅靠 shader 不声明该输出：[SPEC] 使用不同逐附件 blend/write-mask 状态时核实 `independentBlend` 或实际采用扩展的合法合同，不能假设任意差异状态可用。常规 overlay 将非目标附件 colorWriteMask 设为 0，depthWriteEnable=false；若启用 stencil，写掩码置 0 并防止清除或其他操作修改。结合实际 pass 的 loadOp/storeOp、resolve 与 layout 保留已有数据，DONT_CARE/discard 不能作保持不变的证据。能力不足时使用独立 color-only pass，其他附件根本不绑定/不操作，保存目标 color，仍显式同步。以预填 ID/velocity/depth/stencil sentinel 的真实读回验证，而非仅检查 pipeline 创建成功。参见冻结规范 [blend attachments](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/framebuffer.adoc)。
+
+每次进入/离开文字或矢量 pass 后，pipeline、descriptor、vertex/index buffer、viewport、scissor、动态 stencil/blend 状态按现有 renderer 契约恢复或在下个 pass 显式重绑。用户回调不是可以污染其他 pass 的例外。
+
+### 与时域、HDR 和透明内容的分工
+
+屏幕 UI 文字默认在对应的 scene temporal reconstruction 之后合成，避免把 UI 当作三维场景历史；但保持项目既有 HDR/SDR 输出编码责任，不在最后重复 gamma/tone mapping。世界文字、立体字按真实 geometry/depth/motion 需求参与既有链路，不一律挪到 UI pass。[ENGINE]
+
+需要反射、阴影或遮挡的世界文字应显式声明，不能默认将 billboard 都当作不透明 occluder。无需重做 v1.0.14/15 的透明、HDR 或历史算法，只新增文字消费者的接口和失效条件。
+
+依据（接口事实与工程策略分开；平台/设备执行未验证）：
+- [ENGINE] [ImGui Vulkan backend](https://github.com/ocornut/imgui/blob/dbb30112c619990c593ab46f1855ac08d8ff1e52/backends/imgui_impl_vulkan.cpp)
+- [SPEC] [Vulkan framebuffer](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/framebuffer.adoc)
+- [SPEC] [Vulkan synchronization](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc)
+- [SPEC] [Vulkan descriptors](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/descriptorsets.adoc)
+- [REF] [Pipeline rendering attachments](https://docs.vulkan.org/refpages/latest/refpages/source/VkPipelineRenderingCreateInfo.html)

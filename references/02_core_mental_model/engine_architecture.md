@@ -743,3 +743,48 @@ Vulkan Mapping：A → 状态写入 `VkGraphicsPipelineCreateInfo` 各状态结�
 - 用 [覆盖预算](../05_workflows/07_optimization/optimize_mobile_bandwidth.md#coverage-budget) 决定精度、低分辨率、背景LOD，不因点数少或 Compute 更新而预言提速。
 
 所有 pass 挂既有 RenderGraph/同步、ResourceManager/retirement、逐View history/generation。格式/层数/内存/误差超限、相机/实例/时间/资源变化重估；单输出关闭只废弃该输出数据。先能力门控，再验证数值、动态序列与同负载持续 A/B。缺设备时保留未验证结论，回滚关闭新增 pass 并等已提交消费者完成，不立即释放新对象。
+
+
+<a id="text-provider-contract"></a>
+## TEXT18 C1：文本与 provider 数据合同
+
+明确分层：
+
+```text
+文本编码与文本区间
+→ script/direction/style/font fallback
+→ shaping：glyph IDs、位置、advance/offset
+→ 段落/行布局：断行、对齐、基线与溢出
+→ 字形资源请求
+→ GPU 绘制
+```
+
+生产基线复用系统/已有 shaper，不逐 Unicode code point 查图集后拼字。双向段落、换行、字体回退与 shaping 的责任归属需要显式记录；不能因为一个 run-shaping API 可用就声称已经实现完整段落排版。[ENGINE] [ANDROID] [REF]
+
+以下为**工程交接数据合同字段**，不是已存在的 通用 Vulkan API，也不要求另建 UI 对象系统：
+
+| 字段组 | 必须表达 |
+|---|---|
+| 输入身份 | 编码、原始文本区间、locale、script/direction、样式与布局参数 |
+| 字体身份 | provider、实际 font face、face index、variation axes、synthetic style、font generation |
+| shaping 输出 | glyph ID、glyph position/offset/advance、baseline；每项 font fallback 归属 |
+| 文本映射 | provider 可提供的 cluster/run 映射和精度；缺失则标 unavailable，不能编造一字符一 glyph |
+| 尺寸单位 | em/DIP/px/world-unit 的转换责任、DPI/fontScale 和舍入时机 |
+| 能力 | glyph 范围、outline/bitmap/color 表示、变量轴、格式支持、缓存与处理预算 |
+| 失效 | 字体、locale、样式、variation 或布局条件变化使哪些产物失效 |
+
+保留文本和可见语义的关联，方便宿主无障碍标签与命中结果，但本专题不实现完整文本编辑、选区、IME 或屏幕阅读器集成。
+
+### Glyph ID 与能力边界
+上游 HarfBuzz 15.0.0 的 beyond-64k 与 cubic 变化进入“能力/迁移”知识，而不是强制升级依赖。[ENGINE]
+
+- 引擎中间合同建议使用至少 32-bit glyph ID，并保留 provider namespace/face；若现有 ABI 较窄，先做影响面分析，不能只改 typedef。
+- 每个实际 provider/API 单独校验输入范围和字体格式。DirectWrite `GetGlyphRunOutline` 的 `UINT16` 边界不因中间合同更宽而消失。[REF]
+- 不支持新字体格式时使用明确兼容字体/系统 fallback 或报告不可用；不能截断到另一个 glyph。
+- 支持 cubic 的轮廓不能直接按 quadratic 解码；转换需有误差上界与工作预算，失败回退。
+- 避免“换 face 但保留旧 funcs/axis/cache”的错误；每份异步产物必须绑定 face generation。
+
+依据（接口事实与工程策略分开；平台/设备执行未验证）：
+- [ENGINE] [HarfBuzz 15.0.0 NEWS](https://github.com/harfbuzz/harfbuzz/blob/15.0.0/NEWS)
+- [ANDROID] [TextShaper](https://developer.android.com/reference/android/text/TextShaper)
+- [REF] [GetGlyphRunOutline](https://learn.microsoft.com/en-us/windows/win32/api/dwrite/nf-dwrite-idwritefontface-getglyphrunoutline)

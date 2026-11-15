@@ -312,3 +312,61 @@ CPU Pixel Data
 验证固定水/玻璃薄片、屏外/遮挡边缘、原始与线性 depth 对照、多个透明层和 resize；先验颜色/厚度容差及相机序列，未运行 GPU/Android 不宣称视觉通过。天气软交界与局部雾见 [体积合成](add_postprocess_pass.md#local-volume-composite)。
 
 [SPEC] [Framebuffer](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/framebuffer.adoc)；[REF] [Volume absorption background](https://developer.nvidia.com/gpugems/gpugems/part-vi-beyond-triangles/chapter-39-volume-rendering-techniques)。
+
+
+<a id="glyph-representation-quality"></a>
+## TEXT18 C2：字形表示、颜色与质量
+
+### 四类路径，而不是一种算法覆盖全部
+
+| 路径 | 默认用途 | 核心限制/回退 |
+|---|---|---|
+| 灰度 Bitmap/Coverage | 固定屏幕小字号、密集中文、hinted 文本 | DPI/字号变化重新准备合适资源；不用 LCD 彩色 coverage 直接合成到任意透明背景 |
+| MSDF/MTSDF | 可缩放标题、空间标签、有限描边/光晕 | 必须有可靠轮廓；小字、复杂彩色 glyph、极端 minification 用 bitmap/合适 LOD |
+| 解析曲线 | 大倍率/透视的对照或可选路径 | 曲线表示、每像素工作量、数值鲁棒性与授权单独验收；不是默认依赖 Slug/HarfBuzz GPU |
+| Mesh | 真正需要厚度、侧面、投影的 3D 字体 | 合法轮廓、孔洞、细笔画和几何预算；复杂轮廓回退平面表示 |
+
+选择依据是屏幕尺寸、变换、曲率/复杂度、清晰度目标和代价，不是品牌或算法“新旧”。切换策略需要稳定条件与缓存复用，避免变换临界点每帧切表示造成闪烁。[ENGINE]
+
+### 位图与距离场的数据语义
+
+对每个 atlas page 记录 `representation / format / dimensions / row_pitch / distance_range / padding / texel_origin / generation`。
+
+- Coverage、SDF、MSDF、MTSDF 是数据，不作为 sRGB 颜色自动解码；颜色 emoji 单独记录颜色编码与预乘模式。[ENGINE] [SPEC]
+- MSDF/MTSDF 的 distance range 必须与生成器和 shader 一致，屏幕像素范围结合导数与变换计算；不能把固定阈值套给所有倍率。
+- MTSDF 通道含义按选用生成器明确记录，不把第四通道当成普通图片 alpha。
+- 字形内边距与 atlas 外边距分别覆盖效果半径、采样 footprint 和允许的滤波范围。`CLAMP_TO_EDGE` 只限制整张纹理边界，不能隔离内部相邻 glyph。
+- 不给整张紧密 atlas 直接生成普通 mip 后宣称可以任意缩小；采用有隔离的 mip 方案、分尺寸资源或回退表示。
+- DPI、fontScale、世界距离与 transform 改变时，明确是否仅改实例几何、是否需新 glyph raster、是否影响 line layout，不能全部等同“重建字体”。
+
+### 小字、彩色字形和混合合同
+
+默认灰度覆盖率，不在任意旋转/透明/HDR Surface 上强用 LCD subpixel mask。输出经过前版的颜色合同，alpha 只乘一次。[SPEC]
+
+推荐最小数值参考（仅说明一条线性 premultiplied-over 路径）：
+
+```text
+coverage c = 0.5
+text opacity a = 0.8
+linear text RGB = 1.0
+opaque destination RGB = 0.2
+source alpha = c*a = 0.4
+source premultiplied RGB = 1.0*0.4 = 0.4
+out RGB = 0.4 + 0.2*(1-0.4) = 0.52
+out alpha = 1.0
+```
+
+该参考用于隔离 blend/encoding 错误，不是“所有系统字体必须输出同一个灰度”的要求。颜色 glyph 已预乘时不能再次按同一 alpha 预乘；coverage、原始颜色 alpha 和 text opacity 的责任要分开。
+
+### 少依赖的实现路线
+
+先复用项目已有字体、矩形打包、几何和纹理系统。条件选用 `msdfgen/core` 时只接受已验证 Shape 数据，不默认启用 FreeType、Skia、SVG 导入及一串传递依赖；其 ext 层另有功能与依赖，需要独立评估。[ENGINE]
+
+Slug 的解析路径可作知识与画质对照。官网演示、论文、示例 Shader、完整 CPU 库的可用/授权范围不得混为一谈；未获明确权限时不复制完整实现或宣称其开源。[ENGINE]
+
+系统能力不足时先报告具体缺口，例如无法可靠输出目标 glyph 轮廓；再条件评估已有 HarfBuzz/FreeType 或一个精简模块，不一次性引入多套字体栈。
+
+依据（接口事实与工程策略分开；平台/设备执行未验证）：
+- [ENGINE] [Slug capability/licensing entry](https://sluglibrary.com/)
+- [ENGINE] [msdfgen](https://github.com/Chlumsky/msdfgen)
+- [SPEC] [Vulkan framebuffer](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/framebuffer.adoc)

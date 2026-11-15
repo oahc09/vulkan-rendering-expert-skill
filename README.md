@@ -143,3 +143,7 @@ Baseline shadows and reflection fallback; optional query-only AS engineering; te
 前置 Skill v1.0.15 已合入 main；配套测试最终成果在本地保留，其发布同步状态独立记录。本增量复用v15合同，不宣称移动仿真完整验收。原GPU-driven、混合光照与时域路径继续保留。文档、数值host、Shader编译、Vulkan执行、Live/宿主与Android持续质量必须分层报告，实际结果由配对tests证据确定。
 
 变更记录（2026-11-07）：在既有八处知识文件追加C1–C4合同并增加短导航；纠正同主题旧段中把workgroup barrier当全局同步、dynamic indexing当atomic能力、Surface销毁等同compute queue失效及强制采样layout transition的说法。原段落位置保留并就地修正，无硬规则迁移。本候选不自动合并或发布。
+
+## v1.0.18 文字专题候选
+
+已接入文字 provider、字形质量、有界矢量/3D文字与动态图集合同，详见 [按需入口](references/07_integration_pack/task_routing_rules.md#text-vector-topics)。这是知识/测试候选，不是完整平台或视觉验收。v1.0.17 已合入；其未关闭的全域、Live、设备与精确测试配对缺口继续保留。

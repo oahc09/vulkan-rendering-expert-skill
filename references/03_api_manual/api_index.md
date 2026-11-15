@@ -231,3 +231,9 @@ v1.0.12仅按章节扩展既有Android Surface、媒体采样与颜色输出内�
 L0登记/可找到入口不等于 L1 的条件语义或 L2 的实施/排错流程；本候选仍存在稳定扩展逐项审计缺口。未审完不得用一个通用 modern_patterns 链接替代专有合同。不存在/拼错的符号与教学反例分别审查，不按字符串出现次数估算知识覆盖。Registry 分母、章节图、审计来源和状态保存在配套 tests 仓库，评估答案与rubric不进入运行时知识包。
 
 固定权威：[Registry vk.xml](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/xml/vk.xml)、[规范目录](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/vkspec.adoc)。遇到包内缺口时回查对应官方章节并如实声明未验证，不自行创造枚举/feature/VUID。
+
+
+<a id="text18-api-boundary"></a>
+## TEXT18 API 边界
+
+Vulkan 没有通用 shaping/glyph API。平台字体与表示合同从 [TEXT18 路由](../07_integration_pack/task_routing_rules.md#text-vector-topics) 定位；纹理过滤见 [sampler](04_buffer_image_memory/sampler.md#glyph-filtering-contract)。禁止把内部 uint32 glyph ID 当作任意系统接口支持证明。

@@ -224,3 +224,34 @@ Pipeline 状态：
 - Validation Layer 完整报错。
 - RenderDoc / AGI 中 pipeline state 截图。
 - Android lifecycle 日志。
+
+
+<a id="vector-and-extruded-text"></a>
+## TEXT18 C3：有界矢量与立体文字
+
+### 定义输入子集，不承诺完整 SVG
+
+本专题输入为引擎自己的有界 path 数据：line、quadratic、cubic、close；支持 non-zero/even-odd fill，明确 join/cap/miter limit、描边宽度与 dash 的坐标空间。基础范围为简单闭合轮廓及孔洞、常见圆角卡片/图标/进度弧线；一般自交、复杂布尔运算、SVG filters、CSS layout 不在范围内。
+
+任务中出现不支持 path 时不能画错还标成功：可选择平台 CPU raster mask→Vulkan 合成，或显式拒绝/占位。回退同样有尺寸、边数、处理时间和缓存预算。
+
+### 曲线离散与拓扑
+
+以目标屏幕误差决定细分，设置最大层级/顶点数/输出字节；区分 object-space 误差与 perspective 下的屏幕误差。奇异变换、接近相机近面、零长度边、重复点、孔洞方向与边交叉均有处理分支。
+
+轮廓不因来自字体就必然符合简易 triangulator 的输入条件。优先复用已有 tessellator；没有时实现受限路径并可回退，不用 triangle fan 处理带孔 glyph。判定为不可安全拓扑化时禁止自动转成错误实心面。[ENGINE]
+
+### 裁剪与绘制顺序
+
+矩形 screen-space clip 可映射 scissor；旋转/曲线 clip 使用已有 stencil 或 coverage-mask pass，不把包围矩形当作精确裁剪。明确 mask generation、嵌套组合、支持深度、clear/reset、MSAA 与消费者依赖。
+
+不为减少 draw call 任意重新排序重叠透明文字和路径。批处理只能在保持视觉次序与 clip/material/depth 状态等价时进行。预算超限优先分批、降低几何精度或走 mask fallback，不静默截断轮廓。
+
+### 世界标签和挤出字体
+
+分开两种用途：
+
+- 世界标签：平面 glyph、billboard 或随物体姿态变化；明确恒定像素大小/世界大小、遮挡/always-on-top、可见性和 depth write 策略。
+- 立体字：同一 shaping 结果选择正确 glyph 轮廓，生成前面/背面/侧面，使用已有材质/光照/阴影链。有限倒角须防止细笔画与孔洞自交；超过安全半径时减小/禁用倒角或退回平面。
+
+示例只对已验证轮廓启用挤出，颜色 emoji 或复杂层叠彩色字形默认保留平面，不把 COLR paint graph 强行变成单一轮廓。没有可靠 cluster 映射时只支持 run-level 变换，不伪造逐“字符”动画。
