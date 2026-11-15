@@ -368,3 +368,5 @@ Overlay 进入已有 Dynamic Rendering 或 RenderPass 时，使用实际 attachm
 这是可复用的后处理资源交接与诊断参考，不是完整bloom/HDR/tone-mapping算法、颜色科学或性能验收。仅CPU ICD小型端点色场景；linear/mip/anisotropy、sRGB/多平面、depth/resolve、并发/多帧、物理移动GPU、外部工程与Live盲测仍未验。原计划域和release门槛保持未完成。[ENGINE]
 
 参考：[Khronos同步示例](https://docs.vulkan.org/guide/latest/synchronization_examples.html)。实际运行的规范摘录和Validation版本由测试仓固定cohort约束，不用在线新版本替换已有证据。[SPEC]
+
+附加的4×颜色附件 resolve 集成见 [MSAA resolve→sampling](../../03_api_manual/04_buffer_image_memory/copy_blit_resolve.md#delivery19-msaa-resolve-sampling)。该限定入口扩展单样本链，不改变本节原有 SyncVal ON/OFF 证据，也不宣称深度/全域 resolve 或抗锯齿收益已验。
