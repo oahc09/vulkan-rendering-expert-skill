@@ -266,11 +266,11 @@ Command Buffer 录制完成
 
 [ENGINE] 包装 API 的形参、默认值、配置解析和调用点都必须保留完整 64 位值。`UINT32_MAX` 仅为 4,294,967,295 ns（约 4.295 秒），不是 64 位最大值。更大请求经过 32 位无符号形参会截断；只改默认值但保留 32 位形参不能修复。短超时本身合法，错误在于违背调用者的等待策略或忽略结果。取消/预算策略应使用可检查结果的有界等待循环，而不是把一个最大 timeout 当成宿主的取消机制。
 
-[EXTERNAL HISTORY] KhronosGroup/Vulkan-Samples PR #1328 / commit `02d3010a3517620e7eedd919217e169c4a188de3` 将原始 `FencePool::wait` 的声明、定义及默认值改为 64 位。前置版本为 `dca8e0842417ef14440135ee48a09870a05d5bff`。可执行准备入口应直接编译这两个版本的原类，并显式标注替身依赖和 API 捕获边界。不能把 HOST 传参回归称为完整 Renderer 构建、真实 GPU 等待超时或设备修复。
+[ENGINE] 上游历史： KhronosGroup/Vulkan-Samples PR #1328 / commit `02d3010a3517620e7eedd919217e169c4a188de3` 将原始 `FencePool::wait` 的声明、定义及默认值改为 64 位。前置版本为 `dca8e0842417ef14440135ee48a09870a05d5bff`。可执行准备入口应直接编译这两个版本的原类，并显式标注替身依赖和 API 捕获边界。不能把 HOST 传参回归称为完整 Renderer 构建、真实 GPU 等待超时或设备修复。
 
-[PROCESS] 这个修复历史已经公开且开发者已读答案，仅作为开发/开放答案任务。真正盲测需要项目/根因/修复历史分离、独立 solver 与 reviewer 权限隔离，不能只把答案从报告隐藏后称为盲测。另一个上游 Amber 深度屏障候选要求实际设备的 `depthClampZeroOne`；feature 不可用时保持未运行，不删除需求或更改原始 oracle 后冒称上游复现。
+[ENGINE] 这个修复历史已经公开且开发者已读答案，仅作为开发/开放答案任务。真正盲测需要项目/根因/修复历史分离、独立 solver 与 reviewer 权限隔离，不能只把答案从报告隐藏后称为盲测。另一个上游 Amber 深度屏障候选要求实际设备的 `depthClampZeroOne`；feature 不可用时保持未运行，不删除需求或更改原始 oracle 后冒称上游复现。
 
 来源与配对：
 - https://github.com/KhronosGroup/Vulkan-Samples/commit/02d3010a3517620e7eedd919217e169c4a188de3
 - https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc
-- tests 仓 `docs/external-fence-task19.md` 记录精确输入、构建替身、前后判据、回滚、负控与剩余门槛。外部工程准备不自动关闭 E2E19、Live、知识或发布封板。
+- tests 仓的[外部任务准备文档](https://github.com/oahc09/vulkan-rendering-expert-skill-tests/blob/feat/v1.0.19-final-delivery/docs/external-fence-task19.md) 记录精确输入、构建替身、前后判据、回滚、负控与剩余门槛。外部工程准备不自动关闭 E2E19、Live、知识或发布封板。
