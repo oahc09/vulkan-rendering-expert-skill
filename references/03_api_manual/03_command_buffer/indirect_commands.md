@@ -247,3 +247,60 @@ producer writes → COMMAND_PREPROCESS / COMMAND_PREPROCESS_READ；preprocess wr
 容量/装饰/feature/query 支持不满足时停止该路径，改用经过验证的 storage-buffer compute capture 或 CPU 路径并记录输出语义差别；不能把 buffer overflow 当自动扩容，也不能在 active capture 中随意切换不兼容 pipeline。所有 buffer/counter 保留至最后提交完成，重用须同步。mesh、multi-stream、rasterization-stream 与 device-address 新命令的完整交互仍待审查；本节只覆盖传统 EXT 捕获与 byte-count 路径，Device NOT_RUN。
 
 固定 1.4.368 规范证据：[NV layout](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/device_generated_commands/generatedcommands.adoc#L380)；[NV execute/preprocess immutability](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/device_generated_commands/generatedcommands.adoc#L2679)；[NV compute address](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/device_generated_commands/generatedcommands.adoc#L2036)；[NV metadata synchronization](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/pipelines.adoc#L1951)；[EXT execution sets](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/device_generated_commands/generatedcommands.adoc#L2131)；[EXT preprocess writes](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/device_generated_commands/generatedcommands.adoc#L3504)；[transform feedback](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/vertexpostproc.adoc#L41)；[counter synchronization](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/vertexpostproc.adoc#L432)；[byte-count draw](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/drawing.adoc#L2027)。
+
+<a id="delivery19-generated-indirect-draw"></a>
+## v1.0.19：compute 生成普通 indirect draw 的可执行合同
+
+本增量连接 tests 仓库 `cases19/indirect_draw/run.py` 与
+`tools/indirect_draw19.py`，不是对 EXT/NV device-generated commands 的实现，
+也不是外部引擎 GPU-driven 性能验收。执行闭环为：真实 compute shader 生成
+参数 → 参数可见性依赖 → 普通 graphics pipeline 下 vkCmdDrawIndirect →
+非恒定图像与实际参数双重回读。仅看到画面、编译成功或没有 Validation 错误
+不足以证明参数由 compute 正确产生。
+
+### 分开验证参数内存与 API 元参数
+
+1. buffer 必须绑定有效内存并含 INDIRECT_BUFFER usage；本生成器还需要
+   STORAGE_BUFFER usage。实际创建 usage、大小、offset、stride、drawCount、
+   maxDrawIndirectCount 与支持/启用事实进入记录，不从期望结果倒填。
+2. non-Count drawCount=0、1、>1 分开。0 不读命令；1 时 stride 被忽略，
+   检查 offset+16≤bufferSize；>1 时 stride≥16 且整除4，并检查最后命令
+   完整范围。offset 自身仍须4字节对齐。数值类型与溢出先检查，未知不能PASS。
+3. multiDrawIndirect 未启用时 drawCount只能0或1；无论是否启用，count不能
+   超过实际 maxDrawIndirectCount。不能把已支持当已启用。本实跑只用 count1。
+4. GPU 写入的四个 uint32 与宿主 API 元参数不同。firstInstance 为非零时
+   需要其独立功能条件；本切片固定并验证生成值为 `[3,1,0,0]`，不声称读取
+   任意 GPU 内容前可只凭 CPU 调用参数证明 firstInstance 合法。
+
+### 生产者到消费者的真正依赖
+
+compute 的 STORAGE 写入由 COMPUTE_SHADER/SHADER_WRITE 覆盖，indirect 参数
+读取由 DRAW_INDIRECT/INDIRECT_COMMAND_READ 覆盖，不是 VERTEX_SHADER 的普通
+SSBO 读取。单队列顺序、dispatch 在前或 host-coherent 均不能取代该内存依赖。
+参数回读与 color image 回读各有自己的访问链；必须等待完成，再在正确的
+host 可见性条件下读取。buffer、descriptor、pipeline、command pool 等对象
+至少存活至最后提交完成，尚未完成不得重写参数来“修正”本帧。
+
+测试不得让 CPU 预填正确 draw 参数而冒充 GPU 生成。采用不能产生目标图像的
+初值并检查执行后的实际四字段；省略 dispatch 的因果负控应保留零参数和
+清屏色，并因目标不匹配而失败，不能当作另一个 Vulkan 违规。最终图像使用
+独立 CPU 行列参考，而不是从
+回读像素构造期望。独立反色参考应失败。格式/颜色正确不等于一般 culling、
+compaction、residency、多队列或 indirectCount 已正确。
+
+### 诊断负控与来源
+
+有意破坏 offset 对齐时，安排足够大的 buffer，避免同时引入越界，从而可
+精确匹配 `VUID-vkCmdDrawIndirect-offset-02710`。Validation callback 中止
+无效 draw 后丢弃整个 command buffer，不提交；该 void API 不伪装为有返回
+VkResult。缺目标诊断、多余错误、错误退出、生成参数或像素不符都不能PASS。
+规则还分别跟踪 usage 02709、multiDraw 02718、limit 02719、stride 00476、
+count1 range 00487 与 count>1 range 00488；静态正反例不冒充设备逐项验证。
+
+来源：[Khronos Vulkan-Docs drawing v1.4.309](https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.309/chapters/drawing.adoc)，
+Git blob `77c199718a6d74d179af4536df47f3cdc5fe25ad`，CC-BY-4.0，本节为释义。
+独立生成的 validusage.json API1.4.309 SHA256
+`f61afea8ca6097342cae1b65bfab81675ee7fdc2d809403e083329b7d56597a7`。
+与其他章节 1.4.368 inventory 保持版本边界。实际证据为 CPU software ICD，
+无物理/移动 GPU 性能结论；indexed/Count/mesh/DGC、完整 VK11、SC、外部工程
+和 Live/盲测仍未完成，发布状态不因这个有界合同而解除。
