@@ -304,3 +304,11 @@ Git blob `77c199718a6d74d179af4536df47f3cdc5fe25ad`，CC-BY-4.0，本节为释�
 与其他章节 1.4.368 inventory 保持版本边界。实际证据为 CPU software ICD，
 无物理/移动 GPU 性能结论；indexed/Count/mesh/DGC、完整 VK11、SC、外部工程
 和 Live/盲测仍未完成，发布状态不因这个有界合同而解除。
+
+### delivery19-scale-choice：固定可见集合与 Count 实际链
+
+Tests `cases19/scale_choice/run.py` 比较同16候选/7可见 mask 的 CPU direct → compute 稳定压紧+vkCmdDrawIndirectCount →CPU恢复。完整命令/计数/未写区域与16像素独立检查，命令 firstVertex 指定 cell、firstInstance=0；compute 单 invocation 串行压紧，不是并行 culling 性能证据。按实际 feature/query/enable、capacity/stride/countOffset、compute→DRAW_INDIRECT 与 host退休验证。[ENGINE]
+
+合法 maxDrawCount6 控制应实际少画一个可见项且质量门失败；这是 min(count,maxDrawCount) 语义，不是 Vulkan 故障。另两路径错误颜色参考控制保持不可见背景不变。计数正确不替代像素正确。[ENGINE]
+
+CPU逐可见项draw只作正确性参考，不是最优CPU性能基线。调用预算排除该参考时返回 NEEDS_COMPARABLE_BASELINE，不能跳过CPU批处理/instancing而宣称GPU唯一可行；性能目标返回 NEEDS_MEASUREMENT。CPU ICD、单小场景与应用调用数不构成物理GPU吞吐或C2全族验收。[HEUR]

@@ -85,7 +85,7 @@ CPU Data / Previous Compute Output
 | 资源 | 类型 | Usage | 生命周期 | 是否随 swapchain 重建 |
 |---|---|---|---|---|
 | output SSBO | `VkBuffer` | `STORAGE_BUFFER_BIT` | scene / frame | 否（通常） |
-| SSBO memory | `VkDeviceMemory` | device-local（性能）或 host-visible（调试） | 跟随 buffer | 否 |
+| SSBO memory | `VkDeviceMemory` | 按 memoryTypeBits 与访问需求选择属性组合；HOST_VISIBLE 可与 DEVICE_LOCAL 共存，不预设性能 | 跟随 buffer | 否 |
 | staging buffer（可选，CPU 上传） | `VkBuffer` | `TRANSFER_SRC` | 上传后释放 | 否 |
 | readback buffer（可选，CPU 回读） | `VkBuffer` | `TRANSFER_DST` + host-visible | per-frame | 否 |
 | descriptor set | `VkDescriptorSet` | SSBO binding | per-frame / per-pass | 视策略而定 |
@@ -93,7 +93,7 @@ CPU Data / Previous Compute Output
 
 设计说明：
 
-- device-local SSBO 性能最优；host-visible 仅用于调试或 CPU 每帧更新小量参数 [ENGINE]。
+- DEVICE_LOCAL 与 HOST_VISIBLE 是可组合的属性，不是互斥快慢等级；依实际访问、上传/读回成本和目标平台比较，host-visible 不限于调试 [ENGINE]。
 - 若 compute 每帧覆盖写入同一 buffer，建议使用 ring buffer 或 ping-pong 双缓冲，避免上一帧 consumer 读到未完成的旧数据 [HEUR]。
 - indirect draw buffer 必须额外加 `VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT` [SPEC]。
 
@@ -106,7 +106,7 @@ CPU Data / Previous Compute Output
 | set=0,binding=0 | `STORAGE_BUFFER` | output SSBO（compute 写入） | Compute |
 | set=0,binding=1 | `STORAGE_BUFFER` / `UNIFORM_BUFFER` | input data / params | Compute |
 | set=0,binding=0 | `STORAGE_BUFFER` | compute 输出的 SSBO（graphics 读取） | Vertex / Fragment |
-| set=0,binding=0 | `STORAGE_BUFFER` | indirect draw buffer | Vertex（间接消费） |
+| compute 写入时的 SSBO binding；命令消费无需 shader descriptor | `STORAGE_BUFFER`（仅 compute 写入） | indirect command / count buffer | Compute 写入；DRAW_INDIRECT / INDIRECT_COMMAND_READ 命令消费 |
 
 设计说明：
 
@@ -140,20 +140,20 @@ CPU Data / Previous Compute Output
 
 1. **确认特性与限制**：查询 `maxStorageBufferRange`、`minStorageBufferOffsetAlignment`；启用 `storageBuffer16BitAccess` 等若需要 [SPEC]。
 2. **定义数据结构**：按 std430 布局，注意数组元素对齐；GLSL 中 `layout(std430, binding=0) buffer Output { Element data[]; };` [SPEC]。
-3. **创建 output buffer**：`VkBufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT`；若作为 indirect draw buffer 加 `INDIRECT_BUFFER_BIT`；若需 CPU 回读加 `TRANSFER_SRC_BIT` [SPEC]。
-4. **分配内存**：device-local 用于性能；host-visible 仅用于调试 [ENGINE]。
+3. **创建 output buffer**：`VkBufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT`；若作为 indirect draw buffer 加 `INDIRECT_BUFFER_BIT`；选择 copy 到独立 readback buffer 的回读路径时加 `TRANSFER_SRC_BIT`；直接读取 HOST_VISIBLE 映射内存不因 CPU 回读本身要求该 usage [SPEC]。
+4. **分配内存**：按 memoryTypeBits、所需属性和工作负载选择；coherent host-visible 可用于实际输入，DEVICE_LOCAL 不保证更快 [ENGINE]。
 5. **创建 descriptor set layout**：`descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER`，`stageFlags = VK_SHADER_STAGE_COMPUTE_BIT`（compute 写入）或包含 `VERTEX/FRAGMENT`（graphics 读取）[SPEC]。
 6. **分配并更新 descriptor set**：填写 `VkDescriptorBufferInfo`（buffer、offset、range），调用 `vkUpdateDescriptorSets`。range 可设为 `VK_WHOLE_SIZE` 或具体字节数 [SPEC]。
 7. **录制 compute command buffer**：
-   - 若 input 来自 CPU，先 staging copy 并插入 `TRANSFER_WRITE → SHADER_READ` barrier。
+   - 若选择 staging 路径，在 copy 后建立 `TRANSFER_WRITE → SHADER_READ` 依赖；直接写入 host-visible 路径按 coherent/flush、提交前写入顺序及退休条件处理，不强制 staging。
    - `vkCmdBindPipeline(COMPUTE)`、`vkCmdBindDescriptorSets`。
    - `vkCmdDispatch(workgroupX, workgroupY, workgroupZ)`。
    - 插入 `VkBufferMemoryBarrier`：`srcStage = COMPUTE_SHADER`，`srcAccess = SHADER_WRITE`，`dstStage = VERTEX_SHADER | FRAGMENT_SHADER | DRAW_INDIRECT`，`dstAccess = SHADER_READ | INDIRECT_COMMAND_READ`。
-8. **graphics 消费**：在 draw / dispatch indirect 前确保 barrier 已完成；绑定 descriptor set 到 graphics pipeline。
-9. **CPU 回读（可选）**：
-   - compute dispatch 后插入 `SHADER_WRITE → TRANSFER_READ` barrier；
-   - `vkCmdCopyBuffer` 到 host-visible readback buffer；
-   - 建立transfer write→host read依赖，等待真实completion；non-coherent内存按atom对齐invalidate后读取映射内存 [SPEC]。
+8. **graphics 消费**：按真实 consumer 建立依赖：draw/dispatch indirect 的参数由命令阶段读取，不以 graphics shader descriptor 绑定为前提；只有 shader 另行读取 SSBO 时才绑定对应 graphics/compute pipeline 的兼容 descriptor。
+9. **CPU 回读（可选，按内存与复制策略分支）**：
+   - copy 路径：compute 写入后建立 `SHADER_WRITE → TRANSFER_READ` 依赖，`vkCmdCopyBuffer` 到带 `TRANSFER_DST_BIT` 的 host-visible readback buffer，再建立 transfer write→host read 依赖 [SPEC]。
+   - 直接映射路径：源 allocation 必须 HOST_VISIBLE；建立 compute shader write→host read 依赖，不要求仅为回读增加 TRANSFER_SRC usage [SPEC]。
+   - 两路径都须等待实际相关 GPU 工作完成后读取；non-coherent 内存还须按合法 mapped range 和 nonCoherentAtomSize 规则 invalidate。HOST_COHERENT 省去该 invalidate，不省去依赖或完成条件 [SPEC]。
 10. **动态 offset（可选）**：同一 buffer 分 slot 给多个 object，绑定命令传入 dynamic offset，对齐到 `minStorageBufferOffsetAlignment` [SPEC]。
 11. **边界处理**：shader 中通过 `length()` 获取数组元素数量，避免越界；CPU 侧确保 buffer size >= `stride * count`。
 12. **接入销毁路径**：按 `descriptor set → buffer → memory` 顺序释放；VMA 用户统一 `vmaDestroyBuffer`。
