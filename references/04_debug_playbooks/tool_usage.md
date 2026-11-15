@@ -164,3 +164,18 @@ fault记录见 [资源级取证](02_crash_hang/device_lost.md#mobile-fault-evide
 [ENGINE] 优先已有工具，不引入常驻调试服务。Validation/SyncVal 回调保留 message ID 与原始文件 hash；GPU-AV 插桩与性能测量分离。RenderDoc 通过官方 Python API 获取事件/绑定，先核 replay support 与 protected 内容限制；未加载成功不得生成“抓帧已验证”记录。Perfetto Trace Processor 固定查询 `SELECT id, ts, dur, track_id, name FROM slice ORDER BY id LIMIT 10001;`，超过约定10000行拒绝而非把截断表当完整 trace。字段、单位或工具版本不匹配，停止该层并保留错误。
 
 本候选的 callback/CSV 解析是离线合同，不负责获取系统权限或安装 layer，不把模拟输入算真实工具采集。来源：[SyncVal](https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/main/docs/syncval_usage.md)、[Trace Processor](https://perfetto.dev/docs/analysis/trace-processor)。正式证据需另冻结工具版本和文件 hash。
+
+
+### delivery19-real-tool-probe
+Use the companion tests' opt-in `probes19/run_tool_capture.py` to verify adapter
+integration with real local tools. Compile `validation_probe.c` against the
+selected Vulkan headers/loader and explicitly select the desired ICD and layer.
+Record their actual versions. The negative size=0 buffer probe must emit
+VUID-VkBufferCreateInfo-size-00912; the corrected size=16 path must succeed.
+Abort the invalid callback call (VK_TRUE), rather than forwarding invalid input
+to the driver. Remove the layer and remove the injected fault independently:
+both negative controls must fail the bad-case gate.
+Perfetto ingestion of measured CPU subprocess spans verifies trace processing
+only, not GPU time, scheduling data sources, capture replay, or engine repair.
+A software ICD run cannot certify hardware support. Keep raw data local and
+publish only authorized, sanitized provenance and explicit scope limitations.
