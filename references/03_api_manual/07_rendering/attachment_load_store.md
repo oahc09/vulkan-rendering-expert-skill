@@ -83,8 +83,8 @@ VkAttachmentDescription（render pass）
 
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
-| `loadOp` | `LOAD`/`CLEAR`/`DONT_CARE`：决定 tile 开始时是否从 memory 读取。[SPEC] | 该 clear 的用了 LOAD，增加不必要带宽。[TOOL] |
-| `storeOp` | `STORE`/`DONT_CARE`：决定 tile 结束时是否写回 memory。[SPEC] | 需要后续采样时用了 DONT_CARE，导致内容丢失。[TOOL] |
+| `loadOp` | `LOAD`/`CLEAR`/`DONT_CARE`：规定 render area 初始内容保留、清除或丢弃语义，不直接规定物理 tile 读取。[SPEC] | 该 clear 的用了 LOAD，增加不必要带宽。[TOOL] |
+| `storeOp` | `STORE`/`DONT_CARE`：规定 render area 结果是否需保留，不直接规定缓存/压缩物理写回路径。[SPEC] | 需要后续采样时用了 DONT_CARE，导致内容丢失。[TOOL] |
 | `stencilLoadOp` / `stencilStoreOp` | depth 与 stencil 可独立控制。[SPEC] | 只设置 depth op 而忽略 stencil。[TOOL] |
 | `clearValue` | `loadOp = CLEAR` 时必须提供，数组索引与 attachment 索引对应。[SPEC] | clear value 数量不足或索引错误。[TOOL] |
 
@@ -163,7 +163,7 @@ VkAttachmentDescription（render pass）
 
 ### CPU-GPU 同步
 
-- load/store op 由 GPU 执行，CPU 侧无需额外同步。[SPEC]
+- load/store 由设备执行，但不免除 host 访问、提交完成和资源生命周期所需同步。[SPEC]
 
 ### GPU-GPU 同步
 
@@ -171,15 +171,15 @@ VkAttachmentDescription（render pass）
 
 ### 资源访问同步
 
-- `STORE` 后 attachment 的 layout 会变为 `finalLayout` 或 rendering info 指定的 layout，后续使用需匹配。[SPEC]
+- STORE 规定内容保留，不是 layout 转换命令。传统 render pass 另按 attachment/subpass layout 规则转换；dynamic rendering 的 imageLayout 只是声明当前 layout，后续用途仍需显式 transition/依赖。[SPEC]
 
 ---
 
 ## 11. Android 注意点
 
-- Tile-based GPU 上，`LOAD_OP_LOAD` 会把上一帧数据从 system memory 读回 tile memory，功耗高；不需要时务必用 `CLEAR` 或 `DONT_CARE`。[ANDROID][ENGINE]
-- `STORE_OP_STORE` 会把整个 render area 写回 memory；对不需要保留的 depth/stencil 或临时 attachment 用 `DONT_CARE` 可显著降低功耗。[ANDROID]
-- 部分驱动对 `DONT_CARE` 的优化会导致内容不确定，若后续意外读取会出现花屏；必须在架构层面保证不需要的 attachment 真正不被复用。[TOOL]
+- LOAD 保留所需已有内容，不限于上一帧；其实际 tile/system-memory 流量与功耗依实现和工作负载实测，不能由枚举值直接推出。[ANDROID][ENGINE]
+- STORE 保留 render area 结果供后续使用；不需要内容时可考虑 DONT_CARE，但物理流量与功耗收益需测量，不保证显著改善。[ANDROID]
+- DONT_CARE 之后相应区域内容在规范上就是未定义，不是仅部分驱动优化的偶发现象；未重新定义前不能将读取值用于正确性判断。[TOOL]
 
 ---
 
@@ -191,8 +191,8 @@ VkAttachmentDescription（render pass）
 
 ### GPU 侧
 
-- `LOAD`/`STORE` 组合会增加 memory bandwidth；`CLEAR`/`DONT_CARE` 组合最省。[ENGINE]
-- 全屏 render area 配合 `STORE` 会强制写回整屏数据。[ENGINE]
+- 先选择满足内容需求的 LOAD/CLEAR/DONT_CARE 和 STORE；实际 bandwidth 需平台测量，不能保证某组合总是最省。[ENGINE]
+- 全屏 STORE 要求保留区域结果，但不规定所有实现的物理缓存/压缩写回路径或精确字节流量。[ENGINE]
 
 ### 移动端
 
@@ -205,7 +205,7 @@ VkAttachmentDescription（render pass）
 ## 13. 专家经验
 
 **经验**：
-把 load/store op 当作“attachment 内容契约”：在进入 render pass 前问自己“这个 attachment 是否必须保留上一帧内容”，在结束前问自己“后面是否还有人读它”。若两个答案都是否，就用 `DONT_CARE`；若只是开始不需要，用 `CLEAR`；只有真正需要历史内容时才用 `LOAD`。对移动端 tile-based GPU，这四个 op 的选择往往比 shader 优化更能影响帧率。
+把 load/store op 当作“attachment 内容契约”：在进入 render pass 前问自己“这个 attachment 是否必须保留上一帧内容”，在结束前问自己“后面是否还有人读它”。若两个答案都是否，就用 `DONT_CARE`；若只是开始不需要，用 `CLEAR`；只有真正需要历史内容时才用 `LOAD`。对移动端 tile-based GPU，应分别测量这些 op 与 shader 的影响，不预设哪个必然决定帧率。
 
 **适用条件**：
 所有使用 render pass 或 dynamic rendering 的场景。

@@ -203,7 +203,7 @@ VkAttachmentDescription[]
 
 ## 11. Android 注意点
 
-- Tile-based GPU 上 render pass 的 load/store op 直接决定 tile memory 带宽；`LOAD_OP_CLEAR`/`STORE_OP_DONT_CARE` 比 `LOAD`/`STORE` 更省带宽。[ANDROID][ENGINE]
+- load/store op 规定内容需求，可能影响 tile memory 带宽；必须先保留所需内容，再对合法方案实测，不保证 CLEAR/DONT_CARE 总比 LOAD/STORE 更省。[ANDROID][ENGINE]
 - 避免 render area 设置成全屏后再用小 scissor 裁剪，仍可能触发全屏 load/store。[ANDROID]
 - 横竖屏切换导致 surface 尺寸变化时，framebuffer 需要重建，但 render pass 本身若 format/sample 不变通常可复用。[ANDROID]
 - AGI 可分析每 render pass 的 tile 开销与 resolve 次数。[TOOL]
@@ -219,14 +219,14 @@ VkAttachmentDescription[]
 
 ### GPU 侧
 
-- Load/store op 选择直接影响 bandwidth；尽量使用 `CLEAR` / `DONT_CARE` 而非 `LOAD` / `STORE`。[ENGINE]
+- 先满足内容保留/初始化需求，再实测合法 load/store 方案的 bandwidth；不能为预期收益丢弃仍需读取的内容。[ENGINE]
 - Subpass dependency 过宽（`ALL_COMMANDS_BIT`）会限制 GPU 并行。[HEUR]
 - 过多 subpass 会增加 command processor 与 tile 切换开销。[ENGINE]
 
 ### 移动端
 
 - 尽量减少每帧 render pass 切换次数；合并 subpass 或合并 draw call。[ENGINE]
-- 注意 `STORE_OP_STORE` 会把 tile 数据写回 system memory，增加功耗；不需要保留的 attachment 用 `DONT_CARE`。[ANDROID]
+- STORE 要求保留结果，但不规定物理缓存/压缩流量或功耗；不需保留时可选择 DONT_CARE，收益仍需测量。[ANDROID]
 - MSAA resolve 最好通过 subpass resolve attachment 完成，避免手动 resolve。[ENGINE]
 
 ---
@@ -234,7 +234,7 @@ VkAttachmentDescription[]
 ## 13. 专家经验
 
 **经验**：
-把 render pass 当作“渲染阶段”而非“单个 draw call”的描述：一个主光 pass、一个后处理 pass、一个 UI pass 通常只需少量 render pass。通过 subpass 做 input attachment 读取或 MSAA resolve，比手动 barrier 更高效。对移动端，load/store op 的选择和 render area 大小是性能调优的首要杠杆。
+把 render pass 当作“渲染阶段”而非“单个 draw call”的描述：一个主光 pass、一个后处理 pass、一个 UI pass 通常只需少量 render pass。通过 subpass 做 input attachment 读取或 MSAA resolve 可能改变数据驻留与同步成本，是否比另一合法方案高效需目标平台实测。对移动端，load/store op 的选择和 render area 大小是性能调优的首要杠杆。
 
 **适用条件**：
 多阶段渲染、MSAA、deferred shading、tile-based GPU 项目。
