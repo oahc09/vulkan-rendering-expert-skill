@@ -283,3 +283,37 @@ Binary cache 记录 `shaderBinaryUUID` 与 `shaderBinaryVersion`：相同 UUID �
 验证：缺 feature 拒绝、binary incompatible → SPIR-V、混合绑定状态失效、linked stage/layout 不兼容负例；无设备执行不记 GPU PASS。回退使用传统 graphics/compute pipeline，维持相同 descriptor 与 rendering 接口。
 
 固定规范（Vulkan 1.4.368，source-read；不是设备验证）：[shaders-objects-creation / binary-compatibility / pipeline-interaction / destruction](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/shaders.adoc)。
+
+## Delivery19 offline target / device admission split (bounded L1/L2)
+
+Freeze shader source, compiler and validator versions, target environment and
+resulting binary hash together. Run SPIRV-Tools against the deployment target,
+not merely its default environment; a successful newer-target build does not
+establish compatibility with an older target. Disassemble the exact validated
+binary to inspect declared capabilities/extensions. Compiler or validation
+failure must stop this artifact path; a stale binary from an earlier successful
+build is not a replacement. Retain stdout/stderr digests and exit status for both
+positive and target-mismatch controls. A disassembly is evidence about that
+binary, not a general reflection engine or proof of executed shader behavior.
+
+For the bounded Shader/Float64 slice, require Shader capability (08738), then
+check corresponding capability requirements (08740). Float64 needs a real
+shaderFloat64 support query and enablement in the matching logical-device
+creation record. Keep object/run/generation identities. An absent query is
+unknown, support without enablement is not admission, and offline spirv-val has
+no knowledge of the application's VkDevice creation. Unknown capabilities or
+extensions must go to their specific rules, not silently inherit Float64 logic.
+
+The paired `tools/shader_target19.py` checks only those declared-capability
+obligations. Even its positive result leaves device API/SPIR-V compatibility,
+stage and storage restrictions, descriptor/pipeline interfaces, specialization,
+limits, execution, numerical output and final delivery validation open. Its
+support/enablement inputs are supplied facts, not invented observations.
+`cases19/shader_target` supplies actual compiler/validator/disassembler cases;
+CPU feature-manifest negatives are separately labelled and do not claim a
+logical-device experiment. Existing noncoherent memory UNAVAILABLE_NOT_RUN stays
+unchanged. No mobile, SC or external-engine acceptance follows from offline tests.
+
+Sources: [module requirements](https://docs.vulkan.org/refpages/latest/refpages/source/VkShaderModuleCreateInfo.html),
+[device feature definitions](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceFeatures.html),
+[SPIRV-Tools](https://github.com/KhronosGroup/SPIRV-Tools).
