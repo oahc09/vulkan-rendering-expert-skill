@@ -122,7 +122,7 @@ VkDescriptorSet (已分配)
 ### 销毁阶段
 
 - [ ] 更新后的 descriptor set 是否仍被 GPU 使用？
-- [ ] 资源销毁前是否已更新 descriptor 指向新资源或等待 GPU idle？
+- [ ] 旧资源的所有实际 GPU consumer 是否已退休？更新 descriptor 指向新资源不能替代退休证明。
 
 ---
 
@@ -134,7 +134,7 @@ VkDescriptorSet (已分配)
 4. Uniform buffer offset 不满足 alignment。[TOOL]
 5. Combined image sampler 只更新 image 没更新 sampler。[TOOL]
 6. Swapchain recreate 后未更新引用旧 image view 的 descriptor。[ENGINE]
-7. 在 GPU 使用 descriptor set 期间 update 它（非 update-after-bind）。[SPEC]
+7. 在普通 binding 被 pending command buffer 使用期间更新它；高级 binding flags 也须逐项满足 feature、usage 与 host 同步合同。[SPEC]
 8. `descriptorCount` 与数组大小不一致。[TOOL]
 
 ---
@@ -169,16 +169,16 @@ VkDescriptorSet (已分配)
 
 ### 使用时机
 
-- 可在 command buffer 录制前或录制中更新（但需遵守 update-after-bind 规则）。[SPEC]
+- 在绑定/录制前初始化普通 binding；更新已被 recording/executable command buffer 引用的普通 binding 会使相关 command buffer 失效，须 reset/re-record。高级 flags 的例外不可隐含采用。[SPEC]
 - 每帧更新 per-frame descriptor 是常见做法。
 
 ### 销毁阶段
 
-- 资源销毁前，必须确保没有 descriptor set 引用它，或 GPU 已完成。[SPEC]
+- 资源销毁前，必须确保所有实际引用该资源的已提交命令已完成；改写 descriptor 不是对已有 consumer 的退休证明。尚未提交的记录也须在资源变化后保持有效或重新录制。[SPEC]
 
 ### in-flight 风险
 
-- Descriptor set 被 submit 后，其内容（包括指向的资源）在 fence signal 前不能修改。[SPEC]
+- 普通 binding 被 pending command buffer 使用时不能更新（VUID-vkUpdateDescriptorSets-None-03047）；必须证明所有相关提交退休。无关或旧 generation 的 fence signal 不够。descriptor 更新、资源内容写入及对象销毁是不同合同，不以一个 fence 规则概括所有情况。[SPEC]
 - 动态 uniform buffer 可通过 offset 切换避免更新 descriptor。[ENGINE]
 
 ---
@@ -188,7 +188,7 @@ VkDescriptorSet (已分配)
 ### CPU-GPU 同步
 
 - `vkUpdateDescriptorSets` 后，CPU 应确保资源内容已就绪（如 staging copy 完成）。
-- 不要在 GPU 使用 descriptor set 期间 update（除非 update-after-bind）。[SPEC]
+- 普通 binding 的 pending 更新受 03047 限制。UPDATE_AFTER_BIND / UPDATE_UNUSED_WHILE_PENDING 不是全面同步豁免：逐类型 feature 必须支持并启用，binding/layout/pool flags、动态使用限制与 host 外部同步均须满足。[SPEC]
 
 ### GPU-GPU 同步
 
@@ -259,3 +259,20 @@ VkDescriptorSet (已分配)
 2. `VkDescriptorBufferInfo` 的 offset / range 限制。
 3. Combined image sampler 与 separate image / sampler 的 update 差异。
 4. Texel buffer view 的创建与更新规则。
+
+### delivery19-descriptor-retirement-contract
+
+This card and `uniform_buffer_descriptor.md#delivery19-ordinary-ubo-lifetime`
+share one ordinary-binding contract: descriptor replacement does not retire old
+resource consumers. Pending update is prohibited by the exact Vulkan1.4.309
+`VUID-vkUpdateDescriptorSets-None-03047`; buffer destruction independently requires
+all submitted commands referring to the buffer to complete
+(`VUID-vkDestroyBuffer-buffer-00922`). Advanced flags never waive resource lifetime.
+Updating affected recording/executable ordinary bindings requires reset/re-record
+before reuse; existing actual 03047/00070 lifecycle controls cover this bounded
+path. These controls do not exercise illegal destruction of a pending resource.
+
+Frozen VUID source: Vulkan-Headers43d153dd7f9f5e8b9f79d26d868c82a82b9ef80b,
+API1.4.309, validusage SHA256
+`f61afea8ca6097342cae1b65bfab81675ee7fdc2d809403e083329b7d56597a7`.
+A searchable clause or matching identifier alone is not a complete L1/L2 review.

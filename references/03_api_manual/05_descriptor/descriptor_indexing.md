@@ -30,7 +30,8 @@ VkPhysicalDeviceFeatures2
     → VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT
     → VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
 → VkDescriptorSetLayoutCreateInfo (pNext 链接上面)
-→ vkCreateDescriptorSetLayout (flags 含 UPDATE_AFTER_BIND_POOL_BIT 的 pool)
+→ vkCreateDescriptorSetLayout (使用 UAB binding 时 layout 含 UPDATE_AFTER_BIND_POOL_BIT)
+→ vkCreateDescriptorPool (分配该 layout 时 pool 含 UPDATE_AFTER_BIND_BIT)
 → VkDescriptorSetVariableDescriptorCountAllocateInfo (可选)
 → vkAllocateDescriptorSets
 → vkUpdateDescriptorSets (按需 update 部分 element)
@@ -41,14 +42,14 @@ VkPhysicalDeviceFeatures2
 ### 上游依赖
 
 - 设备必须支持 `VK_EXT_descriptor_indexing` 或 Vulkan 1.2 + `descriptorIndexing` feature。[SPEC]
-- 对应 feature bit 必须在 `VkPhysicalDeviceDescriptorIndexingFeatures` 中开启（`shaderSampledImageArrayNonUniformIndexing` / `shaderStorageBufferArrayNonUniformIndexing` / `descriptorBindingPartiallyBound` / `descriptorBindingUpdateAfterBind` / `descriptorBindingVariableDescriptorCount` 等）。[SPEC]
+- 对应 feature bit 必须在 `VkPhysicalDeviceDescriptorIndexingFeatures` 中开启（`shaderSampledImageArrayNonUniformIndexing` / `shaderStorageBufferArrayNonUniformIndexing` / `descriptorBindingPartiallyBound` / 对应 descriptor 类型的实际 update-after-bind feature / `descriptorBindingVariableDescriptorCount` 等）。[SPEC]
 - Descriptor pool 创建时必须使用 `VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT`，才能容纳 update-after-bind 的 set。[SPEC]
 
 ### 下游影响
 
 - Pipeline layout 兼容性规则在 update-after-bind / variable count 下有特殊限制。[SPEC]
 - Shader 中的 `nonuniformEXT` 修饰符必须与对应的 `*NonUniformIndexing` feature bit 匹配。[SPEC]
-- Descriptor set 容量上限由 `maxPerSetDescriptors` 与各 binding `maxDescriptorArrayLength`（厂商查询项）共同决定。[SPEC]
+- 容量须同时检查 descriptor 类型的 per-stage/per-set limits、update-after-bind 对应 limits、pool 容量及 layout support。`vkGetDescriptorSetLayoutSupport` 可配合 `VkDescriptorSetVariableDescriptorCountLayoutSupport::maxVariableDescriptorCount` 查询 variable binding 支持上限；不能用一个通用数组长度字段代替这些条件。[SPEC]
 
 ---
 
@@ -80,9 +81,28 @@ VkPhysicalDeviceFeatures2
 | Flag | 含义 | 必需 feature |
 |---|---|---|
 | `VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT` | binding 中允许部分 element 未 update，shader 订阅前需保证不访问未 update 项。[SPEC] | `descriptorBindingPartiallyBound` |
-| `VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT` | binding 允许在 set 被 command buffer 引用期间继续 update。[SPEC] | `descriptorBindingUpdateAfterBind` |
-| `VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT` | 该 binding 是 set 中最后一个，实际 descriptor 数量在 allocate 时通过 `VkDescriptorSetVariableDescriptorCountAllocateInfo` 决定，可小于 layout 上限。[SPEC] | `descriptorBindingVariableDescriptorCount` |
+| `VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT` | 只在相应类型 feature 和 binding/layout/pool 条件满足时放宽更新时机；不免除在途资源寿命、并发访问和 host synchronization。[SPEC] | 对应 descriptor 类型的实际 update-after-bind feature |
+| `VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT` | 该 binding 必须具有 set 中最高 binding 编号（不是数组排列的最后一项），实际 descriptor 数量在 allocate 时通过 `VkDescriptorSetVariableDescriptorCountAllocateInfo` 决定，可小于 layout 上限。[SPEC] | `descriptorBindingVariableDescriptorCount` |
 | `VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT` | 允许在 GPU 使用期间 update 未被使用的 element（弱化的 update-after-bind）。[SPEC] | `descriptorBindingUpdateUnusedWhilePending` |
+
+### 固定 1.4.309：按类型启用，不存在通用 UAB 开关
+
+下表字段是实际 device-enabled 条件，物理设备支持并不等于已启用。前六项属于 `VkPhysicalDeviceDescriptorIndexingFeatures`（或对应 Vulkan 1.2 成员），后两项属于各自 feature 结构；不是一个通用 feature 的别名。[SPEC]
+
+| Descriptor 类型 | 必需 feature 成员 | 固定 VUID 后缀 |
+|---|---|---|
+| UNIFORM_BUFFER | `descriptorBindingUniformBufferUpdateAfterBind` | 03005 |
+| SAMPLER / COMBINED_IMAGE_SAMPLER / SAMPLED_IMAGE | `descriptorBindingSampledImageUpdateAfterBind` | 03006 |
+| STORAGE_IMAGE | `descriptorBindingStorageImageUpdateAfterBind` | 03007 |
+| STORAGE_BUFFER | `descriptorBindingStorageBufferUpdateAfterBind` | 03008 |
+| UNIFORM_TEXEL_BUFFER | `descriptorBindingUniformTexelBufferUpdateAfterBind` | 03009 |
+| STORAGE_TEXEL_BUFFER | `descriptorBindingStorageTexelBufferUpdateAfterBind` | 03010 |
+| INLINE_UNIFORM_BLOCK | `VkPhysicalDeviceInlineUniformBlockFeatures::descriptorBindingInlineUniformBlockUpdateAfterBind` | 02211 |
+| ACCELERATION_STRUCTURE_KHR / NV | `VkPhysicalDeviceAccelerationStructureFeaturesKHR::descriptorBindingAccelerationStructureUpdateAfterBind` | 03570 |
+
+以上是 `VkDescriptorSetLayoutBindingFlagsCreateInfo` 的类型 feature 门槛，不是所有 binding 类型/flag 合法性的完整列表；例如 dynamic uniform/storage buffer 与 input attachment 不可直接套用普通类型 UAB。未知类型必须回查，不默认支持。除相应 feature 外还要核对 layout/pool flags、limits、descriptor 使用与更新同步、资源 lifetime。只启用 sampled-image UAB 不批准 storage-buffer UAB。[SPEC]
+
+来源：测试仓固定 `validusage.json` Vulkan 1.4.309（SHA256 `f61afea8ca6097342cae1b65bfab81675ee7fdc2d809403e083329b7d56597a7`），上述 owner 的逐类型条款；对应[固定规范源](https://github.com/KhronosGroup/Vulkan-Docs/tree/v1.4.309)。该映射不代表硬件运行验证或全域语义审查完成。
 
 ### 相关扩展 / 版本
 
@@ -98,18 +118,18 @@ VkPhysicalDeviceFeatures2
 ```text
 1. 查询设备能力
    → vkGetPhysicalDeviceFeatures2 (pNext: VkPhysicalDeviceDescriptorIndexingFeatures)
-       检查：descriptorBindingPartiallyBound / descriptorBindingUpdateAfterBind /
+       检查：descriptorBindingPartiallyBound / 按类型分别启用的 update-after-bind feature /
             descriptorBindingVariableDescriptorCount /
             shaderSampledImageArrayNonUniformIndexing / shaderStorageBufferArrayNonUniformIndexing
-   → vkGetPhysicalDeviceProperties2 (pNext: VkPhysicalDeviceDescriptorIndexingProperties)
-       检查：maxPerSetDescriptors / maxUpdateAfterBindDescriptorsInAllPools
+   → vkGetPhysicalDeviceProperties2 (pNext: VkPhysicalDeviceDescriptorIndexingProperties + VkPhysicalDeviceMaintenance3Properties)
+       检查：maintenance3.maxPerSetDescriptors / indexing.maxUpdateAfterBindDescriptorsInAllPools
 
 2. 启用 feature
    → Vulkan 1.2: 在 VkDeviceCreateInfo 的 pNext 中附加 VkPhysicalDeviceVulkan12Features
        descriptorIndexing = VK_TRUE
        shaderSampledImageArrayNonUniformIndexing = VK_TRUE
        descriptorBindingPartiallyBound = VK_TRUE
-       descriptorBindingUpdateAfterBind = VK_TRUE
+       descriptorBindingSampledImageUpdateAfterBind = VK_TRUE  // 仅示例 sampled 类型；其他类型分别检查
        descriptorBindingVariableDescriptorCount = VK_TRUE
    → 或 Vulkan 1.0/1.1 + VK_EXT_descriptor_indexing: 使用 VkPhysicalDeviceDescriptorIndexingFeatures
 
@@ -148,7 +168,7 @@ VkPhysicalDeviceFeatures2
 |---|---|---|
 | `VkPhysicalDeviceDescriptorIndexingFeatures::descriptorBindingPartiallyBound` | 必须为 VK_TRUE 才能使用 `PARTIALLY_BOUND` flag。[SPEC] | 未启用该 feature 就在 bindingFlags 中使用 `PARTIALLY_BOUND`，导致 validation error。[TOOL] |
 | `VkPhysicalDeviceDescriptorIndexingFeatures` 中对应类型的 `descriptorBinding*UpdateAfterBind` 字段 | 按 descriptor 类型启用 sampled image、storage image、uniform/storage buffer、texel buffer 等各自 feature；不存在统一的 update-after-bind feature 字段。[SPEC] | 仅启用其中一个类型的 feature 就用于所有 descriptor，或遗漏 layout/pool flag。[TOOL] |
-| `VkPhysicalDeviceDescriptorIndexingFeatures::descriptorBindingVariableDescriptorCount` | 必须为 VK_TRUE 才能 allocate 时指定实际 count。[SPEC] | variable binding 没有放在 layout 最后一个 binding 上。[TOOL] |
+| `VkPhysicalDeviceDescriptorIndexingFeatures::descriptorBindingVariableDescriptorCount` | 必须为 VK_TRUE 才能 allocate 时指定实际 count。[SPEC] | variable binding 不是 layout 中最高 binding 编号。[TOOL] |
 | `VkPhysicalDeviceDescriptorIndexingFeatures::shaderSampledImageArrayNonUniformIndexing` | shader 中 `nonuniformEXT` 修饰 sampled image array 索引必须开启。[SPEC] | 用了 `nonuniformEXT` 但未启用对应 feature bit。[TOOL] |
 | `VkDescriptorSetLayoutBindingFlagsCreateInfo::pBindingFlags` | 每个 binding 对应一个 flag；`bindingCount` 必须与 `VkDescriptorSetLayoutCreateInfo::bindingCount` 一致。[SPEC] | flag 数组长度与 binding 数组不匹配。[TOOL] |
 | `VkDescriptorSetLayoutBinding::descriptorCount`（对 variable binding） | 这是上限；实际数量在 allocate 时由 `VkDescriptorSetVariableDescriptorCountAllocateInfo` 决定。[SPEC] | 误把 layout 中的 descriptorCount 当作 set 实际长度。[ENGINE] |
@@ -169,8 +189,8 @@ VkPhysicalDeviceFeatures2
 
 - [ ] `VkDescriptorSetLayoutBindingFlagsCreateInfo::bindingCount` 是否等于 `VkDescriptorSetLayoutCreateInfo::bindingCount`？
 - [ ] 启用了 `PARTIALLY_BOUND` 的 binding 是否在 feature 中开启了 `descriptorBindingPartiallyBound`？
-- [ ] 启用了 `UPDATE_AFTER_BIND` 的 binding 是否在 feature 中开启了 `descriptorBindingUpdateAfterBind`？
-- [ ] 使用 `VARIABLE_DESCRIPTOR_COUNT` 的 binding 是否是 layout 中最后一个 binding？
+- [ ] 启用了 `UPDATE_AFTER_BIND` 的 binding 是否在 feature 中开启了 对应 descriptor 类型的实际 update-after-bind feature？
+- [ ] 使用 `VARIABLE_DESCRIPTOR_COUNT` 的 binding 是否具有 layout 中最高 binding 编号？
 - [ ] 是否所有 binding 的 flag 都在合法组合内（spec 表格 `Valid Combinations of VkDescriptorBindingFlagBits`）？
 
 ### Pool 创建阶段
@@ -191,7 +211,7 @@ VkPhysicalDeviceFeatures2
 ### Shader 阶段
 
 - [ ] 使用 `nonuniformEXT` 修饰的索引是否在 feature 中启用了对应的 `*NonUniformIndexing` bit？
-- [ ] 数组大小是否超过 `maxDescriptorArrayLength` 或厂商属性限制？
+- [ ] 是否核对实际类型的 per-stage/per-set limits、UAB limits、layout support 和 variable count 上限？
 
 ---
 
@@ -286,13 +306,13 @@ VkPhysicalDeviceFeatures2
 ### Adreno（Qualcomm）
 
 - 较新驱动（Adreno 7xx 系列 + 较新 driver）支持 descriptor indexing 与 non-uniform indexing。[ANDROID]
-- 早期 Adreno 6xx 驱动可能未开启 `descriptorBindingUpdateAfterBind`，需运行期查询。[ANDROID]
+- 早期 Adreno 6xx 驱动可能未开启 对应 descriptor 类型的实际 update-after-bind feature，需运行期查询。[ANDROID]
 - Bindless array 建议控制在数千级别，过大数组在某些驱动版本上触发性能 cliff 或 crash。[ANDROID]
-- 推荐优先使用 `PARTIALLY_BOUND` + `UPDATE_AFTER_BIND`，比纯 variable count 更稳。[ENGINE]
+- 按实际动态使用、更新时机与设备启用能力选择 PARTIALLY_BOUND / UPDATE_AFTER_BIND / variable count；三者解决不同问题，不构成普适稳定性排序。[ENGINE]
 
 ### Mali（Arm）
 
-- Mali Valhall / Gen5 驱动支持 descriptor indexing，但 `descriptorBindingUpdateAfterBind` 与 `descriptorBindingPartiallyBound` 的稳定性因 driver 版本差异较大。[ANDROID]
+- Mali Valhall / Gen5 驱动支持 descriptor indexing，但 对应 descriptor 类型的实际 update-after-bind feature 与 `descriptorBindingPartiallyBound` 的稳定性因 driver 版本差异较大。[ANDROID]
 - Mali 鼓励使用 bindless（如 "descriptor buffers" / "Bifrost tiling"），但 Vulkan path 上仍以 descriptor indexing 为标准路径。[ANDROID]
 - 注意 `maxPerSetDescriptors` 在 Mali 上通常低于桌面端；bindless array 大小应基于 property 而非写死。[ANDROID]
 
@@ -340,9 +360,9 @@ Bindless 是现代渲染引擎（如 Unreal Nanite、AAA 引擎材质系统）�
    - `texture2D g_Textures[] : register(space0);`（或等价 GLSL）
    - `SamplerState g_Samplers[];`
    - `RWByteAddressBuffer g_Buffers[];`
-2. Layout 启用 `PARTIALLY_BOUND | UPDATE_AFTER_BIND`，最后一个 binding 启用 `VARIABLE_DESCRIPTOR_COUNT`。
+2. Layout 启用 `PARTIALLY_BOUND | UPDATE_AFTER_BIND`，最高编号的 binding 按条件启用 `VARIABLE_DESCRIPTOR_COUNT`。
 3. Pool 创建时设置 `UPDATE_AFTER_BIND_BIT`，按预期资源量 × 类型计算容量。
-4. 资源加载时只 update 对应 slot；unload 时可 leave stale（partially bound 允许）。
+4. 资源加载时按允许更新时机写对应 slot；unload 前先让所有实际消费者退休。PARTIALLY_BOUND 只放宽未被动态使用 descriptor 的有效性要求，不能批准仍被访问的 stale slot 或提前销毁在途资源。
 5. Shader 通过 material index / instance index 访问：`g_Textures[nonuniformEXT(material.texture_id)]`。
 6. 一次 `vkCmdBindDescriptorSets` 在 frame 开始绑定，所有 draw 共享。
 
