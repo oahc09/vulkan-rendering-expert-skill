@@ -61,7 +61,7 @@ Material Texture Data（file / procedural）
 - [ ] Descriptor pool 对 `COMBINED_IMAGE_SAMPLER` / `SAMPLED_IMAGE` / `SAMPLER` 有足够容量 [SPEC]。
 - [ ] Shader 中 set/binding/type 与 descriptor set layout 一致 [TOOL]。
 - [ ] RenderDoc / AGI 可抓帧验证 texture 内容与 binding [TOOL]。
-- [ ] Android Surface / ANativeWindow 生命周期可追踪 [ANDROID]。
+- [ ] 若最终输出到 Android Surface，再单独追踪 Surface / ANativeWindow 生命周期；离屏纹理创建和采样不以 Surface 为前提 [ANDROID]。
 
 ---
 
@@ -111,14 +111,15 @@ CPU Pixel Data
 | set=1,binding=0 | `COMBINED_IMAGE_SAMPLER` | albedo image view + sampler | Fragment [SPEC] |
 | set=1,binding=1 | `COMBINED_IMAGE_SAMPLER` | normal map image view + sampler | Fragment [SPEC] |
 | set=1,binding=2 | `COMBINED_IMAGE_SAMPLER` | roughness/metallic/AO image view + sampler | Fragment [SPEC] |
-| set=1,binding=3 | `SAMPLED_IMAGE` + `SAMPLER`（可选，分离采样） | image view / sampler | Fragment [SPEC] |
+| set=1,binding=3 | `SAMPLED_IMAGE`（可选，分离采样） | image view | Fragment [SPEC] |
+| set=1,binding=4 | `SAMPLER`（与上行配对的独立 binding） | sampler | Fragment [SPEC] |
 | set=0,binding=0 | `UNIFORM_BUFFER` / `UNIFORM_BUFFER_DYNAMIC` | per-frame constants（MVP） | Vertex / Fragment [HEUR] |
 | push constant | `VkPushConstantRange` | material id、UV scale、blend factor | Vertex / Fragment [HEUR] |
 
 设计说明：
 
 - 常规材质优先使用 `COMBINED_IMAGE_SAMPLER`，移动端驱动优化路径更成熟 [ANDROID]。
-- 若同一张 texture 在不同 draw 中需要不同采样方式（如 nearest vs linear），使用分离 `SAMPLED_IMAGE + SAMPLER` 可减少 sampler 数量 [HEUR]。
+- 若同一张 texture 在不同 draw 中需要不同采样方式（如 nearest vs linear），可用分离 image/sampler binding 复用 image descriptor；这不会消除不同采样状态所需的 sampler 对象，也不保证性能收益 [HEUR]。
 - Descriptor 中 `imageLayout` 必须合法且与实际访问一致；graphics 与 compute 的 sampled read 均可采用满足条件的只读 layout 或 `GENERAL`，不是按 shader 阶段硬分 [SPEC]。
 - Normal map 建议使用 `VK_FORMAT_R8G8B8A8_UNORM` 或 `VK_FORMAT_R16G16_SFLOAT`；移动端优先压缩格式 [ANDROID]。
 
@@ -137,7 +138,7 @@ CPU Pixel Data
 - producer stage：`VK_PIPELINE_STAGE_TRANSFER_BIT`（上传）或 `VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT` / `VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT`（运行时写入）。
 - producer access：`VK_ACCESS_TRANSFER_WRITE_BIT` / `VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT` / `VK_ACCESS_SHADER_WRITE_BIT`。
 - oldLayout：`VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL` 或 `VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL` / `VK_IMAGE_LAYOUT_GENERAL`。
-- newLayout：`VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL`（graphics 采样）或 `VK_IMAGE_LAYOUT_GENERAL`（compute 读写）。
+- newLayout：只读 sampled image 可用 `VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL` 或满足条件的 `GENERAL`，fragment 和 compute 均如此；storage image 写入路径通常使用 `GENERAL`。布局选择按资源访问类型，不按 shader 阶段硬分，并与 descriptor 声明一致。
 - consumer stage：`VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT` 或 `VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT`。
 - consumer access：`VK_ACCESS_SHADER_READ_BIT`。
 
@@ -208,7 +209,7 @@ CPU Pixel Data
 
 ## 9. Android 注意点
 
-- 创建 `VkImage` 前确保 `ANativeWindow` / `VkSurfaceKHR` 已创建；texture 上传命令通常提交到与渲染同一 queue，queue 必须在 device 创建后有效 [ANDROID]。
+- 普通离屏 `VkImage` 的创建、上传与采样不要求 `ANativeWindow` / `VkSurfaceKHR`。只有输出呈现链才需要相应 Surface 前提。texture 上传可复用渲染 queue；若使用另一 queue，还需同步及必要的 queue-family ownership 转移 [SPEC]。
 - 移动端优先使用 ASTC / ETC2 压缩格式降低 bandwidth；需调用 `vkGetPhysicalDeviceFormatProperties` 确认支持 [ANDROID]。
 - Android 10+ 部分设备对 `LINEAR` tiling sampled image 支持有限，纹理默认使用 `OPTIMAL` tiling [SPEC]。
 - pause / resume 时 staging buffer 可能被释放；恢复后若 texture 未持久化到 device-local memory，需要重新上传 [ANDROID]。
@@ -370,3 +371,7 @@ Slug 的解析路径可作知识与画质对照。官网演示、论文、示例
 - [ENGINE] [Slug capability/licensing entry](https://sluglibrary.com/)
 - [ENGINE] [msdfgen](https://github.com/Chlumsky/msdfgen)
 - [SPEC] [Vulkan framebuffer](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/framebuffer.adoc)
+
+### 离屏采样最小可执行参考（候选，非完整 graphics workflow 验收）
+
+先用 [限定纹理采样合同](../../03_api_manual/05_descriptor/sampled_image_descriptor.md#delivery19-texture-sampling) 和测试仓 `cases19/texture_sampling/run.py` 验证上传、采样 descriptor、实际 sampler 访问、依赖与完整像素参考，再接入自己的 graphics material pass。该参考使用 compute sampled read + storage output，不具备 mesh/fragment/呈现功能，不能据此宣布本工作流所有步骤已验收。保留实际输入格式、坐标规则与设备限制，切勿把 nearest 端点色的精确结果推广为线性过滤精度保证。

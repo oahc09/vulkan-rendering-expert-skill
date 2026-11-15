@@ -34,7 +34,7 @@ VkImage
 
 ### 上游依赖
 
-- 已创建的 `VkImageView`，其 image 已 transition 到 `SHADER_READ_ONLY_OPTIMAL`（或 `DEPTH_STENCIL_READ_ONLY_OPTIMAL`）。[SPEC]
+- 已创建的 `VkImageView`。Descriptor update 记录的是访问时将采用的 layout；更新 descriptor 本身不执行 transition，也不要求更新时已完成 transition。实际采样前必须完成所需同步，并让可访问 subresource 处于 descriptor 声明的合法 layout，例如颜色 sampled read 的 `SHADER_READ_ONLY_OPTIMAL` 或 `GENERAL`；不按 fragment/compute 阶段硬分。[SPEC]
 - 已创建的 `VkSampler`。[SPEC]
 - Descriptor set layout 中声明了 `COMBINED_IMAGE_SAMPLER` 或 `SAMPLED_IMAGE` + `SAMPLER`。[SPEC]
 
@@ -72,7 +72,7 @@ VkImage
 ## 4. 标准使用流程
 
 ```text
-创建 image 并 transition 到 SHADER_READ_ONLY_OPTIMAL
+创建 image（以下是一种合法顺序，不要求 update 前已 transition）
 → 创建 VkImageView
 → 创建 VkSampler
 → 分配 descriptor set
@@ -80,6 +80,7 @@ VkImage
 → 构造 VkWriteDescriptorSet（descriptorType = COMBINED_IMAGE_SAMPLER 或 SAMPLED_IMAGE）
 → vkUpdateDescriptorSets
 → vkCmdBindDescriptorSets
+→ 完成 upload/transition/visibility 并与 descriptor 的 imageLayout 一致
 → Shader 采样
 ```
 
@@ -90,7 +91,7 @@ VkImage
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
 | `imageView` | 必须与 shader 期望的 dimensionality、format 兼容。[SPEC] | 用 2D view 绑定到 2DARRAY shader 声明。[TOOL] |
-| `sampler` | COMBINED_IMAGE_SAMPLER 时必填；SAMPLED_IMAGE 时可选。[SPEC] | SAMPLED_IMAGE 仍填 sampler 或 COMBINED 漏填 sampler。[TOOL] |
+| `sampler` | `SAMPLER` / `COMBINED_IMAGE_SAMPLER` 非 immutable binding 更新时使用有效 sampler；immutable sampler binding 的更新不使用此成员。`SAMPLED_IMAGE` 更新忽略此成员。[SPEC] | 非 immutable combined 更新漏填 sampler；将被忽略的字段误认为采样状态来源。[TOOL] |
 | `imageLayout` | 采样时 image 必须处于 `SHADER_READ_ONLY_OPTIMAL` 等合法 layout。[SPEC] | layout 仍是 COLOR_ATTACHMENT_OPTIMAL。[TOOL] |
 | `descriptorType` | `COMBINED_IMAGE_SAMPLER` / `SAMPLED_IMAGE` / `SAMPLER` 需与 layout 声明一致。[SPEC] | layout 是 SAMPLER 但写成了 SAMPLED_IMAGE。[TOOL] |
 | `dstBinding` / `dstArrayElement` | 与 shader binding 和 array index 对应。[SPEC] | binding 或数组索引错位。[TOOL] |
@@ -107,7 +108,7 @@ VkImage
 
 ### 使用阶段
 
-- [ ] Image layout 是否已 transition 到 `SHADER_READ_ONLY_OPTIMAL`？
+- [ ] 实际访问时 subresource 的合法 layout 是否与 descriptor 一致，并已建立所需可见性？
 - [ ] 采样前是否已绑定正确的 descriptor set？
 - [ ] Shader binding 是否与 descriptor 更新一致？
 
@@ -119,12 +120,12 @@ VkImage
 
 ## 7. 高频错误
 
-1. Image layout 未 transition 到 `SHADER_READ_ONLY_OPTIMAL`。[TOOL]
+1. 实际 sampled read 的 layout 与 descriptor 不一致，或上传到采样缺少可见性依赖。[TOOL]
 2. `COMBINED_IMAGE_SAMPLER` 与 separate `SAMPLED_IMAGE` + `SAMPLER` 混用，导致 layout 不匹配。[TOOL]
 3. Image view format 与 shader 期望 format 不一致。[TOOL]
-4. Sampler 的 `maxLod` 小于 image 的 mip 数量，导致远处采样黑边。[TOOL]
+4. LOD clamp 与预期 mip 选择不符。合法的 `maxLod` 限制本身不会必然产生黑边；还需检查 mip 内容、view 范围、寻址与过滤。[TOOL]
 5. 更新 descriptor 后提前销毁 image view 或 sampler。[TOOL]
-6. 对 depth/stencil image sample 时未使用 `DEPTH_STENCIL_READ_ONLY_OPTIMAL`。[TOOL]
+6. Depth/stencil sampled view 的 aspect、访问 layout 或 compare sampler 与 shader 用法不匹配；不是所有路径都必须使用同一个 depth/stencil 只读 layout。[TOOL]
 
 ---
 
@@ -286,3 +287,19 @@ Android `AHardwareBuffer` 先用 `vkGetAndroidHardwareBufferPropertiesANDROID` �
 
 
 [描述符写入约束](https://docs.vulkan.org/refpages/latest/refpages/source/vkUpdateDescriptorSets.html) · [采样图像 layout 约束](https://docs.vulkan.org/refpages/latest/refpages/source/VkWriteDescriptorSet.html)。
+
+## delivery19-texture-sampling
+
+### 可执行的限定采样合同（v1.0.19 候选）
+
+测试仓 `cases19/texture_sampling/run.py` 提供独立的上传 → combined image sampler → compute `textureLod` → storage image → 全像素读回链；这是普通采样资源用法，不是仅查询扩展或复制图像，也不是外部生产项目修复。[ENGINE]
+
+- 单一 CPU ICD queue，4×4 `R8G8B8A8_UNORM` 非对称端点色纹理；先查询 sampled/storage/transfer format 支持及实际 image 创建组合。普通 image/view 创建和离屏执行不需要 Surface。[SPEC][TOOL]
+- 普通非 immutable `COMBINED_IMAGE_SAMPLER`，独立 storage output binding；normalized 坐标、nearest min/mag/mipmap、clamp-to-edge、显式 LOD 0，不启用 anisotropy/compare。shader 中 sampled read 与 output storage write 是不同资源和 descriptor 类型。[SPEC]
+- host staging 写入 → transfer upload → compute sampled read；input 在采样时转换到 descriptor 声明的只读 layout。output storage write → transfer copy → host read，各有 stage/access 与实际 fence 完成证明。coherent 仅处理 host cache 可见性，不替代提交退休。[SPEC]
+- 独立 CPU 坐标映射验证所有输出像素；非对称输入用于区分翻转/转置。固定 UV 路径只验实际覆盖的内点及两个越界边缘，不代表全部寻址/过滤精度。[TOOL]
+- 安全负控 `unnormalizedCoordinates=true` 且 `mipmapMode=LINEAR` 触发冻结 1.4.309 的 01073；callback 中止 sampler 创建，句柄不用于提交。错误输出参考另行实际失败；干净 Validation 本身不证明画面正确。[TOOL]
+
+运行入口、环境参数、源代码、SPIR-V、实际设备/限制、规范摘录与原始日志散列见测试仓同目录 README/runner 和 `coverage/v1.0.19/texture-sampling.json`；保留的仓内报告为开发运行，不冒充发布 commit 的复跑证据。[ENGINE]
+
+范围不包括 linear/anisotropic/compare、mip 链、压缩/sRGB/多平面格式、YCbCr、descriptor indexing/buffer、graphics 材质集成、并发队列、非 coherent、实际硬件性能或外部工程/Live/盲测。此合同只增加 VK05/06/07 的限定可执行能力，不关闭任何完整 domain 或发布封印。[ENGINE]
