@@ -137,7 +137,7 @@ VkPhysicalDeviceFeatures2
    → 填写 VkDescriptorSetLayoutBinding[]（descriptorCount = 上限，对 variable binding 是最大值）
    → 通过 VkDescriptorSetLayoutBindingFlagsCreateInfo::pBindingFlags 给每个 binding 指定 flag
        PARTIALLY_BOUND | UPDATE_AFTER_BIND
-       最后一个 binding 可加 VARIABLE_DESCRIPTOR_COUNT
+       具有最高 binding 编号的 binding 可按条件加 VARIABLE_DESCRIPTOR_COUNT（不是声明数组的最后一项）
    → VkDescriptorSetLayoutCreateInfo::pNext = &bindingFlagsInfo
    → vkCreateDescriptorSetLayout
 
@@ -219,7 +219,7 @@ VkPhysicalDeviceFeatures2
 
 1. 启用 `PARTIALLY_BOUND` flag 但未在 device 启用 `descriptorBindingPartiallyBound`。[TOOL]
 2. 启用 `UPDATE_AFTER_BIND` 但 pool 未设置 `UPDATE_AFTER_BIND_BIT`。[TOOL]
-3. Variable count binding 没有放在 layout 最后一个 binding 上。[SPEC]
+3. Variable count binding 不是 layout 中最高 binding 编号（与声明数组排列位置无关）。[SPEC]
 4. Shader 中使用 `nonuniformEXT` 但未启用对应 `*NonUniformIndexing` feature bit。[TOOL]
 5. 在 GPU 仍在访问某 element 时 update 同一 element（即便是 update-after-bind 也禁止）。[SPEC]
 6. `VkDescriptorSetLayoutBindingFlagsCreateInfo::bindingCount` 与 layout 的 binding 数量不一致。[TOOL]

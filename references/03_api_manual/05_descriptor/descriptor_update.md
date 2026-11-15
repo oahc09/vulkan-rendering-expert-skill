@@ -97,7 +97,7 @@ VkDescriptorSet (已分配)
 | `dstBinding` | 必须与 layout / shader 一致。[SPEC] | binding 写错位置。[TOOL] |
 | `dstArrayElement` | array descriptor 的起始元素。[SPEC] | 非 array 时未填 0。[TOOL] |
 | `descriptorType` | 必须与 layout 一致。[SPEC] | layout 是 UBO，update 写成 COMBINED_IMAGE_SAMPLER。[TOOL] |
-| `descriptorCount` | 更新的 descriptor 数量。[SPEC] | array 大小不一致。[TOOL] |
+| `descriptorCount` | 本次更新数量，可为部分数组；符合条件时可跨连续 binding。[SPEC] | 超出起始元素及全部适用连续 binding 的容量，或违反跨 binding 兼容条件。[TOOL] |
 | `pImageInfo->imageLayout` | 对 image descriptor 必须与实际 consumer layout 一致。[SPEC] | layout 填写为 SHADER_READ_ONLY_OPTIMAL，但 image 实际是 COLOR_ATTACHMENT_OPTIMAL。[TOOL] |
 | `pBufferInfo->offset` / `range` | 对 buffer descriptor 必须满足 alignment 且在 buffer size 内。[SPEC] | uniform offset 未对齐。[TOOL] |
 | `pTexelBufferView` | texel buffer 使用 buffer view。[SPEC] | 误用 image info 更新 texel buffer。[TOOL] |
@@ -135,7 +135,7 @@ VkDescriptorSet (已分配)
 5. Combined image sampler 只更新 image 没更新 sampler。[TOOL]
 6. Swapchain recreate 后未更新引用旧 image view 的 descriptor。[ENGINE]
 7. 在普通 binding 被 pending command buffer 使用期间更新它；高级 binding flags 也须逐项满足 feature、usage 与 host 同步合同。[SPEC]
-8. `descriptorCount` 与数组大小不一致。[TOOL]
+8. 把更新数量误当整个数组长度，或未检查部分/连续 binding 更新的有效范围与兼容条件。[TOOL]
 
 ---
 
@@ -276,3 +276,36 @@ Frozen VUID source: Vulkan-Headers43d153dd7f9f5e8b9f79d26d868c82a82b9ef80b,
 API1.4.309, validusage SHA256
 `f61afea8ca6097342cae1b65bfab81675ee7fdc2d809403e083329b7d56597a7`.
 A searchable clause or matching identifier alone is not a complete L1/L2 review.
+
+
+<a id="delivery19-descriptor-consecutive-updates"></a>
+
+### delivery19-descriptor-consecutive-updates
+
+普通 descriptor 的 `descriptorCount` 是本次元素数量，不要求等于整个数组长度。
+从 `dstArrayElement` 开始，剩余元素不足时递归进入 binding 编号 +1，从元素0继续；
+零 descriptorCount 的 binding 跳过。不能按 layout 声明数组的排列顺序扩展，
+也不能把任意不兼容的下一个 binding 当成额外容量。
+
+固定368正文要求涉及的连续 binding 类型、stageFlags、bindingFlags 与 immutable
+sampler references 相同；不可把“都使用 immutable sampler”误当引用必然相同。
+本段仅普通类型范围；mutable、inline uniform bytes、variable count 等额外条件另核，
+不从相同 type/stage 推导所有更新合法。
+
+同一次 `vkUpdateDescriptorSets` 先执行全部 writes，再执行全部 copies，
+各数组内部按数组顺序执行。后面的 copy 可观察先前 write/copy 的结果；
+copy 复制的是 descriptor 引用，不是资源内容，也不让旧资源退休。
+源或目的范围各自按适用连续 binding 规则核验；同 set 的源和目的范围不得重叠。
+复制未定义 descriptor 或引用已销毁资源的 descriptor 会使目标未定义，
+不代表目标可安全用于 shader。copy 与普通 write 的 pending/host同步约束仍需满足。
+
+固定正文 Vulkan-Docs1.4.368 commit `fa30d4e312e843193601be7cb926c7e25d9ec885`，
+`chapters/descriptorsets.adoc` SHA256
+`3de692bf6e4f8579de50175be94c564a4580e1b8f0a59ed1e1267e1c3ca88950`，
+`vkUpdateDescriptorSets`、`descriptors-sets-updates-consecutive`、`VkCopyDescriptorSet`。
+独立1.4.309 validusage SHA256
+`f61afea8ca6097342cae1b65bfab81675ee7fdc2d809403e083329b7d56597a7`：
+00317 同时列 type/stage，00318 列 immutable 使用与否，00321 列适用总容量，
+00349 列同 set 不重叠。368 将 stage 单列10776、bindingFlags列10777；
+不得把不同版本条款拆分或正文的完整 references 条件混同为309同一VUID文本。
+这只是受限知识合同，不证明 GPU 实际访问、资源寿命或整个 descriptor 族完成。
