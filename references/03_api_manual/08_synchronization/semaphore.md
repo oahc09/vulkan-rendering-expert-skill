@@ -92,7 +92,7 @@
 启用 timelineSemaphore feature
 → 创建 VkSemaphoreType = TIMELINE 的 semaphore
 → submit 时通过 VkTimelineSemaphoreSubmitInfo 指定 signal/wait value
-→ 下游 submit 等待更高 value
+→ 下游 submit 等待所需 value（条件为 counter >= value，wait 值无需递增）
 → （可选）CPU 通过 vkWaitSemaphores 等待指定 value
 ```
 
@@ -160,7 +160,7 @@
 ### 日志 / 代码检查
 
 - 检查 `vkAcquireNextImageKHR`、`vkQueueSubmit`、`vkQueuePresentKHR` 的 semaphore 参数是否一一对应。
-- 检查 timeline semaphore 的 value 是否严格递增。
+- 检查 timeline semaphore 的 signal 按实际执行顺序严格递增；wait 值无需递增，host signal 还须核对 pending 操作与差值限制。
 - 检查 swapchain recreate 后旧的 acquire semaphore 是否仍被错误引用。
 
 ---
@@ -265,3 +265,5 @@
 3. 跨 queue 使用 semaphore 时，wait stage mask 与 consumer pipeline stage 的精确匹配。
 4. Timeline semaphore 与 external semaphore（`VK_KHR_external_semaphore`）的交互。
 5. Android WSI 对 semaphore 的特殊限制或扩展行为。
+
+Host timeline signal/wait 的数值、顺序与退休边界见 [受限合同](timeline_semaphore.md#delivery19-timeline-host-values)；不能把 counter 达标作为所有引用完成证明。
