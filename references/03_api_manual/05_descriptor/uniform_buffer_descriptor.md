@@ -244,3 +244,59 @@ VkBuffer（VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT）
 3. Push descriptor 与 inline uniform block 的替代方案限制。
 4. Host-visible coherent buffer 的 flush/invalidate 要求。
 5. 不同驱动对大量 small UBO 分配的性能差异。
+
+## delivery19-ordinary-ubo: consolidated bounded L1/L2 contract
+
+**Scope:** ordinary non-null, non-sparse UNIFORM_BUFFER descriptor updates,
+explicit range or WHOLE_SIZE, fixed single binding/set. Not dynamic descriptors,
+indexing, update-after-bind, inline uniform blocks or descriptor-buffer API.
+Those paths retain separate feature/layout/lifetime contracts, not implicit support.
+
+### L1 invariants and sources
+Ordinary UBO descriptors are core functionality; query the actual device limits,
+not a vendor table. Match buffer UNIFORM_BUFFER usage and complete contiguous
+memory binding. An offset must address inside the buffer and meet uniform-offset
+alignment. Explicit range is nonzero and within remaining bytes; WHOLE_SIZE
+means the remaining bytes, not unlimited access. Both forms must satisfy the
+uniform-range limit. Recreating a device invalidates an old limits profile.
+
+The destination layout type, shader stage visibility, pool descriptor/set budgets
+and write count must match the actual binding. Consecutive-binding writes have
+additional compatibility rules; the executable checker intentionally does not
+claim them. Bind the matching layout at draw time and validate the shader's
+interface separately. A successful descriptor update does not prove readable
+memory, synchronization, matrix layout, dynamic-index bounds or correct pixels.
+
+Do not rewrite an ordinary set while prohibited by command-buffer/pending use.
+Separate per-frame sets or retire their consumers before reuse; serialize host
+access where required. Preserve referenced resources through their GPU use.
+Host-coherent allocation does not remove execution dependencies. Descriptor
+metadata updates do not upload buffer content or flush noncoherent CPU writes.
+
+### L2 implementation, diagnosis and fallback
+1. Establish ownership and actual queried limits, buffer size/usage/binding,
+   pool/set layout, shader interface and update-safe lifetime before publication.
+2. Run the bounded descriptor19 checker. Missing facts stay UNKNOWN; rejected
+   ranges are not silently clamped. Use explicit subranges when whole-buffer
+   range exceeds the limit. Align suballocations with checked arithmetic.
+3. Pair with cases19/descriptor: two positive updates and three negative updates
+   must produce exactly matching rule/VVL diagnostic sets on one fixed runtime.
+4. Keep source/binary hashes and actual layer/device metadata. Missing tools,
+   changed identity or diagnostic disagreement stop the gate for investigation.
+5. Keep ordinary per-frame descriptor sets as the simple fallback until a more
+   complex binding path has separately enabled features and measured benefit.
+6. Test the real renderer's shader/readback and in-flight retirement before
+   shipping. The current tool pair only checks updates; no shader was executed.
+
+**Completed matrix for this scope:** range/offset/effective-range rules and
+positive/negative CPU tests; queried-limit real VVL update pairing; explicit
+ownership/failure/fallback guidance. **Still open:** general layout/pool counts,
+shader interface and access, in-flight integration, dynamic offsets and advanced
+binding paths, device matrix, SC and external engineering acceptance. Therefore
+this does not mark the entire descriptor family complete.
+
+[Descriptor buffer ranges](https://docs.vulkan.org/refpages/latest/refpages/source/VkDescriptorBufferInfo.html)
+and [write conditions](https://docs.vulkan.org/refpages/latest/refpages/source/VkWriteDescriptorSet.html),
+checked 2026-11-15. Rule IDs 00340–00342, 00327, 00329–00330 and00332 are retained
+for traceability. Local Validation1.4.309 and latest reference pages are recorded
+as different versioned evidence, not one fully validated normative snapshot.
