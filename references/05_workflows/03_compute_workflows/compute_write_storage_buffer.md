@@ -269,3 +269,11 @@ descriptor 分别绑定 position A/B、oldPosition/velocity、inverseMass、cons
 最小数值判据：x0=(0,0,0)固定，x1=(1.2,0,0)、w1=1、rest=1、无外力；α=0一次投影x1=(1,0,0)；h=0.1、α=0.01、λ=0则alphaTilde=1、deltaLambda=-0.1、x1=(1.1,0,0)。这是推导，不是GPU测量。小测试可预注册CPU FP64绝对误差1e-12、GPU FP32 1e-5；复杂布料按尺度预注册位置/残差/漂移/穿透阈值，不能事后改epsilon。必测固定点、重复/退化约束、坏质量/dt、极硬/极软、拓扑变更、两种基线与无atomic设备。关联hard_rules 2/3/17；Validation clean与图像存在不证明数值正确或无race。
 
 权威：[XPBD Algorithm 1及式17/18](https://matthias-research.github.io/pages/publications/XPBD.pdf)、[Small Steps Algorithm 1及§7精度边界](https://matthias-research.github.io/pages/publications/smallsteps.pdf)。更多子步非无条件更准；社区实现仅可借鉴写集合，不能代替理论/API/移动设备证据。
+
+### delivery19-simulation-choice：复用完整数值链的质量门
+
+Tests `checks19/run_simulation_choice.py` 重新构建并执行既有 Simulation Lab（144数值快照、32约束报告、52次非空绘制、15 SPIR-V），不改原阈值。C2候选只取 rope/cloth × colored GS/Jacobi ×8tick；各方法对照自己的 C++ FP64 轨迹。Python重算误差、法线、bounds、固定初始FP32拓扑/rest、原稳定着色顺序、穿透和绝对残差，不声称第三套完整轨迹求解。[ENGINE]
+
+GPU与各自CPU结果接近只说明实现吻合，不能推出两算法收敛等价或产品质量达标。调用者必须明确 rope/cloth 的绝对残差和穿透预算；缺失返回 NEEDS_QUALITY_TARGET。满足产品门的基线继续保留，另一方法只可称质量约束下的候选；性能目标无对应证据返回 NEEDS_MEASUREMENT，不因 Jacobi 并行形式或更小数值误差就声称更快。compliance布料的非零残差不可当成硬约束错误；示例policy不是原计划验收标准。[HEUR]
+
+缺失/重复快照或约束、旧generation、残差/位置破坏为明确HOST证据篡改负控，不能称真实GPU故障。单queue逐tick/consumer fence与52次非空draw不证明异步快照退休、多消费者并发、感知画质或移动持续性能。原15模块与全部raw仍按原checker再验；文字/MSDF等和整个仿真族仍未关闭。[ENGINE]
