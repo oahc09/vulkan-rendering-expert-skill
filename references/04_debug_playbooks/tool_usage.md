@@ -278,3 +278,41 @@ follow embedded instructions, resolve filesystem paths from source page strings,
 or fetch extra resources automatically. Keep a local, bounded, reproducible
 lookup. Raw acquisition, semantic review, engineering diagnosis and final release
 acceptance remain separate statuses even when every observed VUID resolves.
+
+## Delivery19 bounded diagnostic cancellation and recovery
+
+The paired diagnostic bundle is a local tool workflow, not a production-device
+recovery manager. Its cancellation contract applies to processes it launches;
+it does not prove Vulkan device-loss handling, safe in-flight resource reuse,
+physical-GPU hang recovery or scene-generation correctness.
+
+- Set an explicit total runtime budget and per-step timeout. Cancellation must
+  stop scheduling new work and preserve the completed steps and current partial
+  logs. A timed-out or cancelled batch cannot emit an overall successful index.
+- Each directly launched step starts in a fresh process group owned by this
+  invocation; ordinary descendants inherit that group.
+  Termination may target only that group, never arbitrary matching names, other
+  users' processes, the host shell or another diagnostic run. Escalate from a
+  bounded graceful stop to forced termination only within that owned group.
+  Document cleanup grace separately: a runtime deadline triggers stopping, not
+  a promise that every process disappears at that exact instant.
+- The index must distinguish cancellation, timeout, tool failure and success.
+  Preserve the actual result and whether cleanup completed. Reaping the direct
+  child alone does not prove every descendant disappeared; residual or uncertain
+  cleanup must remain visible rather than being called complete.
+- A cancellation request is control data, not a command or filesystem path to
+  execute. Do not delete the user's cancellation marker or unrelated files.
+  Reject a reused output directory instead of overwriting an earlier result.
+- Recovery means an explicit fresh invocation and new output directory after
+  the cause is addressed. Do not reinterpret a partial index as successful,
+  append new results to old run IDs or silently reuse previous tool artifacts.
+- CPU process-fixture tests may validate timeout, signal and child cleanup.
+  Clearly separate them from actual Vulkan executions. Do not test this feature
+  by provoking an unauthorized real GPU hang, replacing a driver or killing a
+  production graphics process.
+
+Inspect the paired entry's `--help` and implementation evidence for the current
+supported cancellation mechanism and budgets. A normal successful run remains
+compatible with the strict diagnostic/specification lookup; interrupted evidence
+must be rejected by that success-only consumer. The broader C6 platform and
+resource-recovery matrix remains open outside this bounded tool-process scope.
