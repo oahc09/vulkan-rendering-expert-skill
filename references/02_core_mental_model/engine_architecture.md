@@ -582,16 +582,16 @@ Vulkan Mapping：A → `vkCmdDraw*` + graphics pipeline；B → `vkCmdDispatch` 
 
 ### 10.6 D4：Single Queue vs Async Compute
 
-| 六要素 | A：单 queue 顺序提交 | B：async compute queue |
+| 六要素 | A：单 queue | B：不同 compute queue |
 |---|---|---|
-| 适用条件 | compute 工作占比小（<20% frame time）或与 graphics 强依赖交织；同步简单优先 | graphics 与 compute 时间互补（overlap 余量大）且负载隔离度高（少量 barrier 边）；桌面驱动多 queue 支持成熟 |
-| 不适用条件 | 无失效场景，只有性能上限（串行叠加） | 同步开销大于 overlap 收益；移动端部分驱动多 queue 实现退化 [ANDROID][VENDOR] |
-| 收益 | 时序可推理、无跨 queue 同步 | overlap 缩短 frame time（上限为串行路径中的 compute 段时长） |
-| 复杂度 | 低 | ownership transfer + timeline value 管理 + RG cross-queue 边（§9 链 3） |
-| 性能风险 | graphics 与 compute 串行叠加，frame time 上限固定 | semaphore 等待链变长；queue 间争抢共享执行单元（移动端常见）[VENDOR]；timeline 空泡 |
-| 重新评估条件 | 选 A 后：AGI 显示 graphics 与 compute 互不重叠且合计 >30% frame time → 评估 B | 选 B 后：frame time 反升 / GPU timeline 出现同步空泡 → 回退单 queue（保留代码路径，先关开关） |
+| 适用条件 | 已有路径满足正确性及预算，优先最小改动 | 实际创建可用 compute queue，依赖/ownership 合法，存在待测调度余量 |
+| 不适用条件 | 无 compute 能力或已有路径违反正确性/预算，不能自动 fallback | 仅 advertised 未创建、同一 queue 冒充第二队列、必要依赖未知或不成立 |
+| 收益 | 提交拓扑简单；同 queue 也不保证所有工作串行 | 可能重叠，但 queue 数量不保证硬件并行或收益 |
+| 复杂度 | 同 queue 冲突仍需正确同步 | 跨 queue 依赖；需要时 ownership release/acquire；非必需 timeline |
+| 性能风险 | 瓶颈必须实测，不由 compute 百分比直接判定 | 同步、争用或尾延迟抵消局部加速 |
+| 重新评估条件 | 负载、预算或实际测量改变后评估，无通用 20%/30% 阈值 | 可比全帧退化、质量失真或预算违规时撤销；未知收益先保留基线 |
 
-Vulkan Mapping：A → 单 `VkQueue` + queue 内 barrier；B → 独立 compute `VkQueue` + timeline 类型的 `VkSemaphore`（signal value 单调递增）。查询并启用 `timelineSemaphore` feature，在 `VkSemaphoreCreateInfo.pNext` 链接 `VkSemaphoreTypeCreateInfo`，指定 `semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE`。[SPEC] 依据：[VkSemaphoreTypeCreateInfo](https://docs.vulkan.org/refpages/latest/refpages/source/VkSemaphoreTypeCreateInfo.html)。Verification：AGI GPU timeline 对比 overlap 面积与空泡；frame time 前后对比。[TOOL]
+Vulkan Mapping：不同 queue 无隐式排序，实际 RAW/WAW/WAR 等依赖必须被正确表达。Binary 或 timeline semaphore 的选择取决于需求；选择 timeline 时核实际启用 `timelineSemaphore` 及信号/等待合同。资源 sharing mode、family 与适用扩展决定 ownership，不能把每个新 queue 都等同跨 family transfer。固定规范和可执行有限规则见 `../05_workflows/01_renderer_setup/setup_instance_device_queue.md` 的 `delivery19-compute-scheduling`。Verification：同输入/设备/driver/质量与测量条件下比较完整帧分布；独立记录 pass 时间、overlap 证据与测量限制，公开样例或合成数值不等于目标硬件收益。
 
 ### 10.7 D5：Manual Resource Lifetime vs RenderGraph-managed
 

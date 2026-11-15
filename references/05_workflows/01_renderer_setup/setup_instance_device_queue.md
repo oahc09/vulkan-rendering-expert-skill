@@ -126,13 +126,13 @@ Application
 | Producer | Resource | Barrier / Layout | Consumer |
 |---|---|---|---|
 | graphics queue submit | buffer / image | `queueFamilyIndex` 为 graphics family | graphics queue |
-| compute queue submit | buffer / image | 跨 queue family 时需要 `QUEUE_FAMILY_OWNERSHIP_TRANSFER` [SPEC] | compute queue |
-| transfer queue submit | staging buffer | 跨 queue family 时需要 ownership release/acquire [SPEC] | graphics queue |
+| compute queue submit | buffer / image | 普通 EXCLUSIVE 跨 family 保留内容且无适用例外时，配对 ownership release/acquire；另证执行/内存依赖 [SPEC] | compute queue |
+| transfer queue copy | 被后续 graphics 实际访问的资源 | 按该资源 sharing mode、family 与读写关系处理；staging 源只在 transfer 使用不因 copy 自动跨 family [SPEC] | graphics queue |
 
 必须说明：
 
 - 若 graphics 与 present 使用同一 queue family，则无需 queue family ownership transfer [SPEC]。
-- 若 compute / transfer queue 为独立 queue family，资源在 queue 之间切换时必须显式 barrier [SPEC]。
+- CONCURRENT 资源可在创建时列出的 families 间共享；同 family 不转移 ownership，但真实读写冲突仍需执行/内存依赖。普通 EXCLUSIVE 跨 family 保留内容通常需要配对 release/acquire。已启用 maintenance9 的限定隐式保留规则须逐项证明，不能由支持位直接推定；外部/FOREIGN、optimal image 的 usage 和目标 family 限制另查 [SPEC]。
 - swapchain image 由 present engine 产生，首次写入前通常视为 `VK_IMAGE_LAYOUT_UNDEFINED` 或按 `VkRenderPass` loadOp 处理 [SPEC]。
 
 ---
@@ -256,3 +256,16 @@ Application
 3. 多 GPU / device group 场景下的 physical device 选择策略。
 4. 独立 transfer queue family 与 graphics queue family 之间的 ownership transfer 精确规则。
 5. Android 特定设备对 `VK_KHR_swapchain` 与 surface extension 的支持差异。
+
+## delivery19-compute-scheduling：可执行的有限调度决策
+
+查询的 queueFlags/queueCount、创建时实际请求的 queue family/index、实际取得的 VkQueue 是三类证据。广告存在第二 queue 不等于应用已创建它；同一个 family/index 不是异步第二队列。普通 compute 本身不要求 timelineSemaphore 或 synchronization2；若选择这些机制，分别核实支持与实际启用。
+
+单 queue 也可能流水重叠，不是自动的全串行依赖；不同 queue 无隐式排序，更多 queue 不保证更多硬件执行单元或 overlap。同 family 的不同 queue 可用 semaphore 建立跨队列依赖而不转移 family ownership；CONCURRENT 仍不免除依赖。未覆盖的 maintenance9、protected、外部 ownership 条件必须标未知，不用普遍判断替代规范。
+
+配对 Tests 的 compute scheduling 入口只验证显式输入和有限规则。设备查询/创建记录是真实能力证据；调用者声明的资源依赖和合成性能反例不是实际 GPU 性能。先保留合法旧路径，再用相同 scene/input/output、设备/driver、测量方法与热状态下的全帧分布复评。单 pass 变快而全帧变慢应撤销候选；没有全帧可比证据不得宣称收益。
+
+规范基线：Vulkan-Docs `fa30d4e312e843193601be7cb926c7e25d9ec885`，
+`chapters/devsandqueues.adoc#devsandqueues-queueprops` / `#devsandqueues-queue-creation`、
+`chapters/fundamentals.adoc#fundamentals-queueoperation`、
+`chapters/resources.adoc#resources-sharing`。固定正文映射与版本边界由配对测试保留；不是完整 L1/L2 或硬件验收。

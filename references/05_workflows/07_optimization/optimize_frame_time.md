@@ -65,7 +65,7 @@ CPU Record
 → vkQueueSubmit (fence/semaphore)
 → GPU Vertex/Fragment/Compute Stages
 → VkSwapchainKHR → vkQueuePresentKHR
-→ Frame Time = max(CPU, GPU) + synchronization overhead
+→ 测量实际 frame/present 边界；CPU、GPU 与等待区间可能重叠，不能用通用加和公式代替测量
 ```
 
 ---
@@ -134,7 +134,7 @@ Pipeline 状态：
 | 需求 | 降低并稳定 frame time（§1）；架构上先定优化投入的层级：局部优化还是架构级重排，async compute 在本场景是否有收益 [ENGINE] | — |
 | 约束 | §8 步骤 1-2 的瓶颈定位结论（CPU record / GPU active / fence 等待）、帧预算与 99th percentile 要求（§10）、GPU 架构（IMR / TBDR，§2）、平台、可接受的改动风险窗口（架构级改动需重跑 §10 全套验证） | — |
 | Candidate | A：局部优化——draw call 合并、barrier 精确化、pass 合并、format / bandwidth 调整（§8 步骤 3-9 主路径）；B：架构级重排——pass 结构 / 渲染顺序 / 资源生命周期重组，不换技术栈；C：引入 async compute queue——把与 graphics 互补的 compute 负载 overlap | D4 |
-| Trade-off | A 风险低、可增量验证，但不改结构收益有上限；B 一次投入大、需重跑全套 §10 验证，pass 重排引发手写 barrier 重写时与 D5 的托管边界耦合；C 的 overlap 收益上限为串行路径中 compute 段时长，同步开销（ownership transfer + timeline）可能反噬，移动端部分驱动多 queue 退化（D4）[ANDROID][VENDOR]；async compute 不是默认优化手段——AGI 显示 graphics 与 compute 互不重叠且合计 >30% frame time 才值得评估（D4 重新评估条件） | D4/D5 |
+| Trade-off | A 风险低、可增量验证，但不改结构收益有上限；B 一次投入大、需重跑全套 §10 验证，pass 重排引发手写 barrier 重写时与 D5 的托管边界耦合；C 的同步与资源争用可能抵消收益；ownership transfer 取决于资源与 family，timeline 不是必选机制。async compute 不是默认优化，也没有通用 30% 评估阈值；按当前 workload 的真实依赖、可比全帧分布和产品预算决定（D4） | D4/D5 |
 | Decision | 写明：当前瓶颈归属层级的测量证据、为什么先做该级以及"为什么不选另一边"；若不引入 async compute，写明理由（overlap 余量不足 / 驱动退化 / 同步开销大于收益）。重新评估条件：局部优化后 frame time 仍超预算且手写 barrier 蔓延 → 重开 D5；AGI 出现 overlap 信号 → 重开 D4；选 C 后 frame time 反升或 timeline 空泡 → 回退（保留代码路径，先关开关） | — |
 
 决策规则：
@@ -179,7 +179,7 @@ Pipeline 状态：
    - 使用 secondary command buffer 多线程录制，主线程只 execute；
    - 注意 secondary buffer 的 inheritance info 与 state consistency [SPEC]。
 9. **优化 submit**：
-   - 合并每帧多次 submit 为一次（除非需要 CPU/GPU 交错）；
+   - 将 submit 合并作为待测候选；合并可能推迟已就绪工作、降低 overlap，不默认每帧一次最优；
    - 减少 semaphore 数量，避免 unnecessary signal/wait [HEUR]。
 10. **接入 resize / recreate**：
     - recreate 后重新评估 resolution scale、MSAA、format 选择；
@@ -194,7 +194,7 @@ Pipeline 状态：
 - `ANativeWindow` / surface 创建后才能确定真实渲染分辨率与刷新率；target frame time 与 optimization budget 必须基于实际 surface extent 计算 [ANDROID]。
 - rotation / resize 改变 extent 后，overdraw、bandwidth、fragment shader 开销都会变化；需动态调整 resolution scale、LOD、MSAA [ANDROID]。
 - `extent.width == 0 || extent.height == 0` 时暂停渲染循环，避免 CPU 空转 submit [ANDROID]。
-- TBDR GPU 上，barrier 与 layout transition 会导致 tile memory flush 到 system memory，显著增加 frame time；优先使用 subpass dependency 与 `BY_REGION_BIT` [ANDROID]。
+- TBDR GPU 上，部分 barrier/layout 操作可能引起 tile 存储或加载，取决于具体实现、作用域和附件使用；合法时评估 subpass dependency 与 `BY_REGION_BIT`，不保证保留 tile 或降低 frame time [HEUR]。
 - 移动端 CPU 核数与性能差异大，避免在 render thread 做 heavy work；使用 worker thread 录制 secondary command buffer [ANDROID]。
 - AGI / logcat 验证：关注 `GPU Frame Time`、`CPU Frame Time`、`External Memory Bandwidth`、`Fragment Shaded Count`。
 
@@ -359,3 +359,7 @@ A/B顺序：同算法CPU小oracle→软件/桌面Vulkan正确性→目标手机�
 - 本实验Validation开启，编译/进程时长与调试插桩不是渲染性能计时；不提供GPU/full-frame时延、热状态、功耗、呈现/输入延迟结论，不从CPU ICD推物理移动GPU收益。源码、driver、工具、场景、预算或质量目标改变后应重新评估。[TOOL]
 
 这是C2/C5的可执行硬约束/正确性/请求量决策闭环，不是完整优化封板。当前两仓原计划36项Live/独立验收仍未通过；完整十类决策族、稳定语义分母和支持矩阵不能被此条目代替。[ENGINE]
+
+### delivery19-compute-decision：全帧证据优先
+
+使用 setup_instance_device_queue.md 的 `delivery19-compute-scheduling` 合同。支持、实际创建与启用、资源合法性先于性能选择。仅有 pass 时间、不同场景/设备/测量区间或不同质量输出不能组成有效 A/B；合成反例只验决策逻辑。不要用厂商品牌、专用 queue 名称、零 VVL 消息或单次均值证明重叠/收益。可比整帧退化时回退已验证基线；同样需要检查质量、尾延迟和预算，不以单 pass 加速覆盖退化。真实多queue性能、移动热稳态和呈现延迟在未测设备上保持未验证。
