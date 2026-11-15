@@ -179,3 +179,54 @@ Perfetto ingestion of measured CPU subprocess spans verifies trace processing
 only, not GPU time, scheduling data sources, capture replay, or engine repair.
 A software ICD run cannot certify hardware support. Keep raw data local and
 publish only authorized, sanitized provenance and explicit scope limitations.
+
+## Delivery19 reproducible diagnostic bundle
+
+The paired tests candidate defines one opt-in executable entry point,
+`checks19/run_delivery_bundle.py`, for the bounded local diagnostic delivery
+stage. Its availability and verified revision must be checked against the tests
+PR and delivery evidence; this contract alone is not execution evidence. This is a thin orchestrator of existing tools and case runners, not an
+agent runtime, capture platform or automatic production repair service.
+
+### Invocation contract
+
+Provide the exact Skill checkout, Vulkan include and loader paths, SPIR-V tool
+directory, Perfetto Trace Processor path and a new output directory. Select the
+already authorized ICD/layer environment explicitly. Do not download tools,
+change machines, alter system drivers or enable broader permissions implicitly.
+Consult the paired tests entry point's `--help` for its current arguments.
+
+The entry verifies the committed Skill/tests pair and source identities before
+execution. It runs separate fresh directories for buffer transfer repair,
+ordinary descriptor/command lifetime, shader/pipeline interface repair,
+image upload/compute/readback repair and Validation/Perfetto ingestion. Every
+required step must execute successfully within its declared contract. Existing
+reports are inputs for comparison only, never substitutes for fresh execution.
+
+### Reading the delivery index
+
+- A bundle ID groups these runs for delivery; it does **not** make their Vulkan
+  resources, device generations, frames or clocks interchangeable. Preserve
+  each child's run ID, device scope, sources, tools and report hash.
+- Diagnostic fault cases intentionally abort invalid commands. Their success
+  means the expected fault was observed safely, not that the invalid command
+  produced correct output. Repaired positive paths require their output oracle.
+- Retain expected-negative results, including the image shader-access heuristic
+  limitation. A clean log with an unobserved expected hazard cannot pass.
+- Retain raw subprocess output and the referenced reports. A digest binds bytes
+  and detects changes; it does not authenticate a producer or prove a claim.
+- Missing tools, wrong pair, reused output, timeout, unexpected diagnostics or
+  inconsistent reports must stop or fail the bundle. Keep partial evidence with
+  an explicit failure state; never create an overall success after a skipped
+  required child. A retry uses a new output directory.
+
+### Acceptance boundary
+
+This bundle is a reproducible integration gate for original authored cases on
+an available CPU ICD with coherent host memory. Perfetto input measures CPU
+subprocess spans; it is not GPU timing, a system scheduling capture or a calibrated
+cross-tool timeline. There is no hidden external-engine provenance, physical
+mobile-device validation, model Live evaluation or SC certification. General
+coverage, noncoherent execution and the original ALL19/E2E19 blind tasks retain
+separate statuses. Passing the bundle does not close the original M3/M5/M6 gates
+or authorize a final release by itself.
