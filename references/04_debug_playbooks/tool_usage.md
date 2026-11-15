@@ -316,3 +316,37 @@ supported cancellation mechanism and budgets. A normal successful run remains
 compatible with the strict diagnostic/specification lookup; interrupted evidence
 must be rejected by that success-only consumer. The broader C6 platform and
 resource-recovery matrix remains open outside this bounded tool-process scope.
+
+## Delivery19 verified human-readable handoff
+
+A successful tool index and a normative lookup are inputs to a review, not an
+adequate human delivery by themselves. The paired handoff entry must revalidate
+the strict bundle and recompute the observed diagnostic/specification/reading
+route mapping before rendering a report. A copied successful status string is
+not evidence. Bind the entry, dependencies and Skill routes to the exact pair.
+
+Keep these parts visibly separate in the readable report:
+
+- Actual symptom and diagnostic, with retained raw file, line or JSON pointer.
+- Exact version-paired normative entry, or explicit tool-only/unknown status.
+  A matching VUID is not a proof of root cause or applicability of every condition.
+- The shipped minimal patch where one exists, its actual baseline/fixed identities,
+  the observed before/after result and the checked output oracle. A lifecycle
+  scenario without a shipped patch must not be presented as a patch delivery.
+- Independent fault/incorrect-output controls, diagnostic-mode limitations and
+  the scope of the experiment. Keep separate run identities separate.
+- Risks, fixture-local rollback instructions and unresolved acceptance conditions.
+  Do not execute rollback or turn authored cases into external-project evidence.
+
+A minimal portable reading handoff may copy only explicitly allowed evidence,
+patches and inert specification excerpts. Verify paths and bytes; do not recursively
+include unrelated files, tools, credentials, process environments or local absolute
+paths. Escape source text for the output format. Producing a local handoff does
+not authorize uploading it. Its manifest supports checking retained reading
+artifacts for changes; it does not rerun tools, prove authenticity by itself or
+replace the complete execution bundle and independently pinned inputs.
+
+Preserve the distinction between a readable bounded result and final release.
+All-domain L1/L2, Vulkan SC, external engineering, Live/blind tasks, physical/mobile
+and noncoherent-device verification retain their separate unfinished states.
+No human-facing PASS label may silently promote those original plan gates.
