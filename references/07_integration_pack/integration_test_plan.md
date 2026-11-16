@@ -344,3 +344,20 @@ CONSISTENT_DECLARED_TRACE 不是实际 Vulkan 合法性或 GPU 执行证明。re
 抽象重新录制声明，不证明 reset/Begin/End 或 pool 生命周期。一致轨迹可仍有 pending
 使用，不能据此宣称全部退休。pipeline layout 前置仍需声明，image copy/layout 两族
 本轮仅登记与控制执行，不冒充已组合。完整 L1/L2、外部工程及发布门槛不提升。
+
+## delivery19-resource-capture
+
+配对 Tests 仓的 `checks19/run_resource_capture.py` 将既有普通 storage-buffer
+计算任务的实际调用记录接到受限资源合同；不是通用 Vulkan 抓取层。一次真实提交
+同时关联 input READ 与 output WRITE，不拆成虚构提交。对象生命周期代、内容代与
+command-buffer 录制代分别记录，成功 fence wait 只退休其对应提交。
+
+两轮同对象复用路径通过已完成提交、HOST 覆盖与后续提交关联，不补造不存在的
+compute-to-compute barrier。coherent 的提交前 HOST 写入与 queue submission 的
+内存域保证不能误写为“总要额外 HOST barrier”；非 coherent 与并发 HOST 写入
+不在此限定路径。完整数值回读和错误 oracle 是执行证据，不能替代通用画质或性能。
+
+调用日志仍由指定采集器产生，hash 只校验字节。适配结果区分实际调用观测与尚需
+声明的规范/库存前提，不赋予任意 VERIFIED 权限。篡改日志负控属于 HOST 审核，
+不得声称实际执行了 pending update、提前 free 等非法 GPU 操作。只有运行报告的
+精确源码、工具、设备和输出范围已验；完整 L1/L2、外部盲测与最终发布门仍未关闭。
