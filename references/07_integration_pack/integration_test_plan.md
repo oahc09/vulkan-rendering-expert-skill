@@ -412,3 +412,15 @@ C0/C1 先建立冻结来源的分层分母，再讨论覆盖率。配对 Tests �
 Reference 生成闭包、Headers 或 SPIR-V 已验收。逐功能族审核必须绑定真实规范
 段落、卡片、正常及失败路径与可执行判据，并独立处理冲突。具体阶段与停止条件
 见配对 Tests 的[阶段合同](https://github.com/oahc09/vulkan-rendering-expert-skill-tests/blob/cee8ded856a17eb17df67f07adb51a6f88e84e4b/docs/c0-c1-completion-contract19.md)；缺少完整分母时语义完成率仍未知。
+
+## delivery19-normative-source-graph
+
+规范正文追踪不能只数文档。配对 Tests 的 P 阶段入口从固定 Git 树读取完整来源，
+保留脚本、配置、原始 include 与条件；未展开属性、tag、生成输出和平台配置继续
+列为未解决。单行条件不当块条件，自文件 tag 引用不自动判循环。构建成功也不能
+证明来源闭包，尤其当配置会忽略缺失 include。
+
+实际语义映射先补 dedicated allocation 的偏好与要求：规范原始段落及外层条件
+分别绑定到已有 HOST 正反合同。prefers 不是 requires，支持条件也不是实际启用。
+来源图、正文映射、已执行合同三层分别报告，不从结构索引推导整个功能族 L1/L2
+已完成；309 VUID 与368正文仍保留版本差异及适用性审核。
