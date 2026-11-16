@@ -326,3 +326,21 @@ Compute 输出给 Fragment 采样黑屏，有没有类似案例？
 8. 性能分项：shaping、raster/distance generation、triangulation、JNI、upload、draw、总帧p50/p95/p99、峰值内存与持续热状态。未获得可靠GPU/功耗计数时标UNMEASURED。
 
 不设一个对所有字体与字号通用的SSIM/FPS硬阈值。M0按已批准的输入、表示和reference预注册具体阈值，后续不得因候选失败而放宽；若需要改阈值，独立评审并保留旧结果。效果依赖视觉判断时必须查看实际渲染结果，不仅看文件存在或hash。
+
+## delivery19-resource-contract-chain
+
+受限 HOST 联检入口位于配对 Tests 仓 `checks19/check_resource_contract_chain.py`，
+用固定七族、23 个语义入口及显式 helper 排除清单检测实现漂移，并重新执行、
+核对原始 125 个控制。此清单只是已实现 HOST 子分母，不是完整规范语义覆盖。
+
+普通单设备单队列、非 alias、非 dedicated buffer 的调用者声明可关联 allocation、
+resource、generation、descriptor、recording 和 submission 身份。绑定不证明同步，
+替换 descriptor 不退休旧消费者，timeline counter 满足不证明全部引用完成；
+仍绑定的内存在已退休后可以释放，但之后不得使用该资源。缺失义务保持未知。
+普通 descriptor 更新使已记录引用失效，与 pending 时禁止更新分别处理。
+
+输入来源只允许 CALLER_DECLARED / UNRESOLVED。hash 校验仅关联字节，不认证断言；
+CONSISTENT_DECLARED_TRACE 不是实际 Vulkan 合法性或 GPU 执行证明。record_use 是
+抽象重新录制声明，不证明 reset/Begin/End 或 pool 生命周期。一致轨迹可仍有 pending
+使用，不能据此宣称全部退休。pipeline layout 前置仍需声明，image copy/layout 两族
+本轮仅登记与控制执行，不冒充已组合。完整 L1/L2、外部工程及发布门槛不提升。
