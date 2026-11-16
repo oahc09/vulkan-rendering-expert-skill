@@ -444,3 +444,15 @@ API、validity、hostsync include 的生成不是完整正文或 Reference 生�
 
 Asciidoctor 处理与完整 HTML 数学转换、Reference 提取/渲染须分别报告；core1.4
 单一配置不替代所有扩展、平台或 SC。未处理的语义与完整性门槛继续保留。
+
+## delivery19-reference-validusage
+
+Reference 源提取、每页 HTML 渲染和 validusage 抽取必须分别验收。官方 all 配置
+也须保留实际版本/扩展属性，预览与平台记录不能被称为设备支持；它不是 SC 配置。
+不得把 core 生成片段与 all 正文或映射混用，更不能把368抽取结果替换旧309合同。
+
+官方流水线可能在缺失 include、缺页映射或缺 schema 校验依赖时仍成功退出。
+除官方命令外，应独立核对完整 VUID 集合、owner/正文/页映射、实际源字节及观测，
+运行真实缺失负控。声明 Draft4 的上游 schema 按其原版本检查，不擅自升级语义；
+额外严格合同单独说明。固定产物一致不等于全部条件或正文语义已审，少数页面实际
+渲染不能代表所有 Reference 页验收。
