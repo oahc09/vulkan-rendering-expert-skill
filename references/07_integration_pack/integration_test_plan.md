@@ -411,4 +411,4 @@ C0/C1 先建立冻结来源的分层分母，再讨论覆盖率。配对 Tests �
 所有结构坐标初始未审。结构重建通过不升级 L1/L2，更不等于完整规范正文、
 Reference 生成闭包、Headers 或 SPIR-V 已验收。逐功能族审核必须绑定真实规范
 段落、卡片、正常及失败路径与可执行判据，并独立处理冲突。具体阶段与停止条件
-见 Tests `docs/c0-c1-completion-contract19.md`；缺少完整分母时语义完成率仍未知。
+见配对 Tests 的[阶段合同](https://github.com/oahc09/vulkan-rendering-expert-skill-tests/blob/cee8ded856a17eb17df67f07adb51a6f88e84e4b/docs/c0-c1-completion-contract19.md)；缺少完整分母时语义完成率仍未知。
