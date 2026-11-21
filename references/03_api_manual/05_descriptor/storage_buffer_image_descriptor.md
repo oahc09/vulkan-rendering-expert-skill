@@ -271,3 +271,14 @@ Compute 管线、GPU-driven rendering、后处理、粒子系统、需要 shader
 3. Storage buffer offset 对齐要求。
 4. Compute shader 中 `barrier()` / `memoryBarrier()` 与 Vulkan barrier 的交互。
 5. 不同驱动对 storage image 随机写的性能特征。
+
+<a id="delivery19-external-shared-buffer"></a>
+## 上游工程案例：多个 descriptor 的共享 backing
+
+[ENGINE] 同一逻辑 buffer 经多个 descriptor/view 绑定时，应保持引擎承诺的共享存储和写入可观察性，不能为每个 binding 无条件复制成互不关联的 backing。资源缓存键不能只看 descriptor 身份而丢失逻辑资源身份；创建前须汇总实际 usage，任一可写引用都会影响共享资源的上传/回读策略。offset、range、view 格式、权限及最后使用者的生命周期仍要分别检查。
+
+[SPEC][ENGINE] 这不是“所有别名必须具有同一个 VkBuffer 句柄”的规范要求。不同资源对象也可能合法别名同一内存；相同句柄也不保证 range 相同或访问合法。共享存储不自动建立执行/内存依赖，跨访问 hazard、queue family 及 host 可见性必须另行分析。不要从一个计算样例成功推导全部 alias 或同步规则成立。
+
+[ENGINE] Google Amber #951 的真实历史修复将按 descriptor 独立持有的 transfer resource 转为 Pipeline 按逻辑 Buffer 共享持有，合并 usage 和可写属性，并统一上传/回读。固定修复为 `8c3bfef40c2387944fdc81746e2e3249e4da5566`，前版为 `aaac58d5009e8f6b33e2723258dc1542854d09a4`；上游原用例 compute_one_buffer_in_multiple_bindings.amber 同时涵盖 UBO、SSBO 和 texel view。其原 EXPECT 可用于真实引擎前后回放，实际执行结果必须与源码推断分开报告。
+
+来源：[原始上游修复](https://github.com/google/amber/commit/8c3bfef40c2387944fdc81746e2e3249e4da5566)；[配对 tests 仓任务与验收范围](https://github.com/oahc09/vulkan-rendering-expert-skill-tests/blob/feat/v1.0.19-final-delivery/docs/external-amber951-task19.md)。这是公开答案的开发案例，不是未知任务盲测；完整原工程执行也不等于移动硬件、性能或全域专家验收。

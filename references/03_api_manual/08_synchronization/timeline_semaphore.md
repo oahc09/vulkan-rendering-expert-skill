@@ -91,6 +91,8 @@ VkDevice（启用 timelineSemaphore feature）
 
 ```text
 frame = N
+  仅在对应历史帧存在时计算 N - FRAMES_IN_FLIGHT + 1 并设置 wait；否则省略该 wait，禁止 unsigned 下溢。
+  以下是有历史帧时的示意，完成点须覆盖该资源的全部消费者，不是任意 counter。
   vkQueueSubmit2(
     pSignalSemaphoreInfos = [{ semaphore, value = N + 1 }],
     pWaitSemaphoreInfos    = [{ semaphore, value = N - FRAMES_IN_FLIGHT + 1,
@@ -103,10 +105,10 @@ frame = N
 ### CPU 侧主动推进
 
 ```text
-vkGetSemaphoreCounterValue(semaphore, &current)
-→ 业务推进逻辑判断需要通知 GPU
+vkGetSemaphoreCounterValue(semaphore, &current)（快照可能立即过期，不是排他或退休证明）
+→ 业务推进逻辑确认当前值、全部 pending signal/wait 值与合法 signal 执行顺序
 → vkSignalSemaphore(VkSemaphoreSignalInfo{ semaphore, value = next })
-→ 对端 GPU/CPU 通过 vkWaitSemaphores(value = next) 建立依赖
+→ CPU 通过 vkWaitSemaphores(value = next) 等待；GPU 通过 queue submission 的 wait semaphore/value 建立依赖
 ```
 
 ### 与 vkQueueSubmit2 配合
@@ -128,7 +130,7 @@ vkQueueSubmit2(queue, 1, &submit, fence_optional);
 | `VkSemaphoreTypeCreateInfo.initialValue` | Counter 起始值；通常设 0；signal 执行时须大于当前 counter；wait value 可以重复，也可以小于或等于当前 counter（此时已满足）。[SPEC] | initialValue 设非 0 但 wait 逻辑默认从 0 开始递增，导致首帧错位。[ENGINE] |
 | `VkSemaphoreSubmitInfo.value` | submit2 中直接嵌入 timeline value；signal value 必须严格单调递增。[SPEC] | 同一 semaphore 的两次 signal value 相同或回退，触发 VUID。[TOOL] |
 | `VkSemaphoreSubmitInfo.stageMask` | signal 阶段 mask；wait 阶段 mask 控制阻塞 pipeline stage。[SPEC] | wait stage 设为 `TOP_OF_PIPE_BIT` 通常过早阻塞，并非天然失效；按真实最早消费阶段设置。[HEUR] |
-| `VkSemaphoreSignalInfo.value` | CPU signal 目标值；必须严格大于当前 counter。[SPEC] | signal 一个 ≤ 当前 counter 的 value → 违反有效使用约束并可能触发 validation 诊断；不存在保证返回的专用错误码。[TOOL] |
+| `VkSemaphoreSignalInfo.value` | CPU signal 目标值；必须大于当前 counter、小于每个 pending signal，并满足全部 outstanding wait/signal 的差值限制及执行顺序，见下述合同。[SPEC] | signal 一个 ≤ 当前 counter 的 value → 违反有效使用约束并可能触发 validation 诊断；不存在保证返回的专用错误码。[TOOL] |
 | `VkSemaphoreWaitInfo.pSemaphores` / `pValues` | 多 semaphore 等待时的 value 数组与 semaphore 数组必须按索引对齐。[SPEC] | 数组顺序错位导致等待错误的目标 value。[TOOL] |
 
 ---
@@ -192,7 +194,7 @@ vkQueueSubmit2(queue, 1, &submit, fence_optional);
 
 ### 日志 / 代码检查
 
-- 打印每次 `vkQueueSubmit2` 与 `vkSignalSemaphore` 的 value，断言严格单调递增。[ENGINE]
+- 分别记录 signal 与 wait：验证 signal 的实际执行顺序严格递增；wait 可重复、可等待已满足值，不对全部 submit/wait 日志强加递增断言。[ENGINE]
 - 检查 `VkSemaphoreSubmitInfo` 数组索引与 semaphore/value/stageMask 是否对齐。[ENGINE]
 - 在 Android logcat 抓取 `vkQueueSubmit2` 失败码，判断是否驱动对 timeline + swapchain 组合支持不足。[ANDROID]
 - 对比 `vkGetSemaphoreCounterValue` 期望值与实际值，定位 CPU/GPU 推进失配。[ENGINE]
@@ -285,7 +287,7 @@ vkQueueSubmit2(queue, 1, &submit, fence_optional);
 ## 13. 专家经验
 
 **经验**：
-优先使用 timeline semaphore 替代 per-frame binary semaphore 数组与 per-frame fence 数组管理 N 帧 in-flight 资源生命周期。一个 timeline semaphore + 单调递增的 64-bit counter 即可表达「第 N 帧完成」「第 M 次 compute dispatch 完成」「资源 X 释放点」等多种事件，并统一 GPU-GPU 与 CPU-GPU 同步路径。配合 `vkQueueSubmit2` 的 `VkSemaphoreSubmitInfo.value` 嵌入，调试时通过 counter 单调性即可发现绝大多数同步错位问题，远比 binary semaphore 数组的对齐问题易维护。
+优先使用 timeline semaphore 替代 per-frame binary semaphore 数组与 per-frame fence 数组管理 N 帧 in-flight 资源生命周期。一个 timeline semaphore + 单调递增的 64-bit counter 即可表达「第 N 帧完成」「第 M 次 compute dispatch 完成」「资源 X 释放点」等多种事件，并统一 GPU-GPU 与 CPU-GPU 同步路径。配合 `vkQueueSubmit2` 的 `VkSemaphoreSubmitInfo.value` 嵌入，counter 单调性只能检查部分 signal 错误，不能证明 wait 作用域、所有资源引用退休或跨 queue 执行顺序；维护收益取决于应用设计。
 
 但 swapchain acquire / present 仍必须使用 binary semaphore，因 WSI 规范强制要求；部分 Android 驱动对 timeline + swapchain 组合支持有限。
 
@@ -338,3 +340,32 @@ vkQueueSubmit2(queue, 1, &submit, fence_optional);
 **回退/验证**：无 timeline feature 时用 fence + binary semaphore 的显式状态机；WSI acquire/present 仍用 binary。模拟多 queue 完成乱序、CPU signal、timeout、首次和末次帧；销毁 semaphore 前所有引用它的已提交命令（包括 signal 和 wait）及相关 host 调用都必须结束，不能仅检查“无未来 wait”。
 
 固定依据：Vulkan 1.4.368，commit `fa30d4e312e843193601be7cb926c7e25d9ec885`；[synchronization#synchronization-semaphores-signaling](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-semaphores-signaling)；[synchronization#synchronization-semaphores-hostops](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-semaphores-hostops)。[SPEC]
+
+
+<a id="delivery19-timeline-host-values"></a>
+
+### delivery19-timeline-host-values
+
+- `vkWaitSemaphores` 是 host 等待；GPU 等待由 queue submission 指定。
+  wait 条件是 counter >= 请求值，wait 值无需递增；WAIT_ANY 成功只证明至少一个条件满足。
+- host signal 的 value 必须大于当前 counter（03258），小于每个 pending signal
+  的 value（03259），并与当前 counter **及每个 outstanding wait/signal** 的值之差
+  均不超过 `maxTimelineSemaphoreValueDifference`（03260）；差值按无溢出的数学整数比较。
+- 上述数值合法不等于执行顺序合法。存在 outstanding queue signal 时，必须有依赖
+  保证其晚于这次 host signal；多个 host 线程/process 的 signal 也须保证较小值调用
+  返回后才调用较大值。counter query 是可能立即过期的快照，不是原子 query-and-signal。
+- counter 达标或 host wait 成功只证明对应条件及其合法同步作用域，不是所有引用退休。
+  host signal 不伪造 GPU 完成；销毁前仍须证明全部已提交 signal/wait 引用及相关 host
+  调用结束。资源复用须覆盖全部最后访问；其他 queue 和 presentation 不自动包含。
+- timeout 不是完成；初始值达标也不说明运行过 GPU 工作。未知 pending 集合、作用域或
+  顺序证据时保留 UNKNOWN，不可只看数值判可回收。
+
+固定正文 Vulkan-Docs 1.4.368 commit `fa30d4e312e843193601be7cb926c7e25d9ec885`，
+`chapters/synchronization.adoc` SHA256
+`7748c88e48007820179681ef4f82c1d2244afc5482b5bc0c13d370ef64821909`，
+`synchronization-signal-operation-order`、`synchronization-semaphores-hostops` 及
+`VkSemaphoreSignalInfo`/`vkGetSemaphoreCounterValue`/`vkWaitSemaphores` 原文。
+另独立核对 1.4.309 validusage SHA256
+`f61afea8ca6097342cae1b65bfab81675ee7fdc2d809403e083329b7d56597a7` 中
+`VUID-VkSemaphoreSignalInfo-value-03258`、`03259`、`03260`。
+两版本分别绑定；此合同不证明整个同步族、实际设备运行或完整生命周期验收。

@@ -288,3 +288,22 @@ Surface 尺寸 / 方向变化 或 VK_ERROR_OUT_OF_DATE_KHR
 5. `VkSurfaceCapabilitiesKHR` 中 `currentExtent` 为 0 或 `0xFFFFFFFF` 时的精确处理。
 
 依据：[Swapchain Semaphore Reuse](https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html)、[官方 Swapchain Recreation 样例](https://docs.vulkan.org/samples/latest/samples/api/swapchain_recreation/README.html)。
+
+<a id="delivery19-headless-present-retirement"></a>
+## v1.0.19：headless WSI 的 acquire → readback → present → 重建退休
+
+`cases19/headless_wsi` / `tools/headless_wsi19.py` 是实际 Vulkan 1.4.309 工具配对的 headless surface 路径，不需要 X/Wayland 窗口，也不能证明真实屏幕呈现、窗口 resize、latency 或移动端 Surface 行为。
+
+**先证明完整路径可用。** 查询 headless/surface 扩展、swapchain、对应 queue 的 surface present 支持、格式/色彩空间、present mode、图像数量/extent/usage、transform/composite alpha。只用已列出的 RGBA8/BGRA8 UNORM + SRGB_NONLINEAR、FIFO、TRANSFER_DST|TRANSFER_SRC；clear 后逐像素复制读回按实际通道顺序解码。maxImageCount=0 表示无此上限，不是允许0张图像；固定 currentExtent 不能随意替换。枚举格式数不等于格式可用；还需实际查询选定 format 的2D optimal、usage3、flags0 image-format properties，验证 extent、layer1及sample1可用。
+
+**呈现退休不是渲染退休。** 查询并启用 `VK_EXT_swapchain_maintenance1` 与 `swapchainMaintenance1`，每次 `vkQueuePresentKHR` 链 `VkSwapchainPresentFenceInfoEXT`，实际等待其 fence。render submit fence 只证明对应渲染提交完成，不能独自授权回收 present-wait semaphore 或旧 swapchain；queue/device WaitIdle 也不作为本例呈现退休的证据。若无 maintenance1，本次完整退休准入明确不可用，不伪造替代。
+
+**每帧有独立完成事实。** acquire 成功或 SUBOPTIMAL 才能消费返回的 image index，并等待实际 acquire 同步后访问；NOT_READY/TIMEOUT/OUT_OF_DATE 不得继续等待未信号的 acquire semaphore 或使用旧 index。clear→transfer read→present layout 的依赖、renderDone binary semaphore 被 present 消费、render fence 后 readback、present fence 后同步对象复用分别记录。本例保守逐帧串行，不冒充多帧并行压力测试。present fence 只用于安全退休，不声称用户已看到像素。
+
+**重建保持代际。** 两个 generation 使用合法的不同 extent，各至少两个不同颜色帧。所有旧代 frame 的 render/present 完成后才创建新链，明确传入该旧 `oldSwapchain` 并记录关联。传给创建调用的旧链会退休，即使新链创建失败也不能继续从旧链 acquire；失败恢复须另设计，不把旧链误作回退。新代成功后销毁已经完成退休的旧对象，禁止 generation 混用。
+
+**安全负控与独立输出。** acquire 时 semaphore/fence 均为空触发01780，由 Validation callback 中止，不能读取输出 index 或提交后续工作。错误像素参考必须失败，API 验证与画面数据判据分开。CPU 规则覆盖 timeout/suboptimal/out-of-date、固定 extent、数量边界、过期 generation 和“仅 queueIdle/renderFence 不足”反例；这些规则测试不是设备上真实发生过的窗口失效事件。
+
+范围仍限定 headless、CPU ICD、单 queue、transfer clear/readback、显式 present-fence 退休与主动 extent 重建。没有验收真实 OUT_OF_DATE/SURFACE_LOST、全平台 WSI、protected、VRR/display timing、物理可见输出、SC、外部工程或盲测。
+
+固定来源：[wsi.adoc / v1.4.309](https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.309/chapters/VK_KHR_surface/wsi.adoc)，blob `0bd56db191d0522265e63f2a7ba12364a6966127`；[swapchain wsi.adoc / v1.4.309](https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.309/chapters/VK_KHR_swapchain/wsi.adoc)，blob `e4f2f9c5acc8bcd8e874cf6052afa12d179b59f4`；[present fence / v1.4.309](https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.309/chapters/VK_EXT_swapchain_maintenance1/SwapchainPresentFenceInfo.adoc)，blob `3fcf8641e5253b5bc850a875a1a7bc9242ad3dce`，Khronos CC-BY-4.0（本段概述）；[Swapchain semaphore reuse guide](https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html) 是补充工程解释，不当作固定版本设备证据。完整 frozen validusage 摘录及实际范围见 tests 仓 `coverage/v1.0.19/headless-wsi.json`。

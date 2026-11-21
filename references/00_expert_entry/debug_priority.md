@@ -59,3 +59,11 @@
 5. 找使用点。
 6. 给出 Workaround / Minimal Fix / Structural Fix。
 7. 给出验证方式。
+
+
+<a id="delivery19-causal-diagnosis"></a>
+## 因果诊断与实验停止
+
+[ENGINE] 每个关键假设记录机制、支持 evidence_id、反证、尚未解释现象、最小区分实验、预测、预算和停止条件。WaitIdle 令闪烁消失只改变时序，不能确定是 descriptor 更新、覆写、回收或 queue 依赖。临时 workaround 与最小修复分开。
+
+实验只改可区分假设的最小变量，记录前后失败频率、样本量和观察时长。未知 evidence_id 不允许成为根因证明。相互矛盾的证据、timeout、设备失联、损坏资料或权限不足，停止对应实验而非扩大权限。受控返回码/取消 fixture 必须标 CPU；不得为测试故意挂死实际生产 GPU。

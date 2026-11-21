@@ -118,7 +118,7 @@ VkAttachmentDescription[]
 
 - [ ] `vkCmdBeginRenderPass` 指定的 framebuffer 与 render pass 兼容？
 - [ ] `renderArea` 是否合理？（过小不能裁剪所有渲染工作，过大增加 load/store 开销）[TOOL]
-- [ ] Clear value 数量与 attachment 数量匹配？
+- [ ] `clearValueCount` 是否大于使用 CLEAR 的 attachment 最大索引（包括适用的 stencilLoadOp CLEAR）？它不要求等于总 attachment 数量；没有 CLEAR 附件时可为零（VUID-VkRenderPassBeginInfo-clearValueCount-00902）。[SPEC]
 - [ ] Draw 使用的 pipeline 与当前 subpass 的 attachment 数量/格式兼容？
 
 ### 销毁阶段
@@ -170,7 +170,7 @@ VkAttachmentDescription[]
 
 ### 使用时机
 
-- 在 command buffer 录制阶段通过 `vkCmdBeginRenderPass` 进入，draw 命令必须在其内部。[SPEC]
+- 传统路径通过 `vkCmdBeginRenderPass` 进入 render-pass instance；普通 draw 也可位于合法 dynamic-rendering instance，不要求一律使用传统 RenderPass。[SPEC]
 
 ### 销毁时机
 
@@ -196,14 +196,14 @@ VkAttachmentDescription[]
 
 ### 资源访问同步
 
-- Attachment 的 layout transition 通常由 render pass begin/end 自动处理，但仍需正确设置 `initialLayout` / `finalLayout`。[SPEC]
+- 传统 RenderPass 按 initial/subpass/final layout 描述执行所需的隐式 transition；相同 layout 不凭空发生转换，也不替代 producer/consumer 内存依赖。本比较两端都为 COLOR_ATTACHMENT_OPTIMAL，scope 外使用显式屏障。[SPEC]
 - Input attachment 的读取需要 `INPUT_ATTACHMENT_READ_BIT` 与对应 stage。[SPEC]
 
 ---
 
 ## 11. Android 注意点
 
-- Tile-based GPU 上 render pass 的 load/store op 直接决定 tile memory 带宽；`LOAD_OP_CLEAR`/`STORE_OP_DONT_CARE` 比 `LOAD`/`STORE` 更省带宽。[ANDROID][ENGINE]
+- load/store op 规定内容需求，可能影响 tile memory 带宽；必须先保留所需内容，再对合法方案实测，不保证 CLEAR/DONT_CARE 总比 LOAD/STORE 更省。[ANDROID][ENGINE]
 - 避免 render area 设置成全屏后再用小 scissor 裁剪，仍可能触发全屏 load/store。[ANDROID]
 - 横竖屏切换导致 surface 尺寸变化时，framebuffer 需要重建，但 render pass 本身若 format/sample 不变通常可复用。[ANDROID]
 - AGI 可分析每 render pass 的 tile 开销与 resolve 次数。[TOOL]
@@ -219,14 +219,14 @@ VkAttachmentDescription[]
 
 ### GPU 侧
 
-- Load/store op 选择直接影响 bandwidth；尽量使用 `CLEAR` / `DONT_CARE` 而非 `LOAD` / `STORE`。[ENGINE]
+- 先满足内容保留/初始化需求，再实测合法 load/store 方案的 bandwidth；不能为预期收益丢弃仍需读取的内容。[ENGINE]
 - Subpass dependency 过宽（`ALL_COMMANDS_BIT`）会限制 GPU 并行。[HEUR]
 - 过多 subpass 会增加 command processor 与 tile 切换开销。[ENGINE]
 
 ### 移动端
 
 - 尽量减少每帧 render pass 切换次数；合并 subpass 或合并 draw call。[ENGINE]
-- 注意 `STORE_OP_STORE` 会把 tile 数据写回 system memory，增加功耗；不需要保留的 attachment 用 `DONT_CARE`。[ANDROID]
+- STORE 要求保留结果，但不规定物理缓存/压缩流量或功耗；不需保留时可选择 DONT_CARE，收益仍需测量。[ANDROID]
 - MSAA resolve 最好通过 subpass resolve attachment 完成，避免手动 resolve。[ENGINE]
 
 ---
@@ -234,7 +234,7 @@ VkAttachmentDescription[]
 ## 13. 专家经验
 
 **经验**：
-把 render pass 当作“渲染阶段”而非“单个 draw call”的描述：一个主光 pass、一个后处理 pass、一个 UI pass 通常只需少量 render pass。通过 subpass 做 input attachment 读取或 MSAA resolve，比手动 barrier 更高效。对移动端，load/store op 的选择和 render area 大小是性能调优的首要杠杆。
+把 render pass 当作“渲染阶段”而非“单个 draw call”的描述：一个主光 pass、一个后处理 pass、一个 UI pass 通常只需少量 render pass。通过 subpass 做 input attachment 读取或 MSAA resolve 可能改变数据驻留与同步成本，是否比另一合法方案高效需目标平台实测。对移动端，load/store op 的选择和 render area 大小是性能调优的首要杠杆。
 
 **适用条件**：
 多阶段渲染、MSAA、deferred shading、tile-based GPU 项目。
@@ -268,3 +268,11 @@ VkAttachmentDescription[]
 3. Self-dependency 与 `VK_DEPENDENCY_BY_REGION_BIT` 的精确限制。
 4. Dynamic rendering 与 render pass 混合使用时的兼容性规则。
 5. 特定驱动对 render area 的优化行为。
+
+### delivery19-render-organization：受限实际绘制比较
+
+Tests `cases19/render_organization/run.py` 在 CPU ICD 上运行传统 RenderPass → dynamic rendering →传统恢复；同一 vertex/fragment shader、非对称 4×4 图案与逐像素 CPU 参考。两路径均先显式转换至 COLOR_ATTACHMENT_OPTIMAL，再写入并显式转换供拷贝读回；传统 attachment initial/final 保持该 layout。各自 pipeline 合法，不声称两 pipeline/layout 可互换。[ENGINE]
+
+记录的是一次场景创建的 RP/Framebuffer/pipeline 对象与 begin/draw 调用数，不是每帧重建成本、驱动内存或性能。默认保留传统基线；只有调用者明确禁止应用 RP 对象时，才在已通过输出门的候选中选择 dynamic。性能要求返回 NEEDS_MEASUREMENT。缺动态能力会阻塞整个比较，不能据此宣称传统路径不合法；未实测不支持设备回退。[HEUR]
+
+单提交、单颜色附件、单样本，无 subpass/local-read/tile/深度/物理硬件性能结论；两路径错误参考均必须真实失败。原始完整日志与来源哈希由 runner 保留，不把此例当外部工程或全 C2 完成。[ENGINE]

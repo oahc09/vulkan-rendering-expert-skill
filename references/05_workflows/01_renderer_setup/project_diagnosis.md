@@ -289,3 +289,13 @@ Evidence/Architecture Map仍先于改造。针对当前任务记录下表，不�
 每个结论关联真实文件/函数/行为；无设备/源码时只输出风险和最小验证计划。
 主题按 [现有路由](../../07_integration_pack/task_routing_rules.md#mobile-topics) 按需选一条；
 不因移动能力扩展重写RHI、统一提高最低Vulkan版本或强制引入OpenCL/第三方框架。
+
+
+<a id="delivery19-evidence-chain"></a>
+## 可关联但不伪造的证据链
+
+[ENGINE] 证据条目绑定不可变 run、两仓和项目 SHA、工具版本、设备/driver、原始 artifact hash、观察与限制。资源键至少包括 run/device/handle/generation；句柄相同不能跨设备或代际合并。源码路径/符号/行号、frame/submit/event 缺失则 null；严禁从时间接近猜出 submit 关系。
+
+应用可序列化真实 VkDebugUtilsMessengerCallbackDataEXT 字段，保存 message ID、对象数及原文在本地；这是应用回调采集合同，不是假造 VVL 原生日志格式。Perfetto 可通过固定 SQL 导出 slice id/ts/dur/track_id/name，dur=-1 保持未结束，slice 不是 present 或 GPU 时间。先确认数据源和工具版本；未校准 CPU/GPU 时钟不得直接相减。适配器只读本地输入并限制大小，默认不发布原始消息、资源名称、源码路径或 capture。
+
+工具 clean 不证明无缺陷。证据关联仅说明对象身份，不证明因果；原始记录和公开去敏摘要分离，授权前不上传客户内容。对应适配及测试见配套 tests/tools/evidence19.py；fixture 可解析不等于真实 capture/trace 工具运行。

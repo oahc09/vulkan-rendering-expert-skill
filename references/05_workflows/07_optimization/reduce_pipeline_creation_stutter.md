@@ -178,7 +178,7 @@ Pipeline 状态：
 - 移动端按 CPU 时间/内存/队列背压调整 worker 并发，测与 render thread、driver lock 的争用，不规定统一线程数 [ANDROID]。
 - Pipeline cache blob 在 Android 上可保存到应用私有目录；注意不同设备/驱动间 cache 不通用，建议按 device ID / driver version 分文件 [ANDROID]。
 - rotation / resize 通常不改变 pipeline（除非 surface format 变化），但若启用了 GPL 的 fragment output 库且 format 改变，需要重建对应库 [ANDROID]。
-- pause / resume 期间保留 pipeline cache 与已创建 pipeline；不要销毁 cache，否则下次启动失去加速 [ANDROID]。
+- pause / resume 是否保留 cache/pipeline 由内存与生命周期策略决定。销毁 cache 不会销毁已创建 pipeline；如保存了兼容原始 blob 可重建，是否加速仍需实测 [ENGINE]。
 - AGI / logcat 验证：监控 `vkCreate*Pipelines` 调用耗时、cache hit 情况、async task 完成时间。
 
 ---
@@ -189,7 +189,7 @@ Pipeline 状态：
 - [ ] RenderDoc / AGI / Nsight：
   - 可见 async pipeline 在完成后被绑定；
   - startup 阶段预编译 pipeline 列表正确；
-  - 记录冷/热 `vkCreate*Pipelines` 耗时，不将显著加速作为预设事实 [TOOL]。
+  - 记录明确实验模式的 `vkCreate*Pipelines` 耗时，不把先后两次调用自动命名为真实冷/热，也不预设显著加速 [TOOL]。
 - [ ] 截图 / 数值验证：fallback 切换到 async pipeline 时无画面跳变或 artifact。
 - [ ] logcat（Android）：无 validation error；可输出 `pipelineCreationTime`、`cacheHitRate`、`asyncCompileQueueSize`。
 - [ ] 性能指标：
@@ -204,7 +204,7 @@ Pipeline 状态：
 
 ## 11. 常见失败模式
 
-1. **Pipeline cache 未持久化**：每次启动冷编译所有 pipeline，startup 极慢 [HEUR]。
+1. **Pipeline cache 未持久化**：可能增加应用侧重复创建成本，但存在实现内部缓存，不能推断每次都全冷编译或启动必然极慢 [HEUR]。
 2. **Async pipeline 未完成就使用**：主线程未等 async 完成就绑定，导致渲染错误或未定义行为 [ENGINE]。
 3. **Base/derivative pipeline 创建顺序错误**：base 未设置 `ALLOW_DERIVATIVES_BIT` 或不在同一调用中 [SPEC]。
 4. **多线程并发销毁 pipeline**：`vkDestroyPipeline` 与创建/使用并发导致 crash [SPEC]。
@@ -241,7 +241,7 @@ Pipeline 状态：
 如果信息不足，不直接下结论。优先补充：
 
 - 目标平台 / GPU 型号 / Vulkan 版本。
-- `vkCreate*Pipelines` 耗时分布（首创建 vs cache hit）。
+- `vkCreate*Pipelines` 耗时分布（空应用 cache vs 已导出重载 cache）；只有有效的实现反馈才能另记 application cache hit。
 - Pipeline 总量与变体数量。
 - 是否使用 `VkPipelineCache` 及其命中率。
 - Async compile 线程模型与同步方式。
@@ -270,3 +270,7 @@ Queued → Building → Ready → Published → Retired
 回归：缺输入、损坏缓存、重复请求、创建失败、取消迟到、Device 退出、旧 pipeline in-flight、双 Engine 独立发布。Host 状态机 PASS、真实 Vulkan 创建和移动性能分开。
 
 固定规范：[Vulkan-Docs v1.4.328 pipelines](https://github.com/KhronosGroup/Vulkan-Docs/blob/d38733398a4bec673bd5d24c904d4739a45f020d/chapters/pipelines.adoc)，调度状态/预算是引擎策略，不是 Vulkan API。
+
+### delivery19-pipeline-cost 决策补充
+
+参照 `../../03_api_manual/06_pipeline/pipeline_cache.md` 的 `delivery19-pipeline-cost`：先核完整 opaque 数据来源和目标兼容，再比较创建、首帧、稳态、存储/内存及质量等不同预算。相同 shader 的两次顺序创建只是 API CPU 区间观察，不证明相同冷状态、cache hit 或完整用户收益；no-op 创建也不是画面质量测试。没有首帧/稳态与质量证据时保持 NEEDS_MEASUREMENT，合成政策反例不计入硬件结果。

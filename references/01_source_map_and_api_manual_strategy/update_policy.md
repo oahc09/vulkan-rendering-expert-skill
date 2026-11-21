@@ -105,3 +105,13 @@ SDK/headers声明、驱动支持、device显式启用、路径运行和实测收
 
 GOOGLE HDR扩展按固定Headers `9fbc2a782ee3f8a4db64e7d991e23da75e893f44`核符号，逐设备feature/逐Surface能力再启用；通用Android基础API不是本月发明。可变官网页记录核查日，无法冻结的源码明确限界；来源ledger在tests仓，不把完整第三方文档塞运行包。Source-read不等于build/device，截图也不证明HDR面板亮度。
 来源：[Graphics release](https://developer.android.com/jetpack/androidx/releases/graphics#graphics-core-1.1.0-beta01)、[Media3](https://developer.android.com/jetpack/androidx/releases/media3#1.12.0-alpha01)。
+
+
+<a id="delivery19-scope-freeze"></a>
+## 收尾版分母与维护边界
+
+[REGISTRY] 2026-11-15重新核对官方Registry页面仍显示1.4.368/2026-11-06、Vulkan-Docs fa30d4e312e843193601be7cb926c7e25d9ec885。冻结xml/规范/Headers/SPIR-V/工具hash后再统计，浮动latest不是复现基线。命令、类型/成员、feature、properties/limits、pNext、alias、require/remove、protect/platform与AND/OR依赖均需区分。
+
+[ENGINE] 标准Vulkan与SC独立分母。SC相关记录不得默默丢弃：单列静态资源规划、离线pipeline、受限操作/fault工作流及对应规范；当前尚未逐条完成SC L1/L2，不能称SC合规或认证。公开稳定扩展未知语义保持UNREVIEWED，不能用通用入口充数。特殊能力按实际查询拒绝/回退，不能把没有设备标UNSUPPORTED。
+
+冻结范围之外的新增扩展只入维护账，不悄悄更改既有报告分母。最终维护仅规范差异、真实缺陷、工具/driver兼容与经审查案例，保留八模块和原最小启动，无新强制预读。

@@ -97,10 +97,10 @@ VkDevice
 
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
-| `commandPool` | 必须属于将要 submit 的 queue family。[SPEC] | compute 工作分配到 graphics command pool。[SPEC] |
-| `level` | `PRIMARY` 可直接 submit；`SECONDARY` 只能被 primary execute。[SPEC] | 误将 secondary 直接 submit。[SPEC] |
-| `flags`（begin） | `ONE_TIME_SUBMIT_BIT`：每次录制只提交一次；`RENDER_PASS_CONTINUE_BIT`：secondary 在 render pass 内继续。[SPEC] | 未使用 `ONE_TIME_SUBMIT_BIT` 但每帧 reset，失去语义提示。[HEUR] |
-| `pInheritanceInfo` | Secondary command buffer 必须提供 render pass / framebuffer / subpass / occlusion query 信息。[SPEC] | secondary 未指定 inheritance info 导致 validation 错误。[TOOL] |
+| `commandPool` | 必须属于实际提交 queue 的 family，且 family 支持录制的命令。[SPEC] | 只按 graphics/compute 名称判断，忽略 family 实际 capability 与提交身份。[SPEC] |
+| `level` | 普通路径由 `PRIMARY` submit 并 execute `SECONDARY`；secondary 不直接 submit。嵌套 secondary 另需相应扩展/feature 与深度等条件，不能默认启用。[SPEC] | 误将 secondary 直接 submit，或未满足条件就使用嵌套 execute。[SPEC] |
+| `flags`（begin） | `ONE_TIME_SUBMIT_BIT` 限制本次录制的提交使用，完成后进入 invalid；`RENDER_PASS_CONTINUE_BIT` 声明 secondary 在 render pass instance 内执行。[SPEC] | 把 ONE_TIME 当成 reset 的必要条件；它不能免除 pending 退休要求。[SPEC] |
+| `pInheritanceInfo` | Secondary begin 提供合法 inheritance；传统 render pass 与 dynamic rendering 使用不同的继承分支。后者以 NULL renderPass 和 pNext 的 `VkCommandBufferInheritanceRenderingInfo` 描述格式、sample、viewMask 等，不要求传统 framebuffer。[SPEC] | 混用传统与 dynamic inheritance，或把 primary 绑定的普通 pipeline/dynamic state 当成 secondary 自动继承。[TOOL] |
 | `pBeginInfo->flags` | 决定 command buffer 是否可二次 submit、是否在 render pass 内继续。[SPEC] | 同一 buffer 尚 pending 时再次 submit 但未满足 `SIMULTANEOUS_USE_BIT`。[SPEC] |
 
 ---
@@ -130,13 +130,13 @@ VkDevice
 
 ## 7. 高频错误
 
-1. 未等待 fence 就 reset 正在 GPU 执行的 command buffer。[SPEC]
+1. 未证明所有关联提交已完成，就 reset 仍 pending 的 command buffer。[SPEC]
 2. 未满足 begin 的状态/pool flag 条件；允许隐式 reset 的路径无需显式 reset，也不能为非法状态编造固定返回码。[SPEC]
 3. 将 secondary command buffer 直接 `vkQueueSubmit`。[SPEC]
 4. Command buffer 录制完成后未调用 `vkEndCommandBuffer`。[SPEC]
 5. Command buffer 引用了已销毁的 `VkFramebuffer`、`VkImageView` 或 `VkBuffer`。[SPEC]
 6. 同一 frame resource 被多帧 command buffer 复用但 fence 管理错误。[ENGINE]
-7. Compute 与 graphics command buffer 混用错误的 command pool。[SPEC]
+7. Command pool 的 family 与实际提交 queue 不匹配，或 family 不支持录制的命令。[SPEC]
 8. 对 pending command buffer reset/free/re-record；recording 状态本身不禁止合法 reset/free。[SPEC]
 
 ---
@@ -185,7 +185,7 @@ VkDevice
 
 ### in-flight 风险
 
-- Command buffer 被 submit 后进入 pending 状态，在 fence signal 前不能 reset / free / reuse。[SPEC]
+- Command buffer 在 pending 时不能 reset/free/re-record。满足 `SIMULTANEOUS_USE_BIT` 及全部相关条件时可再次提交/执行，但不免除资源同步或所有关联提交完成后才能修改的要求。[SPEC]
 - Command buffer 引用的资源（image view、framebuffer、buffer、descriptor）在 GPU 完成前必须保持有效。[SPEC]
 
 ---
@@ -194,8 +194,8 @@ VkDevice
 
 ### CPU-GPU 同步
 
-- CPU 通过 fence 等待 command buffer 执行完成，之后才能 reset / free。[SPEC]
-- 不要在 `vkQueueSubmit` 返回后立即 reset，必须等待 fence。[SPEC]
+- reset/free 前须证明所有关联提交已完成；可使用覆盖这些提交的 fence、满足 signal scope 的 timeline semaphore 或适当 queue/device idle 等合法完成证据，不限定只能用 fence。[SPEC]
+- `vkQueueSubmit` 返回不代表执行完成；无关的 fence/timeline 值也不是当前 command buffer 的退休证明。[SPEC]
 
 ### GPU-GPU 同步
 
@@ -212,7 +212,7 @@ VkDevice
 ## 11. Android 注意点
 
 - Android 上 command pool 通常按 queue family 创建，graphics / compute / transfer 需分开或确保 queue family 兼容。[ANDROID]
-- Surface / swapchain recreate 后，旧的 command buffer 仍可能引用旧 framebuffer / image view，必须等待 idle 后再 reset。[ANDROID]
+- Surface / swapchain recreate 时，旧 command buffer 及资源要在全部关联提交完成后才能 reset/free。可用正确完成点而非强制全 device idle；presentation 的 image 使用退休另行证明，不能用渲染 fence 或 command buffer 完成替代。[ANDROID]
 - 移动端应避免每帧 allocate / free command buffer，使用 reset + reuse。[ENGINE]
 - AGI 可查看每帧 command buffer 录制内容与 GPU 执行时间线。[TOOL]
 
@@ -290,3 +290,64 @@ VkDevice
 **验证**：覆盖普通 serial resubmit、ONE_TIME invalid、pending reset拒绝、pool reset跨CB完成检查、两个线程同pool拒绝与分pool允许、secondary失效传播。确认完成点覆盖每一次并行使用；验证层与host线程检测都保留日志。
 
 固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[cmdbuffers#commandbuffers-lifecycle](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/cmdbuffers.adoc#commandbuffers-lifecycle)；[cmdbuffers#commandbuffers-pools](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/cmdbuffers.adoc#commandbuffers-pools)；[cmdbuffers#commandbuffers-recording](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/cmdbuffers.adoc#commandbuffers-recording)。[SPEC]
+
+## Delivery19 ordinary descriptor / command-buffer joint lifecycle (bounded L1/L2)
+
+This contract connects ordinary descriptor updates to command-buffer retirement
+and invalidation. A completed submission is not permission to reuse a recording
+after its referenced ordinary descriptor binding has changed.
+
+- **Preconditions:** primary command buffer, ordinary descriptor bindings (neither
+  UPDATE_AFTER_BIND nor UPDATE_UNUSED_WHILE_PENDING), known complete reference
+  inventory, externally serialized command buffer/pool/set host access. Identify
+  objects and generations; a reused handle or unrelated fence is not proof.
+- **Pending:** wait for every relevant submission to retire. Individual reset is
+  forbidden while pending (`VUID-vkResetCommandBuffer-commandBuffer-00045`). A
+  descriptor update is separately forbidden (03047); resetting does not bypass it.
+- **Retired/executable:** an ordinary referenced-binding update invalidates the
+  recorded command buffer. Reset/re-record before submitting it again. A fence
+  wait fixes pending ownership but does not restore an invalid recording.
+- **Reset:** individual reset requires the pool's RESET_COMMAND_BUFFER flag
+  (00046); otherwise use an appropriate pool lifecycle after all its uses retire.
+  Resetting a secondary can also invalidate referencing primaries; this experiment
+  does not cover that graph or pool-wide reset.
+- **Data correctness:** re-recording alone does not establish memory visibility.
+  Retain the workload's resource dependencies, coherent/noncoherent readback
+  handling and fence ownership. Do not infer a GPU memory barrier from host state.
+- **Failure:** a validation callback configured to abort invalid commands provides
+  a safe diagnostic experiment, not evidence that an invalid driver submission
+  executed successfully. Unsupported timeline or missing layers must fail closed.
+
+Paired tests source: `cases19/descriptor_lifetime`, exact versions and hashes in
+`coverage/v1.0.19/descriptor-lifetime.json`. This is an authored CPU-ICD compute
+experiment, not production-engine discovery, hardware/SC/Live acceptance or full
+VK03 coverage. Consult that checked record for actually exercised branches.
+
+Normative sources (live pages, separate from the frozen registry snapshot):
+[vkResetCommandBuffer](https://docs.vulkan.org/refpages/latest/refpages/source/vkResetCommandBuffer.html),
+[vkUpdateDescriptorSets](https://docs.vulkan.org/refpages/latest/refpages/source/vkUpdateDescriptorSets.html).
+
+<a id="delivery19-secondary-dynamic-draw"></a>
+## Delivery19 secondary dynamic-rendering draw（限定可执行路径）
+
+测试仓 `cases19/secondary_draw/run.py` 连接真实 secondary 录制、primary execute、shader 绘制及完整像素读回，补普通命令管理的实际使用证据；不是仅检查 inheritance 字段。[ENGINE]
+
+- **前提与分支**：core 1.3、已查询并启用 dynamicRendering、graphics queue、兼容的 RGBA8 attachment 与 coherent readback。在单一 host 线程串行录制，primary/secondary 来自同一 queue family。未启用 nested command buffer、simultaneous use 或继承 query。[SPEC][TOOL]
+- **继承**：secondary 使用 `RENDER_PASS_CONTINUE_BIT`，NULL renderPass，pNext 的 inheritance rendering 指定 color 格式、sample count、viewMask、depth/stencil；primary 在 `SECONDARY_COMMAND_BUFFERS_BIT` rendering instance 内 execute。这些是兼容性声明，不等于继承任意 primary pipeline/descriptor/dynamic state；绘制所需状态在 secondary 内明确建立。[SPEC]
+- **实际数据链**：secondary 绑定实际 graphics pipeline 并 draw，primary 结束 rendering 后建立 color-write → transfer-read，再复制到 readback，transfer-write → host-read，经实际 fence 成功后验证每个像素。执行关系不替代资源内存依赖。[SPEC][TOOL]
+- **负控**：negative secondary 的 inheritance 和自身 pipeline 均使用 BGRA8，而 primary attachment 是 RGBA8；安全中止 `vkCmdExecuteCommands` 的唯一 06028 诊断，丢弃 primary，不提交不匹配命令。它测试的是 execute 继承格式冲突，不是 secondary 自身 pipeline draw 格式错误。错误像素参考另行实际退出非零。[TOOL]
+- **生命周期**：所有对象在提交完成前保持有效；pending 时不得 reset/free。已退休 secondary 的 reset/re-record 可能使引用 primary 失效，需重录相应关系；原单次模式之外，下面的两代 lifecycle 模式补一条实际串行失效/重录路径；仍不代表 pending 修改、任意引用图或多线程已验证。DeviceWaitIdle 失败时保守退出，不销毁可能仍 pending 的资源；这不是实际设备故障恢复测试。[SPEC][ENGINE]
+
+格式负控对应测试仓冻结 1.4.309 normative.json；结构语义参见 [inheritance rendering](https://docs.vulkan.org/refpages/latest/refpages/source/VkCommandBufferInheritanceRenderingInfo.html) 与 [execute commands](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdExecuteCommands.html)。最新页面不替换固定 cohort 的 VUID 文本。[SPEC]
+
+限定 CPU ICD、单 secondary、单个 color attachment/sample1、离屏小图。传统 render pass、multiview/depth/resolve、query inheritance、nested、multi-thread/multi-queue、物理 GPU/移动性能、外部工程与 Live/盲测仍未验。VK03/VK10 只增加 PARTIAL_BOUNDED，不能宣布完整 domain 或最终交付通过。[ENGINE]
+
+### 两代 secondary 重录与 primary 失效恢复（限定 lifecycle 模式）
+
+同一 runner 的 `lifecycle` 路径先完成第一代绘制及全像素读回，在实际 fence 退休后 reset/re-record 同一个 secondary。第二代绑定 scissor 宽2的新 pipeline，右半输出来自 primary 的 magenta clear，因此像素变化来自实际录制，不只是 generation 标签。旧 primary 因 secondary reset 而失效，重录 secondary 不会自动修复它。[SPEC][TOOL]
+
+用安全 callback 拦截一次旧 primary 的 submit 尝试，固定 cohort 发出00070且返回 validation failure；这不是无效命令成功执行。之后重录 primary 的 execute 链，以实际上一代 `TRANSFER_SRC_OPTIMAL` 布局转换到 attachment，保留完整 write/read依赖，再成功提交、等待完成并独立核对第二代16像素。错误参考模式仅改变第二代预期，必须实际非零退出。[TOOL]
+
+拒绝的 submit 返回、未完成 fence 状态与成功提交后的完成证据分开；失败路径不将一个未signal fence 当成退休证明。第一次提交不是 ONE_TIME，失效原因被隔离为 secondary reset。所有两代 pipeline、image及readback资源在各自真实使用退休前保留。该路径展示一个可复现的失效诊断→重录修复→结果验证闭环，不是外部工程 patch、并发压力、完整引用图遍历或GPU挂死恢复。[ENGINE]
+
+依据：[reset失效传播](https://docs.vulkan.org/refpages/latest/refpages/source/vkResetCommandBuffer.html)；VUID 文本仍以测试仓冻结1.4.309 normative摘录为准。Barrier并不修复command buffer状态；完成点并不重新创建失效录制。[SPEC]

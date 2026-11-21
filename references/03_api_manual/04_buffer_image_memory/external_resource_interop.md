@@ -187,3 +187,18 @@ Camera/MediaCodec 的 AImage/AHB lease、acquire/release fence 与 FOREIGN owner
 跨平台 external handle 必须分别查询 external buffer/image、semaphore/fence 的 import/export 与 compatible handle types。POSIX FD 成功导入的接管规则不能推广到 Win32：OPAQUE_WIN32 NT handle 导入不转移应用 handle 所有权，应用仍需 CloseHandle；OPAQUE_WIN32_KMT 不持有 payload 引用，必须保持原始资源存活。内存共享不共享执行顺序，不同 API 的 queue ownership、layout 和同步载荷必须逐项约定；不支持匹配 handle 或保护属性时拒绝零拷贝，使用允许的显式复制路径。protected 内容不能用回读或无保护复制作为通用回退。[SPEC]
 
 固定规范（Vulkan 1.4.368，source-read；不是设备验证）：[external memory Win32 ownership](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/memory.adoc)；[external semaphore and fence](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc)。
+
+<a id="delivery19-memory-fd-lifecycle"></a>
+## v1.0.19：Vulkan 来源 OPAQUE_FD 的可执行生命周期边界
+
+本段冻结 Vulkan 1.4.309，与本卡其他 1.4.368 source-read 范围区分。`cases19/external_memory`、`tools/external_memory19.py` 是同进程两个 instance/device 的有限 buffer 路径，不是 OpenCL、跨进程、Android 或完整 VK17 验收。
+
+1. **先分离表示与同步能力。** 对实际 `TRANSFER_SRC|TRANSFER_DST`、flags=0、OPAQUE_FD 查询双方 buffer properties。export 端需 EXPORTABLE，import 端需 IMPORTABLE；双方 compatible handle 包含 OPAQUE_FD，实际启用 `VK_KHR_external_memory_fd`。单独记录 external semaphore/fence FD 的支持。memory 支持不能推出同步 handle 支持，更不能推出跨设备 GPU 可见性。
+2. **配对分配，不猜 memory type。** 同一底层物理设备及兼容驱动，记录 deviceUUID/driverUUID；两端 buffer requirements 的 memoryTypeBits 交集中选择相同 index。Vulkan 来源 OPAQUE_FD 导入的 allocationSize、memoryTypeIndex 必须与原分配完全一致（01742）。检查 dedicated-only 和两端 requiresDedicatedAllocation，必要时分别绑定各自对应 buffer 的 dedicated allocation；资源参数必须兼容。UUID 检查不是 arbitrary 外部 API 兼容性万能证明。
+3. **导出与导入不是同一所有权动作。** 每次成功导出产生新的应用所有 FD；应用负责尚未移交的 FD。成功导入后 ownership 交给实现，应用立即忘记该整数，不能再次 close、fcntl 或重复导入；导入失败仍由应用负责回收。需要再导入时另行 export/dup，在转交前保留明确独立所有权。
+4. **OPAQUE_FD 不查询 memory-FD properties。** `vkGetMemoryFdPropertiesKHR` 禁止 OPAQUE_FD（00674）。本路径从原 Vulkan allocation 保留 type/size，而不是用这个 API “找类型”。安全负控由 Validation callback 中止该调用，输出属性不使用，原 FD 仍由应用关闭；负控不向驱动传递无效或已消费 FD。
+5. **payload 引用与执行退休分别证明。** import 创建独立 VkDeviceMemory，持有 payload 引用；无 queue 提交的生命周期样例可以先销毁 exporter buffer/memory，再销毁 importer。它只证明有限对象/FD 管理，无权声称跨设备写入可见。若加入 GPU producer/consumer，必须另行验证 execution dependency、availability/visibility、外部 ownership release/acquire 及回收；不能把 fence 的完成直接替代这些条件。
+
+可执行规则返回 `MEMORY_IMPORT_WITHIN_SCOPE` 时仍固定 `execution_visibility=NOT_PROVEN`。未知字段/身份/资源形状不自动放行；CPU 所有权负控不是设备上的 double-close 或 use-after-import 实验。无支持的 semaphore/fence FD 路径保留 `UNAVAILABLE_NOT_RUN`，不要改成 PASS。
+
+固定来源：[memory.adoc / v1.4.309](https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.309/chapters/memory.adoc)，Git blob `95878237bc9db06a40478480c6770c89185e261e`，Khronos CC-BY-4.0，以上为概述；实际 runner 将 compact VUID 条目与完整 pinned validusage SHA 核对。证据和未验范围见 tests 仓 `coverage/v1.0.19/external-memory.json`。

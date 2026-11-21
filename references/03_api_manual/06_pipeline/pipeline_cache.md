@@ -41,7 +41,7 @@ VkPipelineCacheCreateInfo（可含初始 blob 数据）
 ### 下游影响
 
 - 影响 pipeline 创建速度，尤其是后续启动。[ENGINE]
-- 多个 pipeline 共享同一 cache 时，cache 会累积编译结果。[SPEC]
+- 多个 pipeline 可共享 cache；实现可记录内部数据，但不能保证 blob 增长或每次产生可观察命中。[SPEC]
 
 ---
 
@@ -75,7 +75,7 @@ VkPipelineCacheCreateInfo（可含初始 blob 数据）
 启动时读取磁盘上的 pipeline cache blob（如有）
 → vkCreatePipelineCache（initialData = blob）
 → 创建 graphics/compute pipeline 时传入 cache
-→ 运行中持续创建 pipeline，cache 自动积累
+→ 运行中创建 pipeline，是否更新 cache 数据由实际实现决定
 → 退出/合适时机调用 vkGetPipelineCacheData 导出 blob
 → 写入磁盘
 → 下次启动复用
@@ -115,7 +115,7 @@ VkPipelineCacheCreateInfo（可含初始 blob 数据）
 
 ## 7. 高频错误
 
-1. 每个 pipeline 创建独立的 cache，无法共享编译结果。[TOOL]
+1. 每个 pipeline 独立 cache 可能降低复用；per-thread cache/merge 也可是有意的同步策略，应按实际成本与需求评估，而非一概判错。[ENGINE]
 2. 持久化 blob 未校验版本，换驱动后加载失败但静默忽略。[TOOL]
 3. 忘记调用 `vkGetPipelineCacheData` 保存 cache。[ENGINE]
 4. 在创建大量 pipeline 的循环中未传入 cache。[ENGINE]
@@ -158,7 +158,7 @@ VkPipelineCacheCreateInfo（可含初始 blob 数据）
 
 ### in-flight 风险
 
-- Pipeline cache 不直接被 command buffer 引用；销毁前只需确保没有并发的 pipeline 创建操作。[SPEC]
+- Pipeline cache 不直接被 command buffer 引用；销毁前确保所有引用它的 host 操作（含创建 pipeline、Get/Merge 等）已结束，并满足外部同步；无需仅因 cache 等待已创建 pipeline 的 GPU 使用退休。[SPEC]
 
 ---
 
@@ -269,3 +269,15 @@ VkPipelineCacheCreateInfo（可含初始 blob 数据）
 取得数据：按扩展约束用 CAPTURE_DATA 创建 pipeline，再 vkCreatePipelineBinariesKHR / vkGetPipelineBinaryDataKHR；归还捕获存储用 vkReleaseCapturedPipelineDataKHR。消费时恢复 binary handles，以 VkPipelineBinaryInfoKHR 链接 create-info，保持与捕获 pipeline 一致的所需状态。create-info 链接的 VkPipelineBinaryInfoKHR 的 binaryCount 非零时，或设置 VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR 时，不能使用 VkPipelineCache，传 VK_NULL_HANDLE；仅链入 binaryCount=0 本身不触发前一限制，仍须满足其他有效用法。binaryCount 与 CAPTURE_DATA 的组合另按 VU 核对，不能无条件同时塞入所有缓存机制。失败清理部分 handles 并显式回退，不能把 VkResult 成功等同于图像正确。[SPEC]
 
 固定来源：[Vulkan-Docs v1.4.328 pipelines：cache flags/merge、binaries](https://github.com/KhronosGroup/Vulkan-Docs/blob/d38733398a4bec673bd5d24c904d4739a45f020d/chapters/pipelines.adoc)。2026-11-01 source-read；原生 Binary/GPL 未在此卡执行。
+
+## delivery19-pipeline-cost：有限持久化与决策合同
+
+配对测试提供真实单线程 flags0 cache 导出/磁盘原字节重读/重新创建 cache 与 compute pipeline 路径。仅创建 no-op pipeline，不提交 GPU 工作，不证明输出质量、首帧或稳态表现。两个 CPU API 调用区间分别记录，不能由先后差值推断 cache 命中或收益：driver 隐式缓存、预热、编译器和顺序都可能混杂。
+
+VERSION_ONE 持久化头按 little-endian 字段读取；header version/size、vendorID、deviceID、pipelineCacheUUID 与目标条件分别核对。头匹配不证明任意 opaque payload 合法：必须保留完整未改 `vkGetPipelineCacheData` 字节来源与完整性；拒绝不可信或损坏来源，回退空 cache。driver/build/shader/schema 的应用失效策略可以更保守，但不要伪装为 header 中不存在的 Vulkan 字段或通用 VUID。测试负控仅在 HOST 导入判据修改，不把伪造数据送驱动。
+
+实际数据可只有头，不能断言增长、命中、byte-identical 跨缓存或跨运行。需要正确处理 size 查询、第二次读取结果及实际长度，有限重试与存储预算独立于 API 本身合法性。缓存不等同 pipeline binary/GPL/shader-object，后者需要独立能力启用与工程合同，不构成自动升级阶梯。
+
+成本选择先核正确性/实际能力/来源，再分别比较 pipeline 创建 CPU 成本、完整首帧、稳态帧、存储与内存预算和质量。输入/设备/driver/工具/测量模式/热身不一致应拒绝 A/B；只有创建变快而首帧或稳态退化时不能宣称整体优化。没有可比成本和质量证据时保留已验证基线或标 NEEDS_MEASUREMENT。
+
+本次固定来源另记为 Vulkan-Docs `fa30d4e312e843193601be7cb926c7e25d9ec885`（1.4.368），`chapters/pipelines.adoc` 的 `pipelines-cache-create`、`pipelines-cache-retrieval`、`pipelines-cache-header`、`pipelines-cache-destroy`。不覆盖前文历史328来源，不宣称完整 C2、并发创建、pipeline feedback 或目标物理硬件验收。

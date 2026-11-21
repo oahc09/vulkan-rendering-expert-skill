@@ -383,3 +383,18 @@ AS 生命周期见 [资源合同](../04_buffer_image_memory/memory_allocation.md
 - [Memory decompression](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/memory_decompression.adoc)、[indirect count common VUs](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/commonvalidity/decompress_memory_indirect_common.adoc)、[indirect copies](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/copies.adoc#L1963)、[synchronization stage/access](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc)。
 
 仍开放：`VK_QCOM_cooperative_matrix_conversion`、`VK_EXT_cooperative_matrix_maintenance1`、`VK_ARM_cooperative_matrix_layouts`、`VK_NV_cooperative_matrix_decode_vector`、`VK_ARM_tensor_controls`、`VK_ARM_data_graph_neural_accelerator_statistics` 的完整扩展特有 L1/L2 语义；主族的全量 VU/SPIR-V capability/精度规则与 foreign-engine 互操作细节也未声称闭合。`VK_NV_external_compute_queue` 在外部互操作域，不据本卡关闭。这里是条件化文档合同与静态回归，不是 20 族完整验收；GPU/Android/live-model 均未执行，现有 llvmpipe buffer probe 不覆盖上述可选路径。
+
+<a id="delivery19-physical-storage-address"></a>
+## 有限地址基础子族：physical-storage-buffer 指针链
+
+这条路径仅补 VK16「地址类能力」的基础合同，并与 VK04 内存/VK08 shader 接口交叉引用；**不是 cooperative matrix/vector、Video、tensor/data graph、光流、解压缩或间接复制扩展的替代验收**。普通 compute 输出正确不等于专用扩展可用。查询表中未公布的 extension 标为 UNSUPPORTED_EXTENSION；表中没有查询的 owner 标为 NOT_QUERIED；仅公布 extension 仍需匹配 feature、queue、profile/tuple 以及实际创建/运行。
+
+限定 Vulkan core 1.2、非 sparse、每个 buffer 均完整连续绑定单个分配、普通 coherent host-visible 分配，不使用 capture/replay 或多设备地址。`bufferDeviceAddress` 必须实际支持并启用；本案例使用的 shader Int64 也独立启用。取址 buffer 必须包含 SHADER_DEVICE_ADDRESS usage，所绑定分配必须带 DEVICE_ADDRESS allocation flag。支持、启用、取址成功和执行成功是四个不同证据，不能互换。
+
+应用显式维护 base、有效 buffer 大小、地址、访问字节长度、shader 声明对齐及 allocation generation。先检查 uint64 加法溢出和完整区间包含，再检查对应的 `buffer_reference_align`/SPIR-V Aligned 操作数。**设备地址不是有界 descriptor，robustBufferAccess/robustness2 不能替这条物理指针路径兜底。** 不向 GPU 提交未验证地址、越界指针或已释放 generation 来制造负例。指针表自身同样需要合法对齐、完整范围和持续有效的 backing allocation。
+
+host 写入输入和指针表后，在提交前完成可见性要求；shader 对输出写入后建立 COMPUTE/SHADER_WRITE → HOST/HOST_READ 依赖并等待真实 fence，才读取结果和销毁所有间接引用的 buffer/memory。fence 不是内存依赖的替代品。等待失败或设备丢失不能报告正常 retirement，也不承诺本例覆盖设备故障恢复。
+
+对照规则入口为 tests 的 `tools/device_address19.py`，实际执行入口为 `cases19/device_address/run.py`。三路证据应分别保留：合法 shader 全量独立数值 oracle；错误 oracle 确实拒绝；缺 SHADER_DEVICE_ADDRESS usage 的取址调用由验证回调中止，仅作为 API 负控，不消费返回地址或提交非法 shader。当前实现是仓内可复现案例，非外部工程缺陷修复、真实硬件/移动端性能或全域 L2 验收。
+
+固定依据：[Vulkan-Docs v1.4.309 physical storage buffer access / vkGetBufferDeviceAddress](https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.309/chapters/descriptorsets.adoc)、同版本 validusage 的 `VUID-VkBufferDeviceAddressInfo-buffer-02600/02601`；shader 引用布局另对照 [GLSL_EXT_buffer_reference](https://github.com/KhronosGroup/GLSL/blob/main/extensions/ext/GLSL_EXT_buffer_reference.txt)。GLSL 链接是补充说明，未作为冻结规范身份；冻结 Vulkan 章节 blob 为 `3cad5740ff176cbef473b1c4914d56c7810281d0`。本例引用基地址满足16字节对齐，但指针表第二个8字节成员位于offset8，实际 SPIR-V load为Aligned8，uint元素访问为Aligned4；不能把基地址对齐错误套到每一个成员。

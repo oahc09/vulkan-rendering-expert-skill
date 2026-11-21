@@ -28,7 +28,7 @@ Color / Depth Image Views
 → VkPipeline
 → VkRenderingInfo（per-frame 指定 attachments / load/store ops）
 → vkCmdBeginRendering
-→ Draw / Dispatch-related commands
+→ Graphics draw commands（compute dispatch 在 rendering scope 外录制）
 → vkCmdEndRendering
 → Barrier / Layout transition for next consumer
 ```
@@ -58,7 +58,7 @@ Color / Depth Image Views
 - [ ] 当前 pipeline 创建路径支持通过 `VkPipelineRenderingCreateInfo` 指定 format [ENGINE]。
 - [ ] 已设计 command buffer 中的 barrier / layout transition 逻辑（dynamic rendering 不自动处理 subpass dependency） [SPEC]。
 - [ ] RenderDoc / AGI 支持 dynamic rendering 抓帧 [TOOL]。
-- [ ] Android Surface / ANativeWindow 生命周期可追踪 [ANDROID]。
+- [ ] 若接 Android WSI，追踪 Surface / ANativeWindow 生命周期；离屏 dynamic rendering 不以 Surface 存在为前提 [ANDROID]。
 
 ---
 
@@ -130,7 +130,7 @@ Per-frame command recording:
 设计说明：
 
 - `VkPipelineRenderingCreateInfo` 通过 `VkGraphicsPipelineCreateInfo.pNext` 链接 [SPEC]。
-- pipeline 创建时指定的 color/depth/stencil format 必须与 `vkCmdBeginRendering` 时实际 attachment 的 format 一致，否则 behavior undefined [SPEC]。
+- 本工作流限定普通非空 attachment、未启用 dynamicRenderingUnusedAttachments 等特例：draw 使用的 pipeline color/depth/stencil format 须满足与实际 attachment 的匹配规则；空 attachment 或扩展例外应另核对应 valid usage，不能无条件套用本限定 [SPEC]。
 - 若同一 pipeline 需要输出到不同 format 的 attachment，必须创建多个 pipeline 或使用 dynamic rendering 的 `colorAttachmentCount` 但 format 相同的场景 [HEUR]。
 - Descriptor set / push constant 设计与 RenderPass 路径完全相同，dynamic rendering 只影响 attachment 声明方式 [SPEC]。
 
@@ -148,8 +148,8 @@ Per-frame command recording:
 必须说明：
 
 - Dynamic Rendering 不自动处理 attachment 之间的 layout transition；`VkRenderingAttachmentInfo.imageLayout` 必须与当前 image layout 一致 [SPEC]。
-- `vkCmdBeginRendering` 前需要手动 barrier 到对应 attachment layout；`vkCmdEndRendering` 后需要手动 barrier 到下一个 consumer 的 layout [SPEC]。
-- `renderArea` 仅用于 hint，不影响 correctness；但为了性能，应尽量精确 [HEUR]。
+- Begin/End 不自动转换 attachment layout。只有当前与所需 layout 不同才需要相应 transition；即使 layout 相同，producer/consumer 仍可能需要内存依赖。不能把每次 Begin/End 都必须转换当通则 [SPEC]。
+- `renderArea` 是附件 load/store/resolve 等操作范围与相关有效性约束的一部分，不是只影响性能的 hint；viewport/scissor 与所需有效像素范围应分别核验 [SPEC]。
 - `loadOp` / `storeOp` 在 `VkRenderingAttachmentInfo` 中直接指定，不需要 `VkAttachmentDescription` [SPEC]。
 
 ---
@@ -174,12 +174,12 @@ Per-frame command recording:
    - `layerCount = 1`（通常）。
    - `pColorAttachments`、`pDepthAttachment`、`pStencilAttachment` 指向步骤 5 的 info [SPEC]。
 7. **录制 command buffer**：
-   - 插入 attachment image barrier，转换到对应 attachment layout [SPEC]。
+   - 按实际旧 layout 和 producer 访问建立所需依赖；layout 不同时才转换到对应 attachment layout，同 layout 仍可能需要内存屏障 [SPEC]。
    - `vkCmdBeginRendering(&renderingInfo)` [SPEC]。
    - bind pipeline，设置 dynamic state，bind descriptor，draw [SPEC]。
    - `vkCmdEndRendering()` [SPEC]。
-   - 插入 barrier 转换到下一 consumer layout（如 `PRESENT_SRC_KHR` 或 `SHADER_READ_ONLY_OPTIMAL`） [SPEC]。
-8. **接入 resize / recreate**：重建 attachment image / view，pipeline 通常不变；若 output format 改变则重建 pipeline [ENGINE]。
+   - 按下一 consumer 的访问与 layout 建立所需依赖，只有 layout 不同时才转换（如 `PRESENT_SRC_KHR` 或 `SHADER_READ_ONLY_OPTIMAL`）；End 本身不提供该跨 scope 依赖 [SPEC]。
+8. **接入 resize / recreate**：退休旧 attachment 使用后按需重建 image/view；dynamic 路径无 framebuffer 对象。静态 viewport/scissor 或其他 extent-dependent pipeline 状态需适配，若已配置动态状态则重新记录相应设置；format/sample 等兼容条件变化也需重建或选择匹配 pipeline [ENGINE]。
 9. **接入销毁路径**：销毁 pipeline、image view、image、memory；无 `VkRenderPass` / `VkFramebuffer` 需要销毁 [ENGINE]。
 
 ---
@@ -202,7 +202,7 @@ Per-frame command recording:
 - [ ] 截图符合预期：color / depth attachment 内容正确。
 - [ ] logcat（Android）：`adb logcat -s vulkan` 无 validation error；输出 `VkPipelineRenderingCreateInfo` 与 `VkRenderingInfo` 关键参数。
 - [ ] 性能指标：
-  - 与 RenderPass 路径相比 frame time 在预期范围（通常接近，具体取决于 driver）；
+  - 同工作负载下测量完整 frame time 与首帧成本，不预设与 RenderPass 路径通常接近；
   - 无 redundant pipeline 创建；
   - AGI 中 attachment load/store 行为符合预期 [TOOL]。
 - [ ] resize / rotation / pause / resume 后渲染正常。

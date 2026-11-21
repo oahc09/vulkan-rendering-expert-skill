@@ -151,3 +151,13 @@ Verification Gate:
 ## 10. 输入来源
 
 进入 G1-G6 前，证据清单与各子问题置信度来自 `00_expert_entry/progressive_retrieval.md` 的检索循环输出；检索循环未达成高置信的子问题，在对应关卡标注"未验证"及原因。
+
+
+<a id="delivery19-four-seals"></a>
+## 四个独立封板状态
+
+[ENGINE] v1.0.19 分别列知识封板、专家交付封板、支持矩阵封板、发布封板。每项用 PASS/FAIL/BLOCKED/UNVERIFIED 与证据；知识L0登记不代替L1语义/L2工作流，软件/CPU不代替目标设备，snapshot不代替Live，包安全不代替专家能力。
+
+ALL19 24组与E2E19 12项仅预登记任务，不能预填“标准回答”当结果。被测模型不得读取rubric/最终patch/历史答案；未经编辑原始回答和实际 usage 保留。未配置模型/宿主/设备为BLOCKED，不生成假通过。既有12题token分母固定，新任务独立计量。
+
+只有实际退出条件满足才封板；候选版本号不证明完成，未完知识不得以缺设备豁免。

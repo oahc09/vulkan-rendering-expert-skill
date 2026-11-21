@@ -54,3 +54,13 @@
 5. Texture sampling 数量。
 6. Alpha blending / overdraw。
 7. 是否存在不必要的中间图读写。
+
+
+<a id="delivery19-joint-ab"></a>
+## 性能与质量联合 A/B
+
+[ENGINE] 预登记 scene/seed/相机/输入/分辨率/设备/driver、cache冷热、预热、温度/电源/后台负载、A/B顺序和重复数；诊断插桩不同的样本不能直接当性能对照。指标分开报告 CPU、GPU pass、全帧、submit/wait、present、峰值内存、质量、延迟及可测功耗。
+
+预先给各必需指标退化上界。单 pass 更快但全帧变慢或质量越界，应撤销；没有用户权重时不编综合分抵消关键退化。缺数据标 UNVERIFIED，不从耗时推导带宽/功耗收益。短时软件 Vulkan 时间仅该实现观察，不推断 Adreno/Mali 热稳态。
+
+降级有迟滞和复评条件，切档同步 history/pipeline/resource generation。第二设备退化时缩小经验适用范围并保留原路径。

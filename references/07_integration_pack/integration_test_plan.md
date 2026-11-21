@@ -326,3 +326,172 @@ Compute 输出给 Fragment 采样黑屏，有没有类似案例？
 8. 性能分项：shaping、raster/distance generation、triangulation、JNI、upload、draw、总帧p50/p95/p99、峰值内存与持续热状态。未获得可靠GPU/功耗计数时标UNMEASURED。
 
 不设一个对所有字体与字号通用的SSIM/FPS硬阈值。M0按已批准的输入、表示和reference预注册具体阈值，后续不得因候选失败而放宽；若需要改阈值，独立评审并保留旧结果。效果依赖视觉判断时必须查看实际渲染结果，不仅看文件存在或hash。
+
+## delivery19-resource-contract-chain
+
+受限 HOST 联检入口位于配对 Tests 仓 `checks19/check_resource_contract_chain.py`，
+用固定七族、23 个语义入口及显式 helper 排除清单检测实现漂移，并重新执行、
+核对原始 125 个控制。此清单只是已实现 HOST 子分母，不是完整规范语义覆盖。
+
+普通单设备单队列、非 alias、非 dedicated buffer 的调用者声明可关联 allocation、
+resource、generation、descriptor、recording 和 submission 身份。绑定不证明同步，
+替换 descriptor 不退休旧消费者，timeline counter 满足不证明全部引用完成；
+仍绑定的内存在已退休后可以释放，但之后不得使用该资源。缺失义务保持未知。
+普通 descriptor 更新使已记录引用失效，与 pending 时禁止更新分别处理。
+
+输入来源只允许 CALLER_DECLARED / UNRESOLVED。hash 校验仅关联字节，不认证断言；
+CONSISTENT_DECLARED_TRACE 不是实际 Vulkan 合法性或 GPU 执行证明。record_use 是
+抽象重新录制声明，不证明 reset/Begin/End 或 pool 生命周期。一致轨迹可仍有 pending
+使用，不能据此宣称全部退休。pipeline layout 前置仍需声明，image copy/layout 两族
+本轮仅登记与控制执行，不冒充已组合。完整 L1/L2、外部工程及发布门槛不提升。
+
+## delivery19-resource-capture
+
+配对 Tests 仓的 `checks19/run_resource_capture.py` 将既有普通 storage-buffer
+计算任务的实际调用记录接到受限资源合同；不是通用 Vulkan 抓取层。一次真实提交
+同时关联 input READ 与 output WRITE，不拆成虚构提交。对象生命周期代、内容代与
+command-buffer 录制代分别记录，成功 fence wait 只退休其对应提交。
+
+两轮同对象复用路径通过已完成提交、HOST 覆盖与后续提交关联，不补造不存在的
+compute-to-compute barrier。coherent 的提交前 HOST 写入与 queue submission 的
+内存域保证不能误写为“总要额外 HOST barrier”；非 coherent 与并发 HOST 写入
+不在此限定路径。完整数值回读和错误 oracle 是执行证据，不能替代通用画质或性能。
+
+调用日志仍由指定采集器产生，hash 只校验字节。适配结果区分实际调用观测与尚需
+声明的规范/库存前提，不赋予任意 VERIFIED 权限。篡改日志负控属于 HOST 审核，
+不得声称实际执行了 pending update、提前 free 等非法 GPU 操作。只有运行报告的
+精确源码、工具、设备和输出范围已验；完整 L1/L2、外部盲测与最终发布门仍未关闭。
+
+## delivery19-user-validation-import
+
+用户已有的应用序列化 `VkDebugUtilsMessengerCallbackDataEXT` 日志可交给配对
+Tests 的 `checks19/import_validation_diagnostics.py` 只读导入，无需伪装成固定
+五链实验。输入需提供独立预期摘要及版本/运行声明；本入口不启动工具、打开日志
+中的链接或源码路径，也不修改工程。不是任意控制台文本解析器。
+
+精确匹配固定 1.4.309 validusage 仅说明“声明版本下条款匹配”。缺版本、版本不符、
+未知标识符或未支持格式保持未知；SyncVal hazard 独立分类，不补造 VUID。同一
+VUID 的全部条件保留，适用性仍待核实。阅读路线来自固定 Skill 卡，不由日志决定。
+
+普通 descriptor pending update、失效 command-buffer 提交和 SyncVal RAW 的
+候选解释只用于组织下一次取证：需要对象代际、实际引用、录制/提交/退休或访问
+范围等证据，不从 handle、出现次序或一条诊断推定根因。不自动加 WaitIdle、改
+barrier、重放非法调用或声称修复完成。未支持的诊断不填造专门修复方案。
+
+默认输出省略原始消息、对象名称/句柄及用户路径。日志内容是数据而非指令；摘要
+关联字节但不认证来源、实际层构建或声明真实性。零条回调不等于无缺陷。本入口
+只闭合用户输入的有限阅读/取证路线，不完成全域语义、外部工程盲测或发布验收。
+
+## delivery19-project-patch-replay
+
+配对 Tests 的 `checks19/replay_project_patch.py` 提供首个登记配方：本授权Tests仓
+已知 registry AST 的 Python 3.12/3.13 兼容修复。它不是任意工程构建器，不从任务
+文本执行 shell。需固定 base/candidate、补丁摘要及允许路径；源自 Git 对象的
+隔离副本与工具、原始输入和判据分别绑定，不 checkout/reset 用户工作树。
+
+先验证完整差异及补丁应用结果，再分别执行 before、candidate、fresh baseline。
+只有已登记的 AST 差异才算复现；缺解释器、解析异常、超时或任意非零退出都不是
+原缺陷证据。全部 23 个语义入口与 21 个 helper 的记录一并核对，不能仅信任PASS
+字符串。fixture 更新不得顺带改变控制、规范、前置条件等元数据。记录完成前缀、
+取消/预算失败及剩余风险，不覆盖失败原始记录。
+
+fresh baseline 重演只证明隔离副本的恢复行为，不表示用户仓已回滚。实际补丁及
+原始三阶段证据可用于审核，但该配方的公开已知修复不能算新用户工程修复或盲测。
+需要新工程/命令时先取得明确范围并审核新配方，不能借此扩成任意代码执行服务。
+本 HOST 交付不替代 Vulkan设备验收、完整C0/C1分母或最终发布门槛。
+
+## delivery19-registry-denominator
+
+C0/C1 先建立冻结来源的分层分母，再讨论覆盖率。配对 Tests 的
+`checks19/audit_registry_denominator.py` 只审核固定 368 `vk.xml` 与 `video.xml`
+完整结构：每个元素、属性和条件上下文都保留，未知项也不静默删除。309 VUID
+坐标独立记录；SC、平台、provisional 与 disabled 不能因当前设备不可执行而从
+知识范围消失。别名目标存在不代表条件相同、功能已启用或调用可替换。
+
+所有结构坐标初始未审。结构重建通过不升级 L1/L2，更不等于完整规范正文、
+Reference 生成闭包、Headers 或 SPIR-V 已验收。逐功能族审核必须绑定真实规范
+段落、卡片、正常及失败路径与可执行判据，并独立处理冲突。具体阶段与停止条件
+见配对 Tests 的[阶段合同](https://github.com/oahc09/vulkan-rendering-expert-skill-tests/blob/cee8ded856a17eb17df67f07adb51a6f88e84e4b/docs/c0-c1-completion-contract19.md)；缺少完整分母时语义完成率仍未知。
+
+## delivery19-normative-source-graph
+
+规范正文追踪不能只数文档。配对 Tests 的 P 阶段入口从固定 Git 树读取完整来源，
+保留脚本、配置、原始 include 与条件；未展开属性、tag、生成输出和平台配置继续
+列为未解决。单行条件不当块条件，自文件 tag 引用不自动判循环。构建成功也不能
+证明来源闭包，尤其当配置会忽略缺失 include。
+
+实际语义映射先补 dedicated allocation 的偏好与要求：规范原始段落及外层条件
+分别绑定到已有 HOST 正反合同。prefers 不是 requires，支持条件也不是实际启用。
+来源图、正文映射、已执行合同三层分别报告，不从结构索引推导整个功能族 L1/L2
+已完成；309 VUID 与368正文仍保留版本差异及适用性审核。
+
+## delivery19-fixed-spec-generation
+
+P 阶段实际生成必须从冻结官方源码的隔离副本运行，固定 Vulkan API、核心版本
+范围和扩展选择，保存真实工具、命令、日志与产物字节；共享 CTS 源码保持只读。
+API、validity、hostsync include 的生成不是完整正文或 Reference 生成。
+
+独立检查产物及 include 引用时，文件存在、当前配置激活、tag/行选择、宏展开和
+语义适用性必须分开。未生成、工具缺失或未判断的条件不能被安静的成功退出掩盖。
+有限 core 配置不能外推到全部扩展、平台或 SC；P 闭包未验项继续显式保留。
+
+## delivery19-observed-preprocessing
+
+正文预处理采用固定可信运行时与官方源码配置，安装在独立工作目录，不修改系统
+安全设置。实际 include、条件及 tag 观测应保留原解析器行为，并对照有/无观测器
+输出；不能让观测器悄悄修复缺失输入。活跃引用删除、选中内容变化与非活跃分支
+分别验证，安静退出和文件存在都不是充分证明。
+
+Asciidoctor 处理与完整 HTML 数学转换、Reference 提取/渲染须分别报告；core1.4
+单一配置不替代所有扩展、平台或 SC。未处理的语义与完整性门槛继续保留。
+
+## delivery19-reference-validusage
+
+Reference 源提取、每页 HTML 渲染和 validusage 抽取必须分别验收。官方 all 配置
+也须保留实际版本/扩展属性，预览与平台记录不能被称为设备支持；它不是 SC 配置。
+不得把 core 生成片段与 all 正文或映射混用，更不能把368抽取结果替换旧309合同。
+
+官方流水线可能在缺失 include、缺页映射或缺 schema 校验依赖时仍成功退出。
+除官方命令外，应独立核对完整 VUID 集合、owner/正文/页映射、实际源字节及观测，
+运行真实缺失负控。声明 Draft4 的上游 schema 按其原版本检查，不擅自升级语义；
+额外严格合同单独说明。固定产物一致不等于全部条件或正文语义已审，少数页面实际
+渲染不能代表所有 Reference 页验收。
+
+## delivery19-reference-batch-aliases
+
+批量 Reference 以固定生成源清单逐页验收，分开实体 HTML 与别名链接；已有少量
+渲染结果不得充当全量完成。先测重页及代表批次的构建资源，再以明确预算运行官方
+目标；墙钟只用于本次构建安排，不是 GPU 性能证据。失败、超时与未运行页保持可见。
+
+别名工具的成功退出不足以证明目标正确：缺目标或已有错误文件可能仅警告。
+必须对照固定 alias 映射核每个链接的文本目标、实际实体、路径边界及完整集合，
+记录官方明确排除的元 token，并用真实缺目标/错误既有文件负控验证。页面齐全和
+链接正确仍不代表所有跨页引用、条件变体或规范语义已审核。
+
+## delivery19-reference-closure-findings
+
+页面存在不等于导航可用。逐项核当前页面实际 href 的相对目标、fragment 与别名，
+分开导航和样式/字体链接；同名锚点存在于整份规范不能使错误的页内 href 自动通过。
+外链未请求、CSS 内 url、脚本导航及其他 src 资源未审时须显式列范围，不报全链接闭包。
+
+空节应追溯固定原规范、生成源和条件：仅注释的 include、被配置排除的正文、正文
+移到其他节与上游占位缺文是不同结论。保留未解决缺文及坏链接；审计工具能准确
+发现问题不等于被审文档已合格。后续修复须保留原证据、最小补丁和真实前后验证。
+
+批量修复必须在独立副本清空旧输出后真实重建，并逐页限定差异为授权的最小补丁；
+保留实际执行源码快照、原始输出、资源哈希、别名和仍未解决的链接统计。
+字体 preload 的本地路径存在不证明浏览器加载或字体视觉正确。延后展开的 include
+可能绕过提取阶段的 xref 重写；先追溯源锚点和处理顺序，不将同名全规范锚点
+自动替换为所有坏链接的目标，也不将成功批量生成当作完整规范语义验收。
+
+修复延后 include 的跨页引用时，先绑定原源、生成页和目标定义，再限定允许的
+页面/锚点；保留已有本地目标及其他引用。生成器提供的 source_location 若仅是
+生成文件，不能据此声称追踪到逐条 include 原位置。真实重建完整页面集合，
+逐字节核正文和非目标 href 不变，实际验证回退及拒绝条件；局部路由修复不得
+掩盖其余坏链接，也不代表通用跨引用解析器或完整规范已验收。
+
+按剩余链接的完整分母分组时，名称形态/频次仅用于排序，不能当作根因或语义结论。
+生成 validity 的 API 引用应核对应独立 Reference 页，规范章节引用另核定义目标；
+不要统一重定向到全文。保留原本可用的本地锚，以及隐式 VU 和扩展条件的全部正文。
+多个构建扩展叠加时先做真实集成探针，避免辅助方法覆盖造成旧路径回归，再以
+完整重建及逐条链接差异验收；未审来源、未支持配置和剩余缺陷继续列明。

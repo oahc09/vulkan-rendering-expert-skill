@@ -115,7 +115,7 @@ VkImage
 1. Render pass 的 `initialLayout` 与实际 image layout 不一致。[TOOL]
 2. Present 前未 transition swapchain image 到 `PRESENT_SRC_KHR`。[TOOL]
 3. Depth attachment 在被 shader sample 时仍保持 `DEPTH_STENCIL_ATTACHMENT_OPTIMAL`。[TOOL]
-4. Image barrier 的 `oldLayout` 填 `UNDEFINED` 导致内容丢失。[TOOL]
+4. 真实 transition 中误用 UNDEFINED 丢弃仍需保留的内容；布局忽略分支中的 UNDEFINED 不表示 discard。[TOOL]
 5. Storage image 未使用 `GENERAL` layout。[TOOL]
 6. 对同一 image 的 subresource range 出现重叠但冲突的 layout 要求。[TOOL]
 
@@ -175,7 +175,7 @@ VkImage
 ### 资源访问同步
 
 - Layout transition 通常与 stage/access mask 一起出现在 image memory barrier 中。[SPEC]
-- `oldLayout` 到 `newLayout` 的 transition 隐含 memory dependency，但 src/dst stage/access 仍需正确填写。[SPEC]
+- 真实 layout transition 是 memory dependency 内的操作，不是充分同步证明；须保证先前写 availability、transition、后续 visibility 的顺序。UNDEFINED discard 不豁免旧访问的执行 hazard。[SPEC]
 
 ---
 
@@ -240,3 +240,6 @@ Buffer 资源不经过 image layout 机制。
 3. 同一 image 不同 subresource range 同时处于不同 layout 的合法性。
 4. Swapchain image 在 acquire/present 时的隐式 layout 假设。
 5. 驱动对 `GENERAL` layout 与专用 layout 的性能差异。
+
+布局值忽略、实际 subresource 状态保持及 discard 不免同步的固定正文边界，见
+[image barrier 合同](../08_synchronization/image_memory_barrier.md#delivery19-image-layout-ignored-discard)。

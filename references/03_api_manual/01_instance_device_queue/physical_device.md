@@ -10,13 +10,13 @@
 | 常用 API | `vkEnumeratePhysicalDevices` / `vkGetPhysicalDeviceFeatures` / `vkGetPhysicalDeviceProperties` / `vkGetPhysicalDeviceMemoryProperties` / `vkEnumerateDeviceExtensionProperties` / `vkGetPhysicalDeviceQueueFamilyProperties` |
 | 适用平台 | 通用 |
 | 来源等级 | `[SPEC] [TOOL] [ENGINE] [ANDROID]` |
-| 适用 Vulkan 版本 | Vulkan 1.0 核心；feature 查询在 1.1+ 通过 `VkPhysicalDeviceVulkan11Features` 等结构体链 |
+| 适用 Vulkan 版本 | Vulkan 1.0 核心；1.1+ 可通过 `vkGetPhysicalDeviceFeatures2` 与其合法 feature 结构体链查询（聚合版本结构体另遵守各自适用版本） |
 
 ---
 
 ## 1. 一句话定位
 
-`VkPhysicalDevice` 是对系统实际 GPU 的不可变句柄，承担"能力查询"职责：在创建 `VkDevice` 前，必须通过它查询 features、properties、memory types、queue families、extensions，确定目标硬件能否支持项目所需的渲染/计算路径。[SPEC]
+`VkPhysicalDevice` 是 Vulkan 实现暴露的物理设备句柄，可以对应 GPU，也可以对应 CPU 软件实现，承担"能力查询"职责：在创建 `VkDevice` 前，必须通过它查询 features、properties、memory types、queue families、extensions，确定目标硬件能否支持项目所需的渲染/计算路径。[SPEC]
 
 ---
 
@@ -357,3 +357,53 @@ vkCreateInstance
 **验证**：以两个入口分别使用不同 Workgroup 数组的模块，比较 SPIR-V 1.3 与 1.4 interface 计数；保留编译器、目标环境、validator 版本及实际设备 limits。文本审查不代表 shader 编译或设备运行已经通过。
 
 固定依据：[Vulkan 1.4.368 shaders.adoc#workgroup-padding](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/shaders.adoc#workgroup-padding)；[limits.adoc#limits-maxComputeSharedMemorySize](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/limits.adoc#limits-maxComputeSharedMemorySize)。
+
+<a id="delivery19-capability-admitted-scene"></a>
+## v1.0.19：能力协商驱动的真实场景交付
+
+配对 tests 入口 `checks19/run_indirect_scene.py` 将实际能力采集、准入解释与
+已有 compute→indirect→graphics 场景连接，而不是再运行一个只有枚举结果的
+示例。`tools/device_selection19.py` 的决策只对声明的受限需求集成立；能力
+信息不是执行结果，也不是已启用 feature 的证据。
+
+### 查询、请求、启用、使用四层事实
+
+- loader 能提供的 instance API 版本与 physical device 的 API 版本分别查询；
+  请求版本不可仅从头文件或编译器版本猜测。本路径需要合法 core 1.3，不能
+  用“扩展名字看起来相似”补足缺少的 feature/入口。
+- 设备查询包括实际 API/vendor/device/driver 标识、queue family/flags、
+  dynamicRendering 支持、计算与间接绘制/viewport/framebuffer 限制、
+  RGBA8 格式和 usage/sample 组合，以及 host-visible coherent 内存条件。
+  仅存在某种内存类型不证明具体资源能使用它，资源 memoryTypeBits 与分配
+  仍由后续真实场景检查。
+- 查询支持不等于 device 已启用。本场景要求 dynamicRendering 被显式启用，
+  使用一次普通 indirect draw，不依赖启用 multiDrawIndirect 或非零
+  firstInstance。不能把支持能力表直接复制成 enabled 表。
+- 设备不应靠跨进程 VkPhysicalDevice handle 数值相等关联。本实现有意限制
+  为恰好一个 CPU software physical device，并按原始身份与选定队列等字段
+  核对 probe 和 scene。多设备情况直接超出范围，不静默取第一个或切到其他
+  设备，也不宣称这是通用多 GPU UUID 选择器。
+
+### 可执行交付合同
+
+1. 固定工具配置结构、probe 与 scene 入口，核验精确两仓提交、计划和源文件
+   清单。配置只提供批准的路径/数据，不得变成任意命令执行模板。
+2. 在实际查询之后解释每项前提。缺证据 UNKNOWN；明确不满足需求则拒绝。
+   准入仅允许启动场景，不能在 scene 尚未运行时写为通过。
+3. 重用已有间接绘制场景的原始四模式：正常参数/像素，offset 诊断安全弃置，
+   省略 dispatch 的因果失败，以及错误参考失败。独立复算配置、真实参数与
+   逐像素参考，并核对原始日志、退出码和 hash，不能只消费一个 PASS 字符串。
+4. 场景结束重新核验身份与输入源绑定；篡改能力记录、执行记录或配对会失败。
+   留下原始工具输出与可追溯摘要，避免把独立运行拼成一条时间上的因果链。
+5. 超时/取消/子进程失败是非成功结果，保留已取得证据；仅清理本次创建的
+   进程组。恢复使用新输出目录，不把旧 summary 当这次重跑的结果。
+
+人为修改 requirement、记录或身份字段的拒绝测试属于交付工具负控，不代表
+某真实设备缺少原本支持的能力。真实 CPU ICD 成功也不代表物理/移动 GPU、
+KHR 降级、device group、Profiles、通用内存或全部 feature 组合通过。
+本合同扩大实际工具使用闭环，不解除原计划的外部实战、盲测或发布门槛。
+
+来源：[Khronos Vulkan-Docs Devices and Queues v1.4.309](https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.309/chapters/devsandqueues.adoc)，
+Git blob `adbcc314fbce0cf2340cc8dff480ef9da71fb7df`，CC-BY-4.0，本节为释义。
+流程约束和单设备 CPU 限定是本交付工具的保守工程策略，不是 Vulkan 规范
+要求所有应用只能使用该配置。规范 cohort 与其他 1.4.368 inventory 分开。

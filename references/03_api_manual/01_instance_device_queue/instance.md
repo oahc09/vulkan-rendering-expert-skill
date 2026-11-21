@@ -264,3 +264,73 @@ VkApplicationInfo（app name / engine name / apiVersion）
 **失败与回退**：分配失败返回NULL并检查Vulkan返回码，按成功对象集合回收；不得返回未对齐或不足size的假成功指针。allocation callbacks 不得调用任何 Vulkan 命令；也不以人为GPU故障作为allocator诊断步骤。无法保证兼容销毁/并发安全时从对象创建起使用NULL默认allocator；不能中途对已有对象换为不兼容allocator。
 
 **验证**：Host 单测覆盖 alignment、分配失败、并发统计、跨兼容实例释放与userdata寿命；真实Vulkan创建/销毁需另跑，Host单测不是driver证明。[SPEC: memory host allocation](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/memory.adoc) 的 `memory-host`、`VkAllocationCallbacks`、`PFN_vkAllocationFunction` 与兼容allocator规则。
+
+## delivery19-sc-migration: bounded SC startup and lifecycle contract
+
+Vulkan SC is a separate API variant, not a flag that makes a standard Vulkan
+application safety-certified. The frozen registry SC1.0 core delta adds and
+removes functionality relative to its stated Vulkan1.2 dependency. Retained
+handle types or similarly named structs do not prove a removed command exists.
+The companion sc19_audit tool reads the pinned registry's exact require/remove
+records and can inspect undefined symbols in a real binary. It flags this
+repository's transfer binary references to vkFreeMemory and vkDestroyCommandPool
+for redesign. No hit remains UNVERIFIED: dispatch pointers and extension-specific
+exceptions need separate inspection. This is not full inherited API resolution.
+
+### Bounded L1: reservation, offline pipelines and fault evidence
+At SC device creation, provide declared object upper bounds through
+VkDeviceObjectReservationCreateInfo and appropriate resource planning. Track the
+actual properties, reservation counts, pool classes and allocation phases of the
+chosen implementation. Standard Vulkan dynamic create/free loops are not a
+migration design. Do not merely remove cleanup calls and call the result safe.
+
+For offline pipelines, bind the intended pipeline identifier, match mode and
+reserved pool-entry size. A missing identifier match and exhausted/undersized
+pool are distinct failures: neither justifies runtime compilation fallback.
+For a given poolEntrySize, sum its reserved counts. If recyclePipelineMemory is
+true, check current occupancy plus one; if false, use cumulative pipelines ever
+created plus one, even after destruction. Unknown property means UNKNOWN, not
+permission to assume recycling. sc19_contract implements only these count/size
+preflights; cache/device compatibility and remaining creation requirements are
+outside its acceptance. Device/driver changes invalidate unverified offline
+cache assumptions and require the target's compatibility checks.
+
+Fault retrieval must retain result code, returned count and pUnrecordedFaults.
+VK_INCOMPLETE or unrecorded faults means incomplete evidence, not fault-free
+execution. Respect maxQueryFaultCount; preserve query behavior because successful
+retrieval can change the stored fault records. Pre-sized storage can avoid a
+count-fetch race, but absence of returned faults is not certification.
+
+### Bounded L2: migration workflow and rejection paths
+1. Freeze variant, registry/hash, headers, target properties and offline toolchain.
+2. Audit concrete command uses plus dynamic entry-point resolution; retain exact
+   source locations for removed symbols. Stop unresolved calls before SC build.
+3. Redesign object budgets and lifetime ownership; account separately for reusable
+   and cumulative pools. Do not hide an insufficient budget with unbounded growth.
+4. Generate target-compatible offline pipeline artifacts with identifiers and
+   manifests. Test no-match, wrong pool size, capacity boundary, and nonrecycling
+   cumulative exhaustion using the companion CPU preflight negative controls.
+5. Define bounded fault capture and application safe-state policy with the
+   system's safety process; no autonomous reset/retry inferred from a fault code.
+6. Compile/run on the actual SC implementation and its required tooling before
+   marking execution verified. Standard lavapipe/VVL results cannot substitute.
+
+Current state: core-delta extraction and bounded host rules tested; SC runtime,
+full L1/L2 domain review, extension overrides and certification remain UNVERIFIED.
+These are migration guidance and CPU preflights, not an SC resource allocator.
+
+Sources checked 2026-11-15:
+[reservation](https://registry.khronos.org/VulkanSC/specs/1.0-extensions/man/html/VkDeviceObjectReservationCreateInfo.html),
+[offline pool matching and VUID05028–05030](https://registry.khronos.org/VulkanSC/specs/1.0-extensions/man/html/VkPipelineOfflineCreateInfo.html),
+[fault retrieval](https://registry.khronos.org/VulkanSC/specs/1.0-extensions/man/html/vkGetFaultData.html).
+Normative source content is not vendored here; summaries and scoped rules are
+original. Latest online pages and the frozen standard registry are distinct
+sources, not silently relabeled as one SC release snapshot.
+
+### v1.0.19 实际 loader 准入与场景交付
+
+[能力协商场景合同](physical_device.md#delivery19-capability-admitted-scene)
+将 loader/设备查询与真实间接绘制连通。头文件版本、loader 可用版本、请求
+instance 版本和设备版本不是同一个事实；只有查询数据不足以证明 feature
+已启用或场景通过。入口固定 core1.3、单 CPU device 的保守范围，未知/多设备
+拒绝，缺工具或执行失败不降格成 PASS；不宣称通用 loader/ICD/平台组合验收。

@@ -84,7 +84,7 @@
 | `srcAccessMask` | Producer 对 memory 的写入类型；决定哪些写入需要 flush。[SPEC] | srcAccess 为空或遗漏 `MEMORY_WRITE_BIT`，导致写入对 consumer 不可见。[TOOL] |
 | `dstAccessMask` | Consumer 对 memory 的读取/写入类型；决定哪些读取需要 invalidate。[SPEC] | dstAccess 与 consumer 实际 access 不一致，导致缓存未失效。[TOOL] |
 | `dependencyFlags` | `VK_DEPENDENCY_BY_REGION_BIT` 允许 per-region 依赖，常用于 subpass/attachment 同步。[SPEC] | 在 buffer / 全局 barrier 中误用 `BY_REGION_BIT`，该 bit 对 non-attachment 资源无效。[TOOL] |
-| `bufferMemoryBarrierCount` / `pBufferMemoryBarriers` | 针对特定 buffer range 的同步；包含 `srcQueueFamilyIndex` / `dstQueueFamilyIndex` 用于 queue family ownership transfer。[SPEC] | `size` 设为 `VK_WHOLE_SIZE` 时未注意 offset 对齐；或 queue family index 填写错误。[TOOL] |
+| `bufferMemoryBarrierCount` / `pBufferMemoryBarriers` | 针对特定 buffer range 的同步；包含 `srcQueueFamilyIndex` / `dstQueueFamilyIndex` 用于 queue family ownership transfer。[SPEC] | offset/size 越界或 queue family index 填写错误；VK_WHOLE_SIZE 不引入通用 offset 对齐要求。[TOOL] |
 | `memoryBarrierCount` / `pMemoryBarriers` | 全局 memory barrier，作用于所有受 src/dst access mask 影响的资源。[SPEC] | 滥用全局 barrier 导致不必要的缓存刷新，移动端性能下降。[ENGINE] |
 
 ---
@@ -304,3 +304,8 @@ buffer 无 image layout；结果图和 history 要另填 old/new layout、subres
 **验证**：测RAW/WAR/WAW、同queue跨CB、跨queue同family、不同family、TOP/BOTTOM正反作用域及64位高bit保留；使用validation查组合，实际内容校验补充其盲区。
 
 固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[synchronization#synchronization-pipeline-stages](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-pipeline-stages)；[synchronization#synchronization-dependencies-access-scopes](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-dependencies-access-scopes)；[synchronization#synchronization-pipeline-barriers](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-pipeline-barriers)。[SPEC]
+
+范围与 host/family 的精确来源边界见
+[buffer barrier 来源合同](buffer_memory_barrier.md#delivery19-buffer-barrier-source-boundaries)：
+309 的 01187–01189 是范围规则，368 固定正文描述 host submission 和 ownership；
+不把 flush/invalidate 的 atom 对齐误套到普通 buffer barrier。

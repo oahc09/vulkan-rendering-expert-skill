@@ -82,7 +82,7 @@ VkImage / VkBuffer
 → 根据 memoryTypeBits 和需求选择 memoryTypeIndex:
     需要 CPU 写入: HOST_VISIBLE
     需要 CPU 无需 flush: HOST_COHERENT
-    需要 GPU 最优: DEVICE_LOCAL
+    需要设备本地属性: DEVICE_LOCAL（不是性能最优保证）
     需要 CPU 读取: HOST_VISIBLE (可能还需 HOST_CACHED)
 → vkAllocateMemory(..., &allocInfo, ..., &memory)
 → vkBind*Memory(resource, memory, offset)
@@ -99,10 +99,10 @@ VkImage / VkBuffer
 
 | 字段 | 专家关注点 | 常见错误 |
 |---|---|---|
-| `size` | 必须满足 resource 的 memory requirements size，且按 alignment 对齐。[SPEC] | 分配 size 小于 requirement。[TOOL] |
+| `size` | 绑定范围须容纳 requirements.size；绑定 offset 按 requirements.alignment 对齐，不据此要求 allocationSize 为该 alignment 的整数倍。[SPEC] | allocationSize − offset 小于 requirements.size。[TOOL] |
 | `alignment` | 绑定 offset 必须是 alignment 的倍数。[SPEC] | offset 未对齐导致 validation error 或崩溃。[TOOL] |
 | `memoryTypeBits` | 32 位掩码，表示该资源可使用的 memory type index。[SPEC] | 选择不在掩码中的 memory type。[TOOL] |
-| `propertyFlags` | `DEVICE_LOCAL` / `HOST_VISIBLE` / `HOST_COHERENT` / `HOST_CACHED` / `LAZILY_ALLOCATED`。[SPEC] | 需要 CPU map 但选非 HOST_VISIBLE；需要 GPU 性能但选非 DEVICE_LOCAL。[TOOL] |
+| `propertyFlags` | `DEVICE_LOCAL` / `HOST_VISIBLE` / `HOST_COHERENT` / `HOST_CACHED` / `LAZILY_ALLOCATED`。[SPEC] | 需要 CPU map 但选非 HOST_VISIBLE；仅按 DEVICE_LOCAL 标签断言性能最优，未实测访问路径。[TOOL] |
 | `allocationSize` | 可分配多个资源到同一块 memory 的不同 offset，普通子分配须满足alignment与范围隔离；显式alias需遵循单独的alias合同。[SPEC] | sub-allocation 未对齐或重叠。[SPEC] |
 
 ---
@@ -136,7 +136,7 @@ VkImage / VkBuffer
 3. 非 coherent memory 写入后未 flush，GPU 读到旧数据。[TOOL]
 4. 绑定 offset 未按 alignment 对齐。[TOOL]
 5. 同一块 memory sub-allocate 时发生重叠。[SPEC]
-6. 销毁 memory 前未销毁绑定的 image / buffer。[SPEC]
+6. memory 仍被设备使用就 free，或 free 后继续使用仍绑定的 image / buffer。[SPEC]
 7. 分配大量小 memory 对象导致分配失败或开销高。[ENGINE]
 8. 未处理 `VK_ERROR_OUT_OF_DEVICE_MEMORY`。[TOOL]
 
@@ -177,12 +177,12 @@ VkImage / VkBuffer
 
 ### 销毁时机
 
-- 所有绑定 resource 销毁后。
-- 必须等 GPU 完成访问。[SPEC]
+- 工程上可选择先销毁所有绑定 resource 再 free，便于管理；这是保守策略，不是规范强制顺序。[ENGINE]
+- free 前必须确认全部设备访问已结束；允许 memory 仍绑定资源，但这些资源之后不得再使用。[SPEC]
 
 ### in-flight 风险
 
-- Memory 被 command buffer 引用后，fence signal 前不能 free。[SPEC]
+- Memory 的所有已提交引用必须完成；覆盖这些使用的 fence/timeline/idle 可提供完成证明，不要求某个特定 fence 必须 signal。[SPEC]
 - 即使 resource 已销毁，若 memory 仍被 pending command buffer 引用，free 也会出问题。[SPEC]
 
 ---
@@ -204,7 +204,7 @@ VkImage / VkBuffer
 
 ## 11. Android 注意点
 
-- Android 设备通常有 device-local 和 host-visible 两个主要 heap。[ANDROID]
+- Android 的 heap/type 拓扑必须查询；多个 memory types 可指向同一 heap，HOST_VISIBLE 与 DEVICE_LOCAL 可同时出现，不能假设固定两个 heap。[ANDROID]
 - 移动端 OOM 风险高，应使用 `VK_EXT_memory_budget` 监控 heap 使用。[ANDROID]
 - 大纹理上传应使用 staging buffer（host-visible）→ device-local image。[ENGINE]
 
@@ -219,8 +219,8 @@ VkImage / VkBuffer
 
 ### GPU 侧
 
-- Device-local memory 通常 GPU 访问最快。[ENGINE]
-- Host-visible memory 可能通过 PCIe / 统一内存访问，带宽较低。[HEUR]
+- DEVICE_LOCAL 表示设备本地属性，不是该负载的最快访问保证；结合实际 heap/type 和测量选型。[ENGINE]
+- HOST_VISIBLE 可对应离散系统的互连路径，也可同时 DEVICE_LOCAL；带宽和访问成本必须按实际拓扑测量。[HEUR]
 
 ### 移动端
 
@@ -332,3 +332,99 @@ VkImage / VkBuffer
 **验证**：测试allocation末尾非整atom、map末尾非整atom、负向/溢出范围、WHOLE_SIZE与局部mapping、邻接两个owner、alias失效后重新初始化；记录精确offset/size，不只记录buffer局部偏移。
 
 固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[memory#memory-device-hostaccess](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/memory.adoc#memory-device-hostaccess)；[memory#memory-device-unmap-does-not-flush](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/memory.adoc#memory-device-unmap-does-not-flush)；[resources#resources-memory-aliasing-consistency](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/resources.adoc#resources-memory-aliasing-consistency)。[SPEC]
+
+## Delivery19 mapped-memory visibility contract (bounded L1/L2)
+
+**Capability first.** Query actual memory properties and intersect memory type
+indices with each resource's `memoryTypeBits`. A host-visible type without
+HOST_COHERENT is required to claim noncoherent visibility execution. Headers,
+CPU arithmetic, or coherent flush calls cannot establish that capability. If no
+compatible type exists, report `UNAVAILABLE_NOT_RUN` for that path; do not change
+memory flags in evidence or substitute a coherent success.
+
+**Ranges.** `VkMappedMemoryRange.offset` is allocation-relative, not buffer-local.
+Account for the binding/suballocation offset first. The allocation must be mapped.
+The offset must align to nonCoherentAtomSize (00687); explicit ranges must remain
+inside the mapping (00685). Explicit size must be atom-aligned unless the range
+ends at allocation end (01390). WHOLE_SIZE ends at the current mapping end, not
+unconditionally allocation end; its offset must be in that mapping (00686), and
+mapping end must be atom-aligned or equal allocation end (01389). Check arithmetic
+before narrowing to VkDeviceSize. Expanding a dirty span to atoms may require a
+larger mapping; never clamp to an arbitrary unaligned partial mapping boundary.
+A valid numerical range alone is not synchronization permission.
+
+**Upload.** Serialize relevant host accesses and retire conflicting device uses.
+Flush noncoherent writes before the consuming submission's dependency chain.
+Unmap is not a replacement for flush. Atom expansion affects neighboring bytes
+for synchronization purposes, so sharing one atom between unrelated live
+suballocations requires ownership coordination, not merely byte-disjoint writes.
+Coherence removes the explicit cache-maintenance requirement, not execution
+ordering or lifetime obligations.
+
+**Readback.** Establish the device-write to host-read memory dependency, wait for
+the associated completion, then invalidate noncoherent ranges before host reads.
+Invalidation is not a device wait. Do not invalidate over unflushed host writes;
+keep upload and readback ownership explicit. Mapping alone is not invalidation.
+Fence evidence must cover the actual uses and object generations, not another
+queue or a reused handle. Device loss or failed flush/invalidate/wait fails the
+path; do not consume a stale readback as success.
+
+Paired `tools/mapped_memory19.py` returns bounded numerical/ownership obligations,
+not proof of GPU state. `cases19/mapped_memory` records queried capabilities and
+actual tested branches separately. External/sparse memory, device groups,
+concurrent atom sharing, mobile hardware, full SC and external-engine acceptance
+remain outside this slice.
+
+Sources: [mapped-range VUIDs](https://docs.vulkan.org/refpages/latest/refpages/source/VkMappedMemoryRange.html),
+[flush semantics](https://docs.vulkan.org/refpages/latest/refpages/source/vkFlushMappedMemoryRanges.html),
+[invalidate dependency chain](https://docs.vulkan.org/refpages/latest/refpages/source/vkInvalidateMappedMemoryRanges.html).
+These live normative pages are distinct from the frozen registry snapshot and
+from the actual Validation layer version recorded by the probe.
+
+
+<a id="delivery19-ordinary-memory-binding"></a>
+
+### delivery19-ordinary-memory-binding
+
+普通 non-sparse、非 external/protected/disjoint/tile-memory 绑定先核资源自身查询到的
+requirements：memoryTypeIndex 对应位必须位于 memoryTypeBits，memoryOffset 小于
+allocationSize 且为 alignment 的整数倍，requirements.size <= allocationSize − memoryOffset。
+不能用 buffer 创建 size 或 texture 像素字节估计代替 requirements.size，
+不能从 offset alignment 推导 allocationSize 必须同样对齐。
+非 sparse 资源一旦绑定过 memory 不可用再次 bind 来重定位，free 原 memory 也不恢复可绑定资格。
+
+requiresDedicatedAllocation 为真时必须使用该资源专属分配；仅 prefersDedicatedAllocation
+不等同强制要求。普通 dedicated 绑定还须核对分配记录中的目标对象一致、memoryOffset=0。
+dedicated image alias 等扩展例外另行证明，不能从此普通合同默认放行。
+专属 allocationSize 还须按版本单独核验：普通 dedicated 的02964/02965在固定368
+要求 >= requirements.size，而独立309同编号要求等于 requirements.size；
+不能把368允许的额外字节分配直接下推到309合同。
+
+普通非 alias 子分配不能仅检查字节范围不重叠：同 allocation 中同时使用的相邻
+linear/non-linear 资源还须检查 bufferImageGranularity 页隔离。此值不是
+nonCoherentAtomSize，也不是每个 allocationSize 的通用对齐单位；同类资源或
+不同时使用的受控 alias 路径条件不同，需分别证明。
+
+free 前所有已提交、经 buffer/image 引用 memory 的命令必须完成（00677）。
+规范允许 memory 仍绑定资源时 free，但之后不得继续使用那些资源；实现可延迟实际
+payload 释放到全部绑定对象销毁。先销毁对象再 free 是可选保守工程策略，不是唯一合法顺序。
+这也不批准销毁正在使用的资源、保留失效 mapped pointer 或伪造完成证明。
+
+固定 Vulkan-Docs1.4.368 commit `fa30d4e312e843193601be7cb926c7e25d9ec885`：
+`chapters/resources.adoc` SHA256 `de7c50943e022c508b369a605ce05b20cc7376274d1e4ecb1d67234698732a7a`，
+Resource Memory Association / bufferImageGranularity 原文及 commonvalidity/bind_buffer_common.adoc、
+bind_image_common.adoc；`chapters/memory.adoc` SHA256
+`a7f291992b45e3c783afd7f379361a1b20471c0d0675267b841e24395c3c593d` 的 vkFreeMemory。
+另独立1.4.309 validusage SHA256
+`f61afea8ca6097342cae1b65bfab81675ee7fdc2d809403e083329b7d56597a7` 中
+vkBindBufferMemory 的07459/01031/01035/01036/01037/01444/01508及
+vkFreeMemory-memory-00677；368 alignment/bounds 条款已随 tile-memory 分支改号，
+两版本不能混用编号或推断全部条款等价。此处不是实际分配成功、内存驻留或整族验收证明。
+
+## delivery19-upload-choice：实际 direct / staging 路径比较
+
+配对测试在同一设备/driver、同一固定 input/SPIR-V/compute/output 下执行 direct→staging→direct。direct 使用满足 input buffer requirements 的 HOST_VISIBLE|HOST_COHERENT storage memory；staging 先写 coherent TRANSFER_SRC，再 copy 到满足 DEVICE_LOCAL 属性的 STORAGE_BUFFER|TRANSFER_DST input，明确 TRANSFER_WRITE→COMPUTE_SHADER/SHADER_READ 依赖。两路输出都需 device→HOST_READ 依赖和覆盖写入的完成等待。coherent 只免 flush/invalidate，不免退休或冲突同步。
+
+这两个选择可能落在同一个同时具备上述 flags 的 memory type；实际 CPU 统一内存结果不能冒充独显 staging 带宽收益。比较记录 logical bytes、各 VkMemoryRequirements.size、选中 type/heap/flags/typeBits 和同时存活的请求分配总量。该总量不等于 residency、driver峰值显存或性能。只在所有输出完整通过且事实可比时，用明确的请求字节预算选择最小足用路径；未测帧时间/热功耗/目标硬件收益保持未知。
+
+负控可在独立参考输出层检验不匹配，不能为了构造错误而向 GPU 提交已知缺失依赖。当前 coherent CPU 路径不替代非coherent、sparse、external 或多queue ownership 验收。固定368 memory/resources/synchronization 原始正文与工具输入由配对报告给出，不扩张旧历史证据范围。
