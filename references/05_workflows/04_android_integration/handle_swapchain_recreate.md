@@ -141,7 +141,7 @@ recreate 前必须确保旧资源不再被 GPU 使用：
 13. 重新录制 command buffer。
 14. 恢复 frame loop。
 
-新 swapchain 按实际 imageCount 创建 render-finished semaphore 数组；旧数组保留至旧 presentation 使用结束。acquire 的 SUBOPTIMAL 已取得 image，应处理本帧的 acquire 信号；OUT_OF_DATE 不继续 submit、不 reset 未提交 frame 的 fence。依据：[Swapchain Recreate API 卡片](../../03_api_manual/02_surface_swapchain/swapchain_recreate.md)。
+新 swapchain 按实际 imageCount 创建 render-finished semaphore 数组；旧数组保留至旧 presentation 使用结束。acquire 的 SUBOPTIMAL 已取得 image，应处理本帧的 acquire 信号；acquire 的 OUT_OF_DATE 未取得 image，不继续 submit、不 reset 未提交 frame 的 fence。若错误来自已调用的 present，旧代 wait 可能仍待执行，不按 acquire 的无信号路径回池。依据：[Swapchain Recreate API 卡片](../../03_api_manual/02_surface_swapchain/swapchain_recreate.md#v20-acquire-generation-contract)。
 
 ---
 
