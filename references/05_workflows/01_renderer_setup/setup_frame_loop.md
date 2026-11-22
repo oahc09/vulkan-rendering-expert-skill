@@ -141,6 +141,7 @@ Frame loop 本身不直接设计 pipeline / descriptor。
 | acquire 成功后录制失败或主动跳过 | 不 reset frame fence；不能直接复用仍有待消费信号的 acquire semaphore 或遗弃 acquired image。进入显式恢复：按规范完成信号消费与 image 处理；不具备恢复协议时停止普通帧循环 |
 | reset fence 失败 | 不提交；检查错误并进入恢复，不能假设 fence 状态已更新 |
 | submit 失败 | 不 present，不回到普通等待已 reset fence 的路径；单独处理 device lost / 恢复并重建受影响状态，不能假设 fence 将来会 signal |
+| present 返回 OUT_OF_DATE / SURFACE_LOST（呈现引擎拒绝） | 旧代的 present wait 仍会执行；停止旧代正常提交并按对应路径重建。根据 [WSI 失败分支](../../03_api_manual/02_surface_swapchain/swapchain_recreate.md#v20-acquire-generation-contract) 单独跟踪旧 present wait 的退休，不按 acquire 无信号分支处理 |
 
 帧循环摘要、API 卡片和独立段落读取均以本节为准；不是可以忽略调用返回值的可直接复制代码。
 非 pending 的 unsignaled fence 也允许 reset；这里把 reset 延迟到 submit 前，是避免失败路径死锁的工程策略，
