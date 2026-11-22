@@ -4,9 +4,9 @@ description: Vulkan 渲染工程专家技能。用于 Vulkan API 设计、实现
 license: MIT
 metadata:
   author: Vulkan 渲染专家技能贡献者
-  version: 1.0.19
+  version: 1.0.20
   release-status: candidate-blocked
-  last-updated: '2026-11-15'
+  last-updated: '2026-11-22'
   keywords: vulkan, rendering, android, graphics-engine, debugging, performance, synchronization, descriptor, pipeline, swapchain
 ---
 

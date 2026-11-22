@@ -278,6 +278,8 @@ vkAllocateCommandBuffers
 
 **失败/回退**：不能用资源最后一次 shader-read 完成点证明整个 command buffer 已不 pending，后面仍可能有命令；选完整完成作用域。barrier 不会恢复已经销毁的对象，也不会使 invalid CB executable。依赖图不明时回退保守全部相关 queue idle 后重录，不继续提交旧录制。
 
+**普通 descriptor 更新与代际**：即使最后一次执行已经完成，受影响的 executable/recording 命令仍可能因普通 binding 更新成为 invalid；先检查 [目标 set、实际更新 binding 和命令状态](../05_descriptor/descriptor_update.md#v20-descriptor-command-validity)，再按主从引用图重建。不要用旧 fence signal 授权旧录制复用或用新 generation 的完成事实覆盖旧工作。
+
 **验证**：追踪 CB generation、parent links、每次 submit 的 completion token，测试同一 secondary 被两个 primary使用、只完成其中一项、reset传播及重录；host-only状态检查与实际GPU执行证据分开记录。
 
 固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[cmdbuffers#commandbuffers-lifecycle](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/cmdbuffers.adoc#commandbuffers-lifecycle)；[cmdbuffers#commandbuffers-secondary](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/cmdbuffers.adoc#commandbuffers-secondary)。[SPEC]

@@ -315,3 +315,18 @@ anchors `synchronization-image-layout-transitions`、
 `VUID-VkImageMemoryBarrier-oldLayout-01197`：其 oldLayout 要求带有
 ownership transfer 或真实 layout transition 的条件，不是无条件匹配断言。
 两版本来源分别绑定，不推断其全部条款完全相同或整族验收完成。
+
+### Vulkan 1.4.369：只读布局按使用范围判断
+
+先确定该命令是否忽略 layout，再检查不被忽略的 `oldLayout` 或 `newLayout` 是否为 `VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL`。相等 queue-family 索引与相等 layout 时，`VkImageMemoryBarrier2` 忽略 layout；旧 `VkImageMemoryBarrier` 还要求已启用 `synchronization2`。不能把这个例外机械套到 host image layout transition。这里仅讨论 usage 条件，合法 aspect、实际旧 layout 和同步责任仍需独立检查。[SPEC]
+
+| 范围 | 1.4.369 的 usage 判据 |
+|---|---|
+| 非仅 stencil，或没有独立 stencil usage | 普通 image usage 至少有 `SAMPLED` 或 `INPUT_ATTACHMENT`（01211） |
+| 包含 stencil 且创建时提供独立 stencil usage | stencil usage 自身至少有 `SAMPLED` 或 `INPUT_ATTACHMENT`（12565） |
+| 同时含 depth/stencil 且独立 stencil usage 生效 | 上述两条分别成立；一个掩码的 flag 不能替另一条 |
+| 仅 stencil 且独立 stencil usage 生效 | 该布局检查使用 stencil usage；普通 usage 不因 01211 另行要求采样 |
+
+例如，真实过渡中普通 usage 可采样但独立 stencil usage 不可采样且不是 input attachment，depth-only 不因该 stencil 条件被拒；把 stencil 纳入就触发 12565。旧 VVL 可能给出未分配诊断名；应核对条件与完整对象/范围，不仅搜索编号。[SPEC][TOOL]
+
+固定来源：[共用 VU](https://github.com/KhronosGroup/Vulkan-Docs/blob/33d3353757d83d6aca683120114fe74cc4eaf8fb/chapters/commonvalidity/image_layout_transition_common.adoc#L155-L181)；[VVL 变更](https://github.com/KhronosGroup/Vulkan-ValidationLayers/commit/b6fed572c965e19868d71b3d67026d5ae225ee19)。

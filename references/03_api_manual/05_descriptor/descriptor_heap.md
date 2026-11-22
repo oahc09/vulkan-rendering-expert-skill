@@ -108,3 +108,11 @@ host writer 不自动提供 GPU 依赖。non-coherent host memory 需 flush；GP
 - [写入资源描述符](https://docs.vulkan.org/refpages/latest/refpages/source/vkWriteResourceDescriptorsEXT.html)
 
 latest 页面非冻结版本。实现前保存 registry/header/spec revision，核验每个实际使用组合的 valid usage；本文不证明任何特定驱动、工具或 shader 编译器已经支持。
+
+### Vulkan 1.4.369：零长保留范围与 shader 独立门禁
+
+`vkCmdBindSamplerHeapEXT` 和 `vkCmdBindResourceHeapEXT` 都要求：若 `reservedRangeSize == 0`，则 `reservedRangeOffset == 0`（12557 / 12558）。对照：若其他规则均满足，则零长+零偏移通过这一条；零长+非零偏移失败；非零长度不受这一条限制，但仍需验证范围、对齐和最小保留空间。不要用旧 VVL 对同条件发出的 `UNASSIGNED` 诊断推断旧工具未检查。[SPEC][TOOL]
+
+接口 admission 和 shader admission 分开：查询并实际启用扩展与 feature、核对 Registry 依赖和属性，然后按目标环境校验 SPIR-V 的 `DescriptorHeapEXT` 约束。例：声明该 capability 后，结构中的 opaque 成员也不能是非 descriptor opaque 类型（11482）；未声明则按 04667 查通用约束。工具不支持或路径不可用时保留普通 descriptor binding 路径，不因头文件能编译而宣称驱动可用。[SPEC][ENGINE]
+
+固定来源：[heap bind](https://github.com/KhronosGroup/Vulkan-Docs/blob/33d3353757d83d6aca683120114fe74cc4eaf8fb/chapters/descriptorheaps.adoc)；[SPIR-V](https://github.com/KhronosGroup/Vulkan-Docs/blob/33d3353757d83d6aca683120114fe74cc4eaf8fb/appendices/spirvenv.adoc)；[VVL 变更](https://github.com/KhronosGroup/Vulkan-ValidationLayers/commit/b6fed572c965e19868d71b3d67026d5ae225ee19)。

@@ -410,4 +410,9 @@ ENG13 新24题按 primary/contrast 成对输入评估，实际 path/anchor/hash/
 <a id="delivery19-topics"></a>
 ## v1.0.19 最终交付的按需子主题
 
-沿现有任务类型路由，只在命中时继续读取：架构取舍 → [决策](../02_core_mental_model/engine_architecture.md#delivery19-decision-contract)；项目取证 → [关联](../05_workflows/01_renderer_setup/project_diagnosis.md#delivery19-evidence-chain)；因果诊断 → [实验](../00_expert_entry/debug_priority.md#delivery19-causal-diagnosis)；修复 → [patch](../02_core_mental_model/regression_reasoning.md#delivery19-minimal-patch)；优化 → [A/B](../00_expert_entry/performance_priority.md#delivery19-joint-ab)；案例 → [生命周期](../06_cases/case_template.md#delivery19-experience-lifecycle)；完成声明 → [四封板](../00_expert_entry/verification_gate.md#delivery19-four-seals)。不把全部子主题加入默认启动。
+沿现有任务类型路由，只在命中时继续读取：架构取舍 → [决策](../02_core_mental_model/engine_architecture.md#delivery19-decision-contract)；项目取证 → [关联](../05_workflows/01_renderer_setup/project_diagnosis.md#delivery19-evidence-chain)；因果诊断 → [实验](../00_expert_entry/debug_priority.md#delivery19-causal-diagnosis)；修复 → [patch](../02_core_mental_model/regression_reasoning.md#delivery19-minimal-patch)；优化 → [A/B](../00_expert_entry/performance_priority.md#delivery19-joint-ab)；案例 → [生命周期](../06_cases/case_template.md#delivery19-experience-lifecycle)；完成声明 → [四封板](../00_expert_entry/verification_gate.md#delivery19-four-seals)。不把全部子主题加入默认启动。若命中 acquire、resize、descriptor 更新后重提旧命令，转 [生命周期交叉核对](#v20-lifetime-cross-contract)。
+
+<a id="v20-lifetime-cross-contract"></a>
+## v1.0.20 生命周期交叉核对
+
+仅在命中相关症状时读取，不增加启动必读项：acquire/resize 提前返回导致下一帧卡住 → [WSI 分支与代际](../03_api_manual/02_surface_swapchain/swapchain_recreate.md#v20-acquire-generation-contract)、[submit fence](../03_api_manual/08_synchronization/fence.md#fence-completion-contract)；更新普通 descriptor 后重用旧录制 → [更新失效](../03_api_manual/05_descriptor/descriptor_update.md#v20-descriptor-command-validity)、[主从命令退役](../03_api_manual/03_command_buffer/command_buffer_lifetime.md#command-retirement-contract)。平台现场、GPU 和模型结果不得从规则审查推断。

@@ -254,7 +254,7 @@ Command Buffer 录制完成
 
 **失败**：VK_TIMEOUT 不是 GPU 失败或完成，不回收、不 reset；submit 失败后先判定返回值与设备状态，禁止继续等待无关联工作的 unsignaled fence。device loss 时 vkWaitForFences 须有限时间返回 VK_SUCCESS 或 VK_ERROR_DEVICE_LOST，不能把无限 timeout 描述成规范保证永久死锁，也不保证立刻返回。设备丢失后结果数据不能视为正常有效。[SPEC]
 
-**回退/验证**：用 queue/device idle 作保守提交完成证明，或覆盖全部使用的 timeline；仍单独处理 presentation。测试首轮无提交、acquire失败、录制失败、submit失败、timeout、wait-any和多queue尾部工作；检查所有状态都不导致错误复用。
+**回退/验证**：用 queue/device idle 作保守提交完成证明，或覆盖全部使用的 timeline；仍单独处理 presentation。测试首轮无提交、[acquire失败](../02_surface_swapchain/swapchain_recreate.md#v20-acquire-generation-contract)、录制失败、submit失败、timeout、wait-any和多queue尾部工作；检查所有状态都不导致错误复用。
 
 固定依据：Vulkan 1.4.368，commit fa30d4e312e843193601be7cb926c7e25d9ec885；[synchronization#synchronization-fences-signaling](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-fences-signaling)；[synchronization#synchronization-fences-waiting](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-fences-waiting)；[synchronization#synchronization-fences-unsignaling](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/synchronization.adoc#synchronization-fences-unsignaling)。[SPEC]
 
