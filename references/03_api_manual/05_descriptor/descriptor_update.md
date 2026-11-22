@@ -309,3 +309,14 @@ copy 复制的是 descriptor 引用，不是资源内容，也不让旧资源退
 00349 列同 set 不重叠。368 将 stage 单列10776、bindingFlags列10777；
 不得把不同版本条款拆分或正文的完整 references 条件混同为309同一VUID文本。
 这只是受限知识合同，不证明 GPU 实际访问、资源寿命或整个 descriptor 族完成。
+
+<a id="v20-descriptor-command-validity"></a>
+## v1.0.20：普通 binding 更新不等于命令仍可提交
+
+[SPEC] 按目标 set（copy 也看 `dstSet`）和**实际更新的 binding**分类。若任何受更新 binding 未用 `UPDATE_AFTER_BIND` 或 `UPDATE_UNUSED_WHILE_PENDING` 创建，且该 set 被 recording/executable command buffer 的已录命令绑定、访问或修改，该命令缓冲区成为 invalid。更新可在不 pending 时发生；“允许更新”不等于“旧命令仍 executable”。pending 普通 binding 则受 03047 限制，不是先更新、事后重录就合法。高级 flag 的独立前提仍按本卡逐条检查。
+
+[ENGINE] 重建时以 set/binding、资源 generation 与已录 CB generation 建反向引用：先证明所有旧提交的实际用点完成，再更新普通 binding，并对受影响的录制走合法 reset/re-record；更新不会证明旧资源已退休。若 invalid secondary 被某个 primary 录制引用，还应回溯其 primary，不能只重录 secondary 后原样提交旧 primary。见 [primary/secondary 完成范围](../03_command_buffer/command_buffer_lifetime.md#command-retirement-contract)。
+
+**反例。** G0 descriptor 仍被 executable CB 绑定，即便 frame fence 已完成，改写为 G1 view 后原 CB 也不是可提交状态。相反，如果某 G0 GPU 工作仍 pending，不能先改写再用重录补救。正例分别审查所有完成点、普通 set 更新合法性、受影响录制重建，以及 G1 view 实际 layout 和 consumer 可见性。证据不足时使用独立新代 set + 重录，保留旧代直至可退休。
+
+[SPEC] 固定 1.4.368 [vkUpdateDescriptorSets](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/descriptorsets.adoc#vkUpdateDescriptorSets)；历史验证见上文原工具版本的证据边界。本段未新增设备、advanced flags 或多队列实测。

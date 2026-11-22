@@ -307,3 +307,22 @@ Surface 尺寸 / 方向变化 或 VK_ERROR_OUT_OF_DATE_KHR
 范围仍限定 headless、CPU ICD、单 queue、transfer clear/readback、显式 present-fence 退休与主动 extent 重建。没有验收真实 OUT_OF_DATE/SURFACE_LOST、全平台 WSI、protected、VRR/display timing、物理可见输出、SC、外部工程或盲测。
 
 固定来源：[wsi.adoc / v1.4.309](https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.309/chapters/VK_KHR_surface/wsi.adoc)，blob `0bd56db191d0522265e63f2a7ba12364a6966127`；[swapchain wsi.adoc / v1.4.309](https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.309/chapters/VK_KHR_swapchain/wsi.adoc)，blob `e4f2f9c5acc8bcd8e874cf6052afa12d179b59f4`；[present fence / v1.4.309](https://github.com/KhronosGroup/Vulkan-Docs/blob/v1.4.309/chapters/VK_EXT_swapchain_maintenance1/SwapchainPresentFenceInfo.adoc)，blob `3fcf8641e5253b5bc850a875a1a7bc9242ad3dce`，Khronos CC-BY-4.0（本段概述）；[Swapchain semaphore reuse guide](https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html) 是补充工程解释，不当作固定版本设备证据。完整 frozen validusage 摘录及实际范围见 tests 仓 `coverage/v1.0.19/headless-wsi.json`。
+
+<a id="v20-acquire-generation-contract"></a>
+## v1.0.20：Acquire、提交与旧代退休的分支
+
+**先分三条归属线。** 取得 image 的 acquire semaphore/fence、frame slot 的 render-submit fence、以及 present 等待/退休对象不互相替代。日志关联 surface/swapchain generation、image index、frame slot 和对应提交或 present；不同代即便 index 和 slot 又相同，归属仍不同。
+
+- `VK_SUCCESS` 或 `VK_SUBOPTIMAL_KHR`：取得当前代 image；按本次 acquire 的同步约束使用。即使决定不渲染，也要有已获取 image 与 acquire 同步的合法处置计划，不能把成功路径当作“未获取”直接回池。
+- `VK_NOT_READY`、`VK_TIMEOUT`、`VK_ERROR_OUT_OF_DATE_KHR` 等未成功取得 image：原 acquire semaphore/fence 状态不变；不读 image index、不提交等待本次未发生信号的工作。NOT_READY/TIMEOUT 按预算决定是否重试；OUT_OF_DATE 重查并重建当前输出，SURFACE_LOST 先恢复有效 surface。frame submit fence 保持原状态：不要在 acquire 前重置它，除非已实现每条无提交分支的安全退路。
+- 新代创建失败且传入了 `oldSwapchain`：旧链已退休，不能恢复其 acquire 循环。另建合法候选，不把句柄仍存在当作未退休。旧代各 GPU 使用完成与 WSI 呈现资源退休分别追踪；见上文 headless WSI 的历史范围，不把 CPU ICD 结论外推到窗口或移动设备。
+
+**反例与止损。** acquire 前 reset frame fence，再因 OUT_OF_DATE early-return，会让下一次 slot 等待一个没有关联提交的 fence。仅有渲染提交完成，仍不授权复用 present-wait semaphore。仅因新资源绑定成功，也不能把旧代已经录制的命令继续提交；检查 [descriptor 更新失效](../05_descriptor/descriptor_update.md#v20-descriptor-command-validity) 与 [命令退休](../03_command_buffer/command_buffer_lifetime.md#command-retirement-contract)。异常恢复不得靠主循环下一帧自愈。
+
+[SPEC] 固定 1.4.368： [WSI acquire、oldSwapchain 与 present](https://github.com/KhronosGroup/Vulkan-Docs/blob/fa30d4e312e843193601be7cb926c7e25d9ec885/chapters/VK_KHR_surface/wsi.adoc)。与 [fence 作用域](../08_synchronization/fence.md#fence-completion-contract) 对照。此处是规则及反例审查，不代表真实 OUT_OF_DATE/SURFACE_LOST 或 Android 已执行。
+
+### Vulkan 1.4.369：present fence 的主机同步
+
+把传给 present 的每个非空 `pFences` 元素纳入对应 fence 的主机访问协调；不要让其他线程并发 reset、destroy 或将该 fence 另作提交使用。present 前须是未触发、未关联尚未完成的队列命令的 fence；host 互斥不代表 present 已退休。用同一代 swapchain 的呈现完成证据退役，而不是提交 fence 的信号。[SPEC][ENGINE]
+
+1.4.369 的 Registry 在 KHR 结构的 `pFences` 标了 `externsync`；EXT 名称是该结构的别名，不能当独立语义处理。固定来源：[Registry](https://github.com/KhronosGroup/Vulkan-Docs/blob/33d3353757d83d6aca683120114fe74cc4eaf8fb/xml/vk.xml)；[present fence 与 VU](https://github.com/KhronosGroup/Vulkan-Docs/blob/33d3353757d83d6aca683120114fe74cc4eaf8fb/chapters/VK_KHR_surface/wsi.adoc#L8681-L8740)。

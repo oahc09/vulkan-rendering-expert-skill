@@ -82,3 +82,19 @@ vulkan-rendering-expert-skill/
 基于已合入 #13 的 Skill main `068a967038ce92a0d4f7c28e4dcdc70a1a3c7c4c`，不是宣称 v1.0.17 全域验收完成。原 K/B/P 未完成事项保留。TEXT18按四条主线在原文件加锚点，运行时知识文件净增0。配套 tests 的前版基线/精确候选与状态报告独立登记，不能把主仓合并或历史测试数当成完整跨仓回归。
 
 本候选可以审阅知识与可执行 Host 材料，但 Platform/Shader/Vulkan/Live/实际Host/Visual/Device必须以各层实际执行记录为准；缺少记录保持 UNVERIFIED。未运行模型不得称20题通过；未查看真实渲染不得称视觉达标。
+
+<a id="v20-current-candidate"></a>
+## v1.0.20 当前候选
+
+冻结实施起点：Skill main [c475084](https://github.com/oahc09/vulkan-rendering-expert-skill/commit/c475084fa720596f1c0fddf82e7a0a820b7bfd95)，tests main [f8cadd3](https://github.com/oahc09/vulkan-rendering-expert-skill-tests/commit/f8cadd3614f998b042b77293618323120bcb6d28) 仍配历史 v1.0.14；tests [PR #12](https://github.com/oahc09/vulkan-rendering-expert-skill-tests/pull/12) 的候选头 [770bfdf](https://github.com/oahc09/vulkan-rendering-expert-skill-tests/commit/770bfdf5bcc5497e8490432d315604242adda23d) 是 v1.0.19 证据入口，不是本候选精确配对。不要直接用任何一个 tests 分支的旧 PASS 证明 v1.0.20。
+
+| tests 路径 | 已核对关系与保留范围 |
+|---|---|
+| [#8](https://github.com/oahc09/vulkan-rendering-expert-skill-tests/pull/8) | 合并提交 `b40bfb2` 的目标是较早的 v1.0.15 分支；进入 source-review 祖先图的是本 PR 的源头 `528ba9e`，不能把两者视为同一 provenance。 |
+| [#9](https://github.com/oahc09/vulkan-rendering-expert-skill-tests/pull/9)、[#10](https://github.com/oahc09/vulkan-rendering-expert-skill-tests/pull/10) | TEXT18 和 CORE17 合入的是 source-review 分支（`ee1e42e` → `90b2df2`），不是 tests main。保留该分支成果，不用 main 的 v1.0.14 合同替代。 |
+| [#11](https://github.com/oahc09/vulkan-rendering-expert-skill-tests/pull/11)、[#12](https://github.com/oahc09/vulkan-rendering-expert-skill-tests/pull/12) | 两个草稿在 `90b2df2` 分岔；#11 Scene B 的 12 个变化路径在 #12 中未相对共同基线变化。后续分别核对和合入，不假设 #12 已包含 #11。原 #12 执行的 Skill pin 是 `6eafab53`，3042 PASS / 228 skip / 9 deselect 仅为历史配对范围。 |
+
+- V20-01/02：本表固定起点和整理顺序，不表示双仓已整合或 v1.0.20 配对已完成。下一步从 source-review 保留已有成果、核对两份草稿差量，再登记与当前 Skill 的精确配对；发布结果记录实际两仓提交，不预填提交自身 SHA。
+- V20-05/07 局部源码审查见 [WSI 失败分支](../03_api_manual/02_surface_swapchain/swapchain_recreate.md#v20-acquire-generation-contract)、[Fence 分支](../03_api_manual/08_synchronization/fence.md#fence-completion-contract)、[Descriptor 更新与失效](../03_api_manual/05_descriptor/descriptor_update.md#v20-descriptor-command-validity)、[旧代命令](../03_api_manual/03_command_buffer/command_buffer_lifetime.md#command-retirement-contract)。来源、适用条件、反例和剩余缺口在权威段，状态仅为部分审查，无新增执行证据。
+- V20-22 当前计数：旧默认 runner 的 120 个逻辑输入保持不变，重建的 CORE17 24 个逻辑输入从独立入口运行。合计 144 不是单 runner 分母，也不是 Live 通过数。上文 138 是旧登记口径。原 24 个 ALL19 成对任务组及 12 个 E2E19 工程任务仍为独立验收分母，本修订不升级状态。
+- v1.0.20 定向知识以 1.4.368 冻结规范为依据。全域 L1/L2、官方 369 差分的完整审查、实际模型/宿主、Android、第二设备或驱动及发布封板分别跟踪，未满足保持未验证。运行时知识文件净增 0。

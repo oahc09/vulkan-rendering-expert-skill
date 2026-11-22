@@ -195,3 +195,18 @@ v1.0  可用于真实 Vulkan 工程辅助
 3. 每个文件职责单一。
 4. 合并版文档用于阅读。
 5. ZIP 源码包用于直接放入 skill 仓库。
+
+## v1.0.20 / W7：Vulkan 1.4.368 → 1.4.369 维护差分
+
+- Docs 与 Registry：[368 `fa30d4e`](https://github.com/KhronosGroup/Vulkan-Docs/tree/fa30d4e312e843193601be7cb926c7e25d9ec885) → [369 `33d3353`](https://github.com/KhronosGroup/Vulkan-Docs/tree/33d3353757d83d6aca683120114fe74cc4eaf8fb)；[2026-11-20 更新日志](https://github.com/KhronosGroup/Vulkan-Docs/blob/33d3353757d83d6aca683120114fe74cc4eaf8fb/ChangeLog.adoc)。
+- Headers：[368 tag](https://github.com/KhronosGroup/Vulkan-Headers/tree/v1.4.368) → [369 `d277a0a`](https://github.com/KhronosGroup/Vulkan-Headers/tree/d277a0a3cda9c682708c93279f0c72cd6b0ae3f3)；VVL [`b6fed57` 校验增量](https://github.com/KhronosGroup/Vulkan-ValidationLayers/commit/b6fed572c965e19868d71b3d67026d5ae225ee19)。这些不是驱动版本，也不是提高最低核心 Vulkan 版本的依据。
+
+| 差分 | 已处理 / 待验证 |
+|---|---|
+| 01211 / 12565 | [image barrier](../03_api_manual/08_synchronization/image_memory_barrier.md) 已拆分普通和独立 stencil usage；按仅 depth、仅 stencil、二者和忽略布局做后续正反例。VVL 的旧未分配标识与新 12565 必须与同一语义核对。 |
+| present fence host 调用 | [swapchain recreate](../03_api_manual/02_surface_swapchain/swapchain_recreate.md) 已补非空 fence 主机同步；工具验证要与正常串行、重复占用和真正 present 完成分开。 |
+| heap bind 12557/12558、SPIR-V、依赖 | [descriptor heap](../03_api_manual/05_descriptor/descriptor_heap.md) 已补零长分支和 shader/API 分离。依赖按固定 Registry 解释：Vulkan 1.4 是一条满足路径；另一条需要 extended flags 或 maintenance5，再加 buffer device address 或 Vulkan 1.2，均不免除 feature/属性/工具检查。 |
+| 其他 spec / VVL 差异 | 复核清单：外部 host pointer 查询和已有导入、index buffer robustness、shader abort 大小、planar clear 12556 和 imageless framebuffer 12562。此批不改变相关行为结论；保留旧报告和工具标识，待定向配对验证。 |
+| AMDX 多层加速结构 | 仅观察。Registry 是 provisional，依赖 acceleration structure、以及 maintenance5 或 Vulkan 1.4，并须验证 beta 声明、实际 extension/feature 和适用 shader 路径。无证据则保留普通加速结构方案；不推断移动支持或性能。 |
+
+以上仅为固定来源差分审查与规则卡片修订。旧 1.4.368 报告保留；没有执行新旧配对 VVL/SPIR-V 工具对照、GPU/Android/驱动测试，不改变发布门槛。
