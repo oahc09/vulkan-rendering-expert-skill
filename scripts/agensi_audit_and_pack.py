@@ -19,7 +19,7 @@ from host_contract import validate_documents
 
 REQUIRED = {'SKILL.md', 'LICENSE', 'README_EN.md'}
 MAX_CHARACTERS = 6_000_000
-MAX_FILES = 201  # exactly one SKILL.md plus 200 other text files
+MAX_FILES = 200  # Candidate budget counts every file, including SKILL.md.
 MAX_BYTES = 50_000_000
 BINARY_SUFFIXES = {'.exe', '.dll', '.so', '.dylib', '.bin', '.app', '.dmg', '.msi', '.deb', '.rpm', '.wasm', '.class', '.jar', '.war', '.png', '.jpg', '.pdf', '.zip'}
 RULES = {
@@ -89,7 +89,7 @@ def audit(blobs):
     if missing:
         errors.append('Missing required files: ' + ', '.join(sorted(missing)))
     if len(blobs) > MAX_FILES:
-        errors.append('200 additional text file limit exceeded')
+        errors.append(f'Candidate package exceeds {MAX_FILES} total files (including SKILL.md)')
     if sum(PurePosixPath(p).name == 'SKILL.md' for p in blobs) != 1:
         errors.append('Exactly one root SKILL.md required (no nested skills)')
     texts = {}

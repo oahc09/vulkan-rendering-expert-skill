@@ -85,11 +85,22 @@
 
 **Claude Code**
 
+复现已通过离线回执的 v1.0.21 候选时，固定到对应提交：
+
 ```bash
 git clone https://github.com/oahc09/vulkan-rendering-expert-skill ~/.claude/skills/vulkan-rendering-expert-skill
+git -C ~/.claude/skills/vulkan-rendering-expert-skill checkout --detach 79147e3e669527fec587d5b61713c3bdbbbeec03
 ```
 
 放入技能目录后，描述 Vulkan 问题即可自动触发；也可显式说"使用 vulkan-rendering-expert-skill"。
+
+**安装后验证**
+
+确认宿主可读取技能根目录下的 `SKILL.md`、`references/` 及其中的命中段落。可复制提问：
+
+> 使用 vulkan-rendering-expert-skill。帧 fence 已 signal 时，能否立即复用 vkQueuePresentKHR 等待的 semaphore？请列出实际读取的技能参考文件和最小验证方法。
+
+合格回答应区分提交完成与呈现等待的资源回收，并指出相关 WSI 或同步参考。宿主提供读取记录时，检查实际加载路径。没有读取记录时只记录回答行为，宿主加载轨迹保留未验证。
 
 **TraeCode / Trae**
 

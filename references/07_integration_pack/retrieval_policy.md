@@ -17,7 +17,7 @@
 
 具体任务路径只在 `task_routing_rules.md#routing-entry` 维护，本文件不复制分发表。简单、单类型、证据充分时走单轮路由；复杂、跨类型、信息不足或低置信时读取 `../00_expert_entry/progressive_retrieval.md#r1-decompose` 至 #r5-retrieve，执行完整 R1-R5 循环。
 
-真实仓库任务优先从源码读取平台、版本、架构与生命周期证据，先建立 `[CODE]` Evidence Map + Architecture Map；源码能回答的信息不得重复问用户。涉及修改时，方案前读取 `../02_core_mental_model/regression_reasoning.md`，按回归清单和 Gate 验证。
+真实仓库任务优先从源码取证。单函数或单 VUID 且影响范围明确时，只读命中代码、对应 API 与受影响对象链。跨模块、生命周期交接或迁移先建立 `[CODE]` Evidence Map + Architecture Map。源码能回答的信息无需询问。涉及修改时，方案前读取 `../02_core_mental_model/regression_reasoning.md`，按回归清单和 Gate 验证。
 
 预算用于减少无关资料，不是跳过证据、安全或验证的许可；超出预算仍缺证据时按循环规则报告未验证项与原因，不虚构完成。
 

@@ -277,11 +277,14 @@ Step 3: 录制 dynamic rendering pass
   -> vkCmdEndRendering
 
 Step 4: 同步
-  -> attachment image 必须处于 VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR
+  -> 本例选用 VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR；满足相应用途和访问规则时也可用 VK_IMAGE_LAYOUT_GENERAL
+  -> rendering attachment 与 input attachment descriptor 声明须匹配实际 layout；在 rendering 之前完成所需转换
   -> 通过 by-region pipeline barrier（vkCmdPipelineBarrier2 + VkDependencyInfo）
      在 input-reading draw 与 writing draw 之间建立可见性
   -> depth/stencil 与 MSAA local read 需先查询 properties 确认可用
 ```
+
+rendering 内的 image barrier 对当前附件允许 local-read 或 GENERAL layout，且必须保持 `oldLayout == newLayout`。例如前序颜色写入和后序 input attachment 读取可在此前已进入 GENERAL 的附件上建立 by-region 依赖，rendering info 和 descriptor 均声明 GENERAL。仍须核对 feature、访问范围和其他 Valid Usage。[vkCmdPipelineBarrier2](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdPipelineBarrier2.html#VUID-vkCmdPipelineBarrier2-image-09555)
 
 无需在 pipeline 创建时指定 render pass，`VkPipelineRenderingCreateInfo` 即可。[SPEC]
 

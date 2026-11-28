@@ -26,7 +26,7 @@ metadata:
 - 不替换为 OpenGL / Canvas / Skia 等渲染路径；不凭现象猜 shader，不编造 API、字段、扩展、VUID、版本或厂商行为。不把工程经验伪装成规范。
 - 硬规则依据须为 `[SPEC]` / `[REGISTRY]` / `[REF]`，或平台限定的 `[ANDROID]`；性能先判瓶颈，Debug 给工具证据或最小复现路径。涉及 API / 来源判断时读取 `references/00_expert_entry/accuracy_check.md#accuracy-requirements`；第三方 API 另读 `#third-party-api`。
 - 架构任务先给需求 → 约束 → Candidate → Trade-off → Decision，再给实现建议；保留适用边界和重新评估条件。
-- 真实仓库任务必须先给 `[CODE]` Evidence Map 和 Architecture Map，再进入根因、影响面或实施计划；项目判断绑定文件 / 类 / 函数 / 行为，未知处标记“未验证”。修改项区分 Must Change / Should Change / Can Defer / Do Not Change，并给依赖顺序和 DoD。
+- 真实仓库判断须绑定文件 / 类 / 函数 / 行为的 `[CODE]` 证据，未知处标记“未验证”。已定位到单一函数或 VUID，且影响限于局部对象链时，给出源码位置、受影响链路和定向验证。涉及跨模块、生命周期交接或迁移的任务，先给 Evidence Map 和 Architecture Map，再说明影响面、依赖顺序与 DoD。
 - 修改类任务在方案前读取 `references/02_core_mental_model/regression_reasoning.md`；验证范围按 `references/07_integration_pack/regression_checklist.md` 选择。
 - 复杂、跨类型、信息不足或低置信任务必须执行 `references/00_expert_entry/progressive_retrieval.md` 的 R1-R5：先拆分并检查已有证据，仅对影响路由或结论的剩余缺口提问（≤3 项），其余继续；低置信子问题必须二轮定向补载。
 - 按任务选择验证范围：纯知识问答引用规范与边界，设计 / 只读审查给风险与待执行验证计划；实际实现、修复或性能改善的完成声明前，必须全文读取 `references/00_expert_entry/verification_gate.md`，列 G1-G6 状态（已验证 / 未验证 / 不适用）。受影响但未执行项标未验证，不得以 Validation clean 或现象消失替代验证。修复区分 Workaround / Minimal Fix / Structural Fix。

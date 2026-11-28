@@ -158,6 +158,7 @@
 
 首轮读取：`../05_workflows/01_renderer_setup/project_diagnosis.md`，先建立 Evidence Map + Architecture Map。
 
+- 已定位到单一函数或单个 VUID 且影响限于局部对象链时，走命中的 API 或 Debug 段，提供 `[CODE]` 源码位置、对象链和定向验证。若涉及跨队列、生命周期交接或其他模块，回到本节建立相关主链地图。
 - 已有项目档案或需要复查变更时，按 [项目档案复用](../05_workflows/01_renderer_setup/project_diagnosis.md#project-profile-reuse) 和 [变更影响](../05_workflows/01_renderer_setup/project_diagnosis.md#project-revalidation) 定向读取。用户提供运行导出时，转 [事件关联](../05_workflows/01_renderer_setup/project_diagnosis.md#delivery19-evidence-chain)。
 
 用户提供真实 Vulkan / 图形引擎仓库，要求理解当前架构、评估版本升级 / 重构影响面、把 Debug Playbook 映射到源码，或生成 coding-agent 实施计划。

@@ -81,11 +81,22 @@ This skill follows the Agent Skills specification: the repository root is the sk
 
 **Claude Code**
 
+Pin the v1.0.21 candidate that passed the offline receipt:
+
 ```bash
 git clone https://github.com/oahc09/vulkan-rendering-expert-skill ~/.claude/skills/vulkan-rendering-expert-skill
+git -C ~/.claude/skills/vulkan-rendering-expert-skill checkout --detach 79147e3e669527fec587d5b61713c3bdbbbeec03
 ```
 
 Once placed in the skills directory, describing a Vulkan problem triggers it automatically; you can also explicitly say "use vulkan-rendering-expert-skill".
+
+**Installation check**
+
+Confirm your host can read `SKILL.md` and the matching sections in `references/`. Try:
+
+> Use vulkan-rendering-expert-skill. Can I reuse the semaphore waited on by vkQueuePresentKHR as soon as my frame fence signals? List the skill references actually loaded and the smallest verification step.
+
+The response should explain the distinction between submission completion and presentation resource retirement. Check the loaded paths if the host exposes a read trace. Without that trace, record the answer and leave actual host loading unverified.
 
 **TraeCode / Trae**
 

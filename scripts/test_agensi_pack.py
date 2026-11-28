@@ -124,6 +124,15 @@ class PackTests(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertEqual(list(self.base.glob('.agensi-*')), [])
 
+    def test_candidate_limit_includes_the_entry_file(self):
+        blobs = dict(self.blobs)
+        for index in range(200 - len(blobs)):
+            blobs[f'references/budget/example-{index}.md'] = b'# Example\n'
+        self.assertEqual(len(blobs), 200)
+        self.assertEqual(pack.audit(blobs)[0], [])
+        blobs['references/budget/overflow.md'] = b'# Extra\n'
+        self.assertIn('Candidate package exceeds 200 total files (including SKILL.md)', pack.audit(blobs)[0])
+
     def test_crc_failure_does_not_publish(self):
         output = self.base / 'bad.zip'
         with patch.object(zipfile.ZipFile, 'testzip', return_value='SKILL.md'):

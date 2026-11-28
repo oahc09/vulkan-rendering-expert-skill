@@ -51,7 +51,7 @@ G1 API 合法性
 确认修改没有引入生命周期破坏：
 
 1. 创建顺序正确（instance → device → queue → 资源）。
-2. 销毁顺序与依赖关系逆序一致，且满足 `hard_rules.md` 第 15 条幂等要求。[SPEC]
+2. 检查受影响对象的销毁顺序、有效性及主机同步。[SPEC] 若修改共用清理封装，按 `hard_rules.md` 第 15 条检查重复进入与资源状态。[ENGINE]
 3. 销毁前确认所有相关提交完成；present semaphore / swapchain 还需独立的 presentation 资源退役证据，不能仅依赖 submit fence / WaitIdle。详见 `../03_api_manual/02_surface_swapchain/swapchain_recreate.md`。
 4. swapchain recreate 路径中，旧 image view / framebuffer / 尺寸相关资源同步销毁或重建。[ENGINE]
 
