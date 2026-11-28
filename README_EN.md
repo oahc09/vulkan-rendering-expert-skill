@@ -6,7 +6,11 @@ English | [中文](https://github.com/oahc09/vulkan-rendering-expert-skill/blob/
 
 This is a Vulkan rendering engineering expert skill package. It is not a Vulkan beginner tutorial, but a runtime knowledge base prepared for real rendering engineering tasks: when handling Vulkan design, implementation, debugging, optimization, and verification problems, it organizes judgments, citation rules, API details, debugging paths, and regression verification along engineering pipelines.
 
-## v1.0.20 candidate
+## v1.0.21 development candidate
+
+This version develops project profile reuse, runtime event association, and targeted revalidation. Its status is `candidate-blocked`. See the [development candidate entry](references/07_integration_pack/README.md#v21-current-candidate).
+
+## v1.0.20 pinned candidate
 
 This first tranche reconciles acquire/submit, ordinary descriptor updates and command validity, and swapchain generation retirement. The candidate remains `candidate-blocked`; it adds no new Live, Android or second-driver acceptance. See [current baseline and scope](references/07_integration_pack/README.md#v20-current-candidate).
 

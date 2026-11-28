@@ -43,6 +43,16 @@ Repository Evidence
 
 仓库已能提供的信息不得重复询问。
 
+<a id="project-profile-reuse"></a>
+### 复用项目接入档案
+
+若项目提供由 Tests 侧工具生成的接入档案，先核对项目 SHA、工作区差异、当前构建条件及相关文件指纹。仅复用当前条件仍成立且标为 `REUSED` 的源码绑定。对 `REVIEW_REQUIRED`、缺失或移除的绑定定向重读实际源码，确认符号、行为和配置后重新建立证据。连续使用同一份待复核档案时保留待复核状态。源码档案支持 Evidence Map，运行中的对象代际、提交、呈现及回收仍需对应运行证据。
+
+<a id="project-revalidation"></a>
+### 工程变化后的定向重验
+
+核对项目、Shader 接口、attachment、退役协议、编译目标、工具、driver 和规范身份。每条结论关联会影响它的身份及检查项。依赖改变列定向重验，身份不足或未分类变化列人工复核，撤销经验只保留为历史引用。文档变更按实际包身份更新。引用仍适用的旧证据时保留原运行的配对和条件，当前验证状态取自本次回执。
+
 ## 3. 前置检查
 
 开始诊断前确认：
@@ -295,6 +305,8 @@ Evidence/Architecture Map仍先于改造。针对当前任务记录下表，不�
 ## 可关联但不伪造的证据链
 
 [ENGINE] 证据条目绑定不可变 run、两仓和项目 SHA、工具版本、设备/driver、原始 artifact hash、观察与限制。资源键至少包括 run/device/handle/generation；句柄相同不能跨设备或代际合并。源码路径/符号/行号、frame/submit/event 缺失则 null；严禁从时间接近猜出 submit 关系。
+
+应用有明确事件导出时，用同一 run/device/engine/output、对象代际、frame 和 submission 身份核对前序 ID，并与对应项目档案的源码绑定比对。提交接受、工作完成、present 请求接受和显示反馈是独立观察。没有真实显示反馈就保留未知。待复核的源码绑定、重复事件或乱序流不支持完整关联。事件报告先列观察，再给能区分候选原因的下一项检查。
 
 应用可序列化真实 VkDebugUtilsMessengerCallbackDataEXT 字段，保存 message ID、对象数及原文在本地；这是应用回调采集合同，不是假造 VVL 原生日志格式。Perfetto 可通过固定 SQL 导出 slice id/ts/dur/track_id/name，dur=-1 保持未结束，slice 不是 present 或 GPU 时间。先确认数据源和工具版本；未校准 CPU/GPU 时钟不得直接相减。适配器只读本地输入并限制大小，默认不发布原始消息、资源名称、源码路径或 capture。
 

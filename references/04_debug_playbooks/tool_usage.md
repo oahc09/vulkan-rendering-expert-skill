@@ -114,6 +114,12 @@
 
 ## 5. 工具能力矩阵与版本留证（2026-10-17）
 
+### 上游版本分流（2026-11-28）
+
+- Windows SDK 1.4.363.1（2026-11-02）包含 VVL timeline host-wait 跨队列同步修复。复查时固定程序、driver、layer 可执行文件及配置。按官方样例使用同一 queue family 的两个具 transfer 能力的 queue，验证有效依赖与实际删除必要依赖的负例。队列或工具身份不足时记未执行。[SDK 发布说明](https://vulkan.lunarg.com/doc/view/latest/windows/release_notes.html) · [VVL 固定修复及正例](https://github.com/KhronosGroup/Vulkan-ValidationLayers/commit/317cff060893783f96d4174f50491e6374eb3714)
+- Mesa 26.3.1（2026-11-18）的 ANV 样本是 Intel LNL 上同一命令缓冲中 render pass clear 后的 storage image compute 写入。项目先核对真实 ICD 和硬件，确认命令序列与依赖再复现。[Mesa 发布说明](https://docs.mesa3d.org/relnotes/26.3.1.html)
+- Emulator 37.3.10（2026-11-19）的 Windows 壁纸纹理问题源于 API 37.1 Quick Boot 快照恢复。记录 Emulator build、guest image、图形后端及快照来源，分别观察同条件的冷启动和恢复。其他 API 或手机性能需独立证据。[Android Emulator 发布说明](https://developer.android.com/studio/releases/emulator#37-3-10)
+
 每次记录 SDK、VVL build/revision、RenderDoc、AGI、shader 编译器/SPIR-V Tools、OS/GPU/driver 版本。针对实际使用路径填写“支持 / 不支持 / 未核验”，不要用工具名称作保证：
 
 | 路径 | core validation | sync validation | GPU-AV | capture/replay | descriptor 解码 | 目标设备输出对照 |

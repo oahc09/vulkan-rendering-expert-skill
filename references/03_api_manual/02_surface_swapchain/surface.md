@@ -271,6 +271,13 @@ Surface、swapchain、present support 是不同能力。`VK_KHR_surface` 与平�
 
 Windows 使用 Win32，Linux 区分 Xlib/Xcb/Wayland，Metal 使用 `VK_EXT_metal_surface` 的 CAMetalLayer 合同；窗口库返回的所需扩展仍须核对支持并启用。枚举 portability 实现时，支持且启用 `VK_KHR_portability_enumeration` 并设置 `VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR`；设备若报告 `VK_KHR_portability_subset`，创建 device 时必须启用该扩展，并查询其 feature/property 限制，不能宣称完整原生 Vulkan 等价。[SPEC]
 
+<a id="apple-portability-version-boundary"></a>
+### Apple portability 版本边界
+
+- 固定 Vulkan 1.4.368 headers/loader 与支持 subset 的 MoltenVK 路径，按上述规则保留 subset 枚举、设备扩展启用和 feature/property 查询。已有产品单独固定 legacy SDK 和 driver。
+- Khronos 2026-11-25 公告安排在 12 月中旬 SDK 移除 provisional `VK_KHR_portability_subset` 的规范及 headers 定义，并调整 `VK_KHR_portability_enumeration` 的 loader 规则。将公告与实际取得的 headers/loader/driver 分开记录。取得工具后重新检查 symbol、驱动 manifest、实例枚举及两条构建路径，具体行为以该版 SDK 与设备实测为准。
+- Apple silicon 与 macOS 26+ 可评估 KosmicKrisp。Intel Mac、早于 macOS 26 的 Apple silicon 及当前 iOS 按各自 MoltenVK 条件评估。区分硬件、OS、headers、loader、实际 ICD 和 feature，保留项目原有 fallback 直到对应目标回归完成。[Khronos 公告](https://www.khronos.org/blog/from-portability-to-conformance-a-new-chapter-for-layered-vulkan-on-apple)
+
 普通 offscreen rendering 只用 image，不需要 surface/swapchain/present。`VK_EXT_headless_surface` 是可选的 WSI headless surface，仍走 surface 能力和 swapchain 协议，不等同 offscreen 自动支持。`VK_KHR_display` 的 display/mode/plane 直显还需独立枚举与兼容查询，不能把桌面窗口创建参数套进去。[SPEC]
 
 正常：创建平台 surface → 查询 support/capabilities/formats/modes → 按实际 extent/usage 创建 swapchain。失败：SURFACE_LOST 停止向旧 surface 新提交，按 [swapchain 生命周期](swapchain_recreate.md) 退役并重建平台关联；零 extent 暂停而非制造 1×1 present。无 present 支持时可选择另一个已查询支持的 queue/device，或明确回退 offscreen；不要伪造 headless 扩展。多窗口分别维护 acquisition 与 retirement 状态，GPU submit 完成不能替代 presentation 完成。protected surface/swapchain 必须查询相应支持并保留保护边界，不允许 readback 作为通用诊断。[SPEC][ENGINE]

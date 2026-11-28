@@ -6,7 +6,11 @@
 
 这是一个 Vulkan 渲染工程专家技能包。它不是 Vulkan 入门教程，而是为真实渲染工程任务准备的运行时知识库：用于在处理 Vulkan 设计、实现、调试、优化和验证问题时，按工程链路组织判断、引用规则、API 细节、调试路径和回归验证。
 
-## v1.0.20 候选状态
+## v1.0.21 开发候选
+
+本版推进项目档案复用、运行事件关联和定向重验，状态为 `candidate-blocked`。见[开发候选入口](references/07_integration_pack/README.md#v21-current-candidate)。
+
+## v1.0.20 固定候选
 
 首批修订对齐 acquire/submit、普通 descriptor 更新与旧命令状态，以及旧 swapchain 代际的提交与呈现退休。当前仍为 `candidate-blocked`；没有新的 Live、Android 或第二驱动通过证据。见[版本入口与范围](references/07_integration_pack/README.md#v20-current-candidate)。
 

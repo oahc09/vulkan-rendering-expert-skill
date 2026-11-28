@@ -84,7 +84,7 @@ vulkan-rendering-expert-skill/
 本候选可以审阅知识与可执行 Host 材料，但 Platform/Shader/Vulkan/Live/实际Host/Visual/Device必须以各层实际执行记录为准；缺少记录保持 UNVERIFIED。未运行模型不得称20题通过；未查看真实渲染不得称视觉达标。
 
 <a id="v20-current-candidate"></a>
-## v1.0.20 当前候选
+## v1.0.20 固定候选
 
 冻结实施起点：Skill main [c475084](https://github.com/oahc09/vulkan-rendering-expert-skill/commit/c475084fa720596f1c0fddf82e7a0a820b7bfd95)，tests main [f8cadd3](https://github.com/oahc09/vulkan-rendering-expert-skill-tests/commit/f8cadd3614f998b042b77293618323120bcb6d28) 仍配历史 v1.0.14；tests [PR #12](https://github.com/oahc09/vulkan-rendering-expert-skill-tests/pull/12) 的候选头 [770bfdf](https://github.com/oahc09/vulkan-rendering-expert-skill-tests/commit/770bfdf5bcc5497e8490432d315604242adda23d) 是 v1.0.19 证据入口，不是本候选精确配对。不要直接用任何一个 tests 分支的旧 PASS 证明 v1.0.20。
 
@@ -98,3 +98,8 @@ vulkan-rendering-expert-skill/
 - V20-05/07 局部源码审查见 [WSI 失败分支](../03_api_manual/02_surface_swapchain/swapchain_recreate.md#v20-acquire-generation-contract)、[Fence 分支](../03_api_manual/08_synchronization/fence.md#fence-completion-contract)、[Descriptor 更新与失效](../03_api_manual/05_descriptor/descriptor_update.md#v20-descriptor-command-validity)、[旧代命令](../03_api_manual/03_command_buffer/command_buffer_lifetime.md#command-retirement-contract)。来源、适用条件、反例和剩余缺口在权威段，状态仅为部分审查，无新增执行证据。
 - V20-22 当前计数：旧默认 runner 的 120 个逻辑输入保持不变，重建的 CORE17 24 个逻辑输入从独立入口运行。合计 144 不是单 runner 分母，也不是 Live 通过数。上文 138 是旧登记口径。原 24 个 ALL19 成对任务组及 12 个 E2E19 工程任务仍为独立验收分母，本修订不升级状态。
 - v1.0.20 定向知识以 1.4.368 冻结规范为依据。全域 L1/L2、官方 369 差分的完整审查、实际模型/宿主、Android、第二设备或驱动及发布封板分别跟踪，未满足保持未验证。运行时知识文件净增 0。
+
+<a id="v21-current-candidate"></a>
+## v1.0.21 工程接入与持续回归开发候选
+
+从[项目诊断路由](task_routing_rules.md#route-project)进入档案复用、运行事件和变更重验。开发状态、实际日志和精确配对清单由 Tests 仓维护。旧 v1.0.20 固定候选与回执保留原身份。准备新候选时核对两仓实际 SHA、tree、首尾洁净状态和回执实际执行模式。原 36 项、12 题、真实设备、宿主和四项验收沿用原口径，开发候选未封板。

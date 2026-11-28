@@ -158,6 +158,8 @@
 
 首轮读取：`../05_workflows/01_renderer_setup/project_diagnosis.md`，先建立 Evidence Map + Architecture Map。
 
+- 已有项目档案或需要复查变更时，按 [项目档案复用](../05_workflows/01_renderer_setup/project_diagnosis.md#project-profile-reuse) 和 [变更影响](../05_workflows/01_renderer_setup/project_diagnosis.md#project-revalidation) 定向读取。用户提供运行导出时，转 [事件关联](../05_workflows/01_renderer_setup/project_diagnosis.md#delivery19-evidence-chain)。
+
 用户提供真实 Vulkan / 图形引擎仓库，要求理解当前架构、评估版本升级 / 重构影响面、把 Debug Playbook 映射到源码，或生成 coding-agent 实施计划。
 
 使用模块：
